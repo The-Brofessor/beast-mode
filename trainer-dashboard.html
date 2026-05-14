@@ -924,7 +924,10 @@
 
 <div class="modal-overlay" id="modal-plan-builder">
   <div class="modal" style="max-width: 900px;">
-    <h3 id="plan-builder-title">Create Exercise Plan</h3>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+      <h3 id="plan-builder-title" style="margin:0;flex:1;">Create Exercise Plan</h3>
+      <span id="plan-autosave-indicator" style="font-size:.78rem;color:var(--green);opacity:0;transition:opacity 0.3s;font-weight:600;">✓ Saved</span>
+    </div>
     <div style="background:var(--bg);border-radius:8px;padding:16px;margin-bottom:16px;border:1px solid var(--border);">
       <h4 style="font-size:.95rem;margin-bottom:12px;color:var(--accent);">Plan Source</h4>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
@@ -990,9 +993,8 @@
 
     <div class="modal-actions" style="flex-wrap:wrap;">
       <button class="btn btn-secondary" onclick="closeModal('modal-plan-builder')">Cancel</button>
-      <button class="btn btn-primary" onclick="savePlan(false)" title="Save changes and keep editing">💾 Save</button>
       <button class="btn btn-primary" onclick="savePlan(true)" title="Save changes and close">💾 Save &amp; Close</button>
-      <button class="btn btn-success" onclick="generatePlanCode()">📤 Export Plan Code</button>
+      <button class="btn btn-success" onclick="generatePlanCode()" title="Save changes, close builder, and open the share modal">📤 Save &amp; Send to Client</button>
     </div>
   </div>
 </div>
@@ -2055,8 +2057,17 @@ function openPlanBuilderModal(clientName) {
   currentPlanClientName = clientName;
   currentPlanData = clients[clientName] || null;
 
-  document.getElementById('plan-builder-title').textContent = `Create Exercise Plan for ${clientName}`;
-  document.getElementById('modal-plan-builder').classList.add('open');
+  // Honest title — edit vs. create based on whether a plan already exists
+  const hasExistingPlan = (clients[clientName]?.categories || []).length > 0;
+  document.getElementById('plan-builder-title').textContent = `${hasExistingPlan ? 'Edit' : 'Create'} Exercise Plan for ${clientName}`;
+  const _planModal = document.getElementById('modal-plan-builder');
+  _planModal.classList.add('open');
+  // Hook debounced autosave once per page lifetime
+  if (!_planModal._autosaveHooked) {
+    _planModal.addEventListener('input', schedulePlanBuilderAutosave);
+    _planModal.addEventListener('change', schedulePlanBuilderAutosave);
+    _planModal._autosaveHooked = true;
+  }
 
   // Load client's existing exercises and split into daily/weekly sections
   const allCats = JSON.parse(JSON.stringify(clients[clientName]?.categories || []));
@@ -2146,9 +2157,42 @@ function generatePlanCode() {
   // Save both categories and supplements back to client data before generating code
   clients[currentPlanClientName].categories = merged;
   clients[currentPlanClientName].supplements = planBuilderSupplements.filter(s => s.name.trim());
+  clients[currentPlanClientName].ts = new Date().toISOString();
   saveClients();
+  renderAll();
   const code = generateClientCode(currentPlanClientName, 'update');
+  // Close builder BEFORE opening share modal — no more stacked modals
+  closeModal('modal-plan-builder');
   showShareModal(code, currentPlanClientName, 'update');
+}
+
+// Debounced autosave for the plan-builder modal. Fires ~600ms after the last
+// input/change event on the modal. Persists silently and flashes a tiny
+// "✓ Saved" indicator in the modal header. Wrapped in try/catch so a partial
+// DOM state (mid-typing) can never throw and break the modal.
+let planBuilderAutosaveTimer = null;
+function schedulePlanBuilderAutosave() {
+  const modal = document.getElementById('modal-plan-builder');
+  if (!modal || !modal.classList.contains('open')) return;
+  if (!currentPlanClientName || !clients[currentPlanClientName]) return;
+  clearTimeout(planBuilderAutosaveTimer);
+  planBuilderAutosaveTimer = setTimeout(() => {
+    try {
+      const merged = mergePlanCategories();
+      syncSupplementsFromUI('plan-supplement-builder');
+      clients[currentPlanClientName].categories = merged;
+      clients[currentPlanClientName].supplements = planBuilderSupplements.filter(s => s.name.trim());
+      clients[currentPlanClientName].ts = new Date().toISOString();
+      saveClients();
+      const indicator = document.getElementById('plan-autosave-indicator');
+      if (indicator) {
+        indicator.style.opacity = '1';
+        setTimeout(() => { if (indicator) indicator.style.opacity = '0'; }, 1500);
+      }
+    } catch (e) {
+      console.warn('Plan-builder autosave skipped:', e);
+    }
+  }, 600);
 }
 
 function generateClientCode(clientName, type) {
@@ -2846,7 +2890,7 @@ function renderClientGrid() {
       ${progressBars}
       ${whyHtml}
       <div class="client-card-actions">
-        <button class="btn btn-primary" onclick="event.stopPropagation();openPlanBuilderModal('${name.replace(/'/g, "\\'")}')" >📋 Create Plan</button>
+        <button class="btn btn-primary" onclick="event.stopPropagation();openPlanBuilderModal('${name.replace(/'/g, "\\'")}')" >${(data.categories && data.categories.length > 0) ? '✏️ Edit Plan' : '📋 Create Plan'}</button>
         <button class="btn btn-secondary" onclick="event.stopPropagation();showDetail('${name.replace(/'/g, "\\'")}')" style="flex:1;">View Details</button>
       </div>
     </div>`;
@@ -2875,7 +2919,7 @@ function showDetail(name) {
   document.getElementById('detail-tabs').innerHTML = [0,1,2,3].map(w =>
     `<button class="detail-tab ${w === (data.currentWeek||0) ? 'active' : ''}" onclick="showWeekDetail('${name.replace(/'/g, "\\'")}', ${w})"">Week ${w+1}</button>`
   ).join('') + `<button class="detail-tab" onclick="showSummaryDetail('${name.replace(/'/g, "\\'")}')">Summary</button>`
-    + `<button class="detail-tab" onclick="showEditPlanDetail('${name.replace(/'/g, "\\'")}')">Edit Plan</button>`
+    + `<button class="detail-tab" onclick="showEditPlanDetail('${name.replace(/'/g, "\\'")}')">🎛️ Toggle Exercises</button>`
     + `<button class="btn btn-danger btn-small" style="margin-left:auto;" onclick="removeClient('${name.replace(/'/g, "\\'")}')">Remove Client</button>`;
 
   showWeekDetail(name, data.currentWeek || 0);
@@ -3045,7 +3089,7 @@ function showSummaryDetail(name) {
 
 function showEditPlanDetail(name) {
   document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.detail-tab').forEach(t => { if (t.textContent === 'Edit Plan') t.classList.add('active'); });
+  document.querySelectorAll('.detail-tab').forEach(t => { if (t.textContent === '🎛️ Toggle Exercises') t.classList.add('active'); });
 
   const data = clients[name];
   selectedClient = name;
