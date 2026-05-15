@@ -1014,41 +1014,51 @@
       </div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;">
         <button class="btn btn-primary" style="font-size:1rem;padding:12px 28px;" onclick="shortenAndCopyLink()" id="btn-shorten-link">📋 Copy Link to Send</button>
+        <button class="btn btn-secondary" style="font-size:1rem;padding:12px 20px;" onclick="sharePlanNative()" id="btn-native-share">📤 Share</button>
       </div>
       <div id="link-copy-confirm" style="font-size:.85rem;color:var(--green);text-align:center;margin-top:8px;display:none;font-weight:600;">✓ Link copied! Paste into any text or message.</div>
       <div id="shorten-status" style="font-size:.82rem;color:var(--text2);text-align:center;margin-top:6px;display:none;"></div>
-
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
-        <button class="btn btn-secondary" style="flex:0 1 auto;min-width:100px;" onclick="sharePlanNative()" id="btn-native-share">📤 Share</button>
-        <button class="btn btn-secondary" style="flex:0 1 auto;min-width:100px;" onclick="sharePlanSMS()">💬 SMS</button>
-        <button class="btn btn-secondary" style="flex:0 1 auto;min-width:100px;" onclick="sharePlanEmail()">✉️ Email</button>
-      </div>
     </div>
 
-    <!-- QR Code Section (for in-person sharing) -->
-    <details id="qr-details" style="margin-bottom:16px;">
-      <summary style="cursor:pointer;font-size:.82rem;color:var(--text2);user-select:none;">Show QR code (for in-person sharing)</summary>
-      <div id="qr-section" style="text-align:center;padding-top:12px;">
-        <div id="qr-code-container" style="display:inline-block;background:white;padding:16px;border-radius:12px;margin-bottom:10px;"></div>
-        <div style="font-size:.78rem;color:var(--text2);margin-top:4px;">Client scans this with their phone camera while looking at your screen</div>
+    <!-- Everything else collapsed under a single expander -->
+    <details style="margin-bottom:16px;">
+      <summary style="cursor:pointer;font-size:.82rem;color:var(--text2);user-select:none;">More share options (SMS, Email, QR, raw code)</summary>
+      <div style="padding-top:12px;">
+
+        <!-- SMS + Email send the shortened link too -->
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px;">
+          <button class="btn btn-secondary" style="flex:0 1 auto;min-width:120px;" onclick="sharePlanSMS()" id="btn-share-sms">💬 Text (SMS)</button>
+          <button class="btn btn-secondary" style="flex:0 1 auto;min-width:120px;" onclick="sharePlanEmail()" id="btn-share-email">✉️ Email</button>
+        </div>
+
+        <!-- QR Code section (for in-person sharing) -->
+        <details id="qr-details" style="margin-bottom:14px;">
+          <summary style="cursor:pointer;font-size:.82rem;color:var(--text2);user-select:none;">📷 Show QR code (for in-person sharing)</summary>
+          <div id="qr-section" style="text-align:center;padding-top:12px;">
+            <div id="qr-code-container" style="display:inline-block;background:white;padding:16px;border-radius:12px;margin-bottom:10px;"></div>
+            <div style="font-size:.78rem;color:var(--text2);margin-top:4px;">Client scans this with their phone camera while looking at your screen</div>
+          </div>
+        </details>
+
+        <!-- Raw code (debug / paste fallback) -->
+        <details>
+          <summary style="cursor:pointer;font-size:.82rem;color:var(--text2);user-select:none;">🔧 Show raw code</summary>
+          <div style="margin-top:10px;">
+            <textarea id="export-code" readonly onclick="this.select()" style="cursor:pointer;background:var(--surface2);height:80px;font-size:.75rem;margin-bottom:10px;"></textarea>
+            <button class="btn btn-secondary" style="width:100%;" onclick="copyCode()">📋 Copy Code</button>
+            <div id="copy-confirm" style="font-size:.85rem;color:var(--green);text-align:center;margin-top:8px;display:none;font-weight:600;">✓ Copied to clipboard!</div>
+          </div>
+        </details>
+
       </div>
     </details>
 
-    <!-- Fallback: manual code (shown if QR too large) -->
+    <!-- Fallback: manual code (shown if QR too large to fit a QR) -->
     <div id="manual-code-section" style="display:none;">
       <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:12px;font-size:.82rem;color:var(--orange);text-align:center;">
         ⚠️ Plan is too large for a QR code. Use the link above to share.
       </div>
     </div>
-
-    <details style="margin-bottom:16px;">
-      <summary style="cursor:pointer;font-size:.82rem;color:var(--text2);user-select:none;">Show raw code</summary>
-      <div style="margin-top:10px;">
-        <textarea id="export-code" readonly onclick="this.select()" style="cursor:pointer;background:var(--surface2);height:80px;font-size:.75rem;margin-bottom:10px;"></textarea>
-        <button class="btn btn-secondary" style="width:100%;" onclick="copyCode()">📋 Copy Code</button>
-        <div id="copy-confirm" style="font-size:.85rem;color:var(--green);text-align:center;margin-top:8px;display:none;font-weight:600;">✓ Copied to clipboard!</div>
-      </div>
-    </details>
 
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn btn-secondary" onclick="closeModal('modal-export-code')">Done</button>
@@ -1689,6 +1699,11 @@ function syncBuilderFromUI(containerId) {
       ex.metric = row.querySelector('.exercise-metric-select').value || 'checkbox';
       ex.trainerNotes = row.querySelector('input[data-field="trainerNotes"]')?.value || '';
 
+      // Guard: some legacy / partially-initialized exercises may have
+      // ex.target === undefined. Without this, the assignment below throws
+      // "Cannot set properties of undefined" and breaks the whole save.
+      if (!ex.target) ex.target = {};
+
       const targetInputs = row.querySelectorAll('.exercise-targets input, .exercise-targets select');
       targetInputs.forEach(inp => {
         const field = inp.getAttribute('data-target');
@@ -2263,13 +2278,9 @@ function showShareModal(code, clientName, type) {
   document.getElementById('share-modal-title').textContent = type === 'update' ? `Updated Plan for ${clientName}` : `Send to ${clientName}`;
   currentShareClientName = clientName;
 
-  // Auto-populate custom slug with client name + short unique suffix
-  const now = new Date();
-  const safeName = clientName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  const day = now.getDate();
-  const suffix = Math.random().toString(36).substring(2, 5);
-  const suggestedSlug = `BM_${safeName}_${day}_${suffix}`;
-  document.getElementById('custom-slug-input').value = suggestedSlug.substring(0, 30);
+  // Slug input stays empty by default — placeholder communicates the format.
+  // Trainer fills it in if they want a branded link; blank means random short link.
+  document.getElementById('custom-slug-input').value = '';
 
   // Build the shareable URL with the code in the hash
   // LZString compressToEncodedURIComponent output is already URL-safe (A-Z, a-z, 0-9, +, -, $)
@@ -2330,178 +2341,205 @@ function copyCode() {
   showCopyConfirm();
 }
 
-function copyShareLink() {
-  if (!currentShareUrl) return;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(currentShareUrl).then(() => {
-      showLinkCopyConfirm();
-    }).catch(() => {
-      fallbackCopyLink();
-    });
-  } else {
-    fallbackCopyLink();
-  }
-}
-
-function fallbackCopyLink() {
-  const ta = document.createElement('textarea');
-  ta.value = currentShareUrl;
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  document.body.appendChild(ta);
-  ta.select();
-  try {
-    document.execCommand('copy');
-    showLinkCopyConfirm();
-  } catch(e) {
-    alert('Copy failed. The link is:\n' + currentShareUrl);
-  }
-  document.body.removeChild(ta);
-}
-
-function showLinkCopyConfirm() {
-  const el = document.getElementById('link-copy-confirm');
-  el.style.display = 'block';
-  setTimeout(() => { el.style.display = 'none'; }, 3000);
-}
+// ── Share helpers (Item 2 rewrite) ───────────────────────────────────────
+// All share paths (Copy Link / Native Share / SMS / Email) go through
+// withShortenedLink so the client always receives a short, clickable URL —
+// never the raw BMPLAN/BMNEW code.
 
 function sanitizeSlugInput(el) {
   // is.gd allows only a-z, 0-9, underscore — auto-convert hyphens to underscores
   el.value = el.value.replace(/-/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
 }
 
-function copyShortUrl(shortUrl, statusEl, btn) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(shortUrl).then(() => {
-      statusEl.style.color = 'var(--green)';
-      statusEl.innerHTML = '✓ Short link copied: <strong>' + shortUrl + '</strong>';
-    }).catch(() => {
-      statusEl.style.color = 'var(--green)';
-      statusEl.innerHTML = 'Short link: <strong>' + shortUrl + '</strong> (copy it manually)';
-    });
-  } else {
-    statusEl.style.color = 'var(--green)';
-    statusEl.innerHTML = 'Short link: <strong>' + shortUrl + '</strong> (copy it manually)';
-  }
-  btn.disabled = false;
-  btn.textContent = '📋 Copy Link to Send';
-}
-
-function shortenWithTinyUrl(statusEl, btn) {
-  statusEl.textContent = 'Creating short link...';
-  return fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(currentShareUrl))
-    .then(response => {
-      if (!response.ok) throw new Error('Service unavailable');
-      return response.text();
-    })
-    .then(shortUrl => {
-      shortUrl = shortUrl.trim();
-      if (!shortUrl.startsWith('http')) throw new Error('Invalid response');
-      copyShortUrl(shortUrl, statusEl, btn);
-    });
-}
-
-function shortenAndCopyLink() {
-  if (!currentShareUrl) return;
-  const statusEl = document.getElementById('shorten-status');
-  const btn = document.getElementById('btn-shorten-link');
-  const slugInput = document.getElementById('custom-slug-input');
-  const customSlug = slugInput.value.trim().replace(/-/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-  btn.disabled = true;
-  btn.textContent = '⏳ Creating link...';
-  statusEl.style.display = 'block';
-  statusEl.style.color = 'var(--text2)';
-
-  if (customSlug) {
-    // Enforce is.gd minimum 5 characters
-    const slug = customSlug.length < 5 ? customSlug + '_plan' : customSlug;
-    statusEl.textContent = 'Creating custom link "' + slug + '"...';
-    // Use is.gd — supports custom aliases, CORS, no API key
-    fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(currentShareUrl) + '&shorturl=' + encodeURIComponent(slug))
-      .then(response => response.json())
-      .then(data => {
-        if (data.shorturl) {
-          copyShortUrl(data.shorturl, statusEl, btn);
-        } else if (data.errorcode) {
-          // Alias taken or invalid — show message and try TinyURL fallback
-          const isTaken = data.errormessage && data.errormessage.includes('already exists');
-          statusEl.style.color = 'var(--orange)';
-          statusEl.textContent = isTaken
-            ? '"' + slug + '" is already taken — creating random short link...'
-            : data.errormessage + ' — creating random short link...';
-          return shortenWithTinyUrl(statusEl, btn);
-        } else {
-          throw new Error('Unexpected response');
-        }
-      })
-      .catch(err => {
-        // is.gd failed — try TinyURL as fallback
-        statusEl.style.color = 'var(--text2)';
-        statusEl.textContent = 'Custom link service unavailable — trying alternate...';
-        shortenWithTinyUrl(statusEl, btn).catch(err2 => {
-          // Both services failed — copy full link
-          statusEl.style.color = 'var(--orange)';
-          statusEl.textContent = 'Link shorteners unavailable — full link copied instead.';
-          copyShareLink();
-          btn.disabled = false;
-          btn.textContent = '📋 Copy Link to Send';
-        });
-      });
-  } else {
-    // No custom slug — use TinyURL directly
-    statusEl.textContent = 'Creating short link...';
-    shortenWithTinyUrl(statusEl, btn).catch(err => {
-      statusEl.style.color = 'var(--orange)';
-      statusEl.textContent = 'Shortener unavailable — full link copied instead.';
-      copyShareLink();
-      btn.disabled = false;
-      btn.textContent = '📋 Copy Link to Send';
-    });
-  }
-}
-
-function fallbackCopy() {
-  const code = document.getElementById('export-code');
-  code.select();
-  try {
-    document.execCommand('copy');
-    showCopyConfirm();
-  } catch(e) {
-    alert('Copy failed. Please copy manually.');
-  }
+function showLinkCopyConfirm() {
+  const el = document.getElementById('link-copy-confirm');
+  if (!el) return;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
 function showCopyConfirm() {
   const confirm = document.getElementById('copy-confirm');
+  if (!confirm) return;
   confirm.style.display = 'block';
   setTimeout(() => { confirm.style.display = 'none'; }, 2000);
 }
 
+// Synchronous fallback for clipboard.writeText (older browsers / iOS Safari).
+function fallbackCopyText(text, onSuccess) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    if (onSuccess) onSuccess();
+  } catch(e) {
+    alert('Copy failed. The link is:\n' + text);
+  }
+  document.body.removeChild(ta);
+}
+
+// Module-level guard so double-clicking share buttons doesn't fire shorten twice.
+let _shareInFlight = false;
+
+// Shorten the current share URL, then invoke callback(shortUrl).
+// Slug rules:
+//   - Custom slug present → is.gd. On collision, append random suffix and retry once.
+//     On any other error, fall back to the full URL.
+//   - No slug → TinyURL directly. On failure, fall back to the full URL.
+function withShortenedLink(callback) {
+  if (!currentShareUrl) return;
+  if (_shareInFlight) return;
+  _shareInFlight = true;
+
+  const statusEl = document.getElementById('shorten-status');
+  const slugInput = document.getElementById('custom-slug-input');
+  const customSlug = slugInput
+    ? slugInput.value.trim().replace(/-/g, '_').replace(/[^a-zA-Z0-9_]/g, '')
+    : '';
+
+  const setStatus = (msg, color) => {
+    if (!statusEl) return;
+    statusEl.style.display = 'block';
+    statusEl.style.color = color || 'var(--text2)';
+    statusEl.textContent = msg;
+  };
+  const setStatusHTML = (html, color) => {
+    if (!statusEl) return;
+    statusEl.style.display = 'block';
+    statusEl.style.color = color || 'var(--green)';
+    statusEl.innerHTML = html;
+  };
+  const done = (shortUrl, statusHtml) => {
+    _shareInFlight = false;
+    if (statusHtml) setStatusHTML(statusHtml, 'var(--green)');
+    callback(shortUrl);
+  };
+  const fail = (msg) => {
+    _shareInFlight = false;
+    setStatus(msg || 'Shortener unavailable — using full link.', 'var(--orange)');
+    callback(currentShareUrl);
+  };
+
+  // No custom slug → TinyURL only.
+  if (!customSlug) {
+    setStatus('Creating short link...', 'var(--text2)');
+    fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(currentShareUrl))
+      .then(r => { if (!r.ok) throw new Error('TinyURL request failed'); return r.text(); })
+      .then(shortUrl => {
+        shortUrl = (shortUrl || '').trim();
+        if (!shortUrl.startsWith('http')) throw new Error('Invalid TinyURL response');
+        done(shortUrl, '✓ Short link: <strong>' + shortUrl + '</strong>');
+      })
+      .catch(() => fail('Shortener unavailable — using full link.'));
+    return;
+  }
+
+  // Custom slug → is.gd (with one retry using a random suffix on collision).
+  const baseSlug = customSlug.length < 5 ? customSlug + '_plan' : customSlug;
+  setStatus('Creating custom link "' + baseSlug + '"...', 'var(--text2)');
+  const tryIsGd = (slug, isRetry) => {
+    return fetch('https://is.gd/create.php?format=json&url='
+        + encodeURIComponent(currentShareUrl)
+        + '&shorturl=' + encodeURIComponent(slug))
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.shorturl) {
+          done(data.shorturl, '✓ Short link: <strong>' + data.shorturl + '</strong>');
+          return;
+        }
+        const taken = data && data.errormessage && data.errormessage.includes('already exists');
+        if (taken && !isRetry) {
+          const retrySlug = slug + '_' + Math.random().toString(36).substring(2, 5);
+          setStatus('"' + slug + '" was taken — trying "' + retrySlug + '"...', 'var(--text2)');
+          return tryIsGd(retrySlug, true);
+        }
+        if (taken) {
+          fail('"' + slug + '" was taken (retry also failed) — using full link.');
+        } else if (data && data.errormessage) {
+          fail(data.errormessage + ' — using full link.');
+        } else {
+          fail('Custom-link service returned an unexpected response — using full link.');
+        }
+      });
+  };
+  tryIsGd(baseSlug, false).catch(() => fail('Custom-link service unreachable — using full link.'));
+}
+
+// Primary action — Copy Link.
+function shortenAndCopyLink() {
+  const btn = document.getElementById('btn-shorten-link');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating link...'; }
+  withShortenedLink(function(url) {
+    if (btn) { btn.disabled = false; btn.textContent = '📋 Copy Link to Send'; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(() => showLinkCopyConfirm())
+        .catch(() => fallbackCopyText(url, showLinkCopyConfirm));
+    } else {
+      fallbackCopyText(url, showLinkCopyConfirm);
+    }
+  });
+}
+
+// Native Share — uses the OS share sheet on mobile, falls back to clipboard.
 function sharePlanNative() {
-  const code = document.getElementById('export-code').value;
-  const clientName = document.getElementById('share-modal-title').textContent;
-  if (navigator.share) {
-    navigator.share({ title: `Beast Mode Plan`, text: code });
-  } else {
-    fallbackCopy();
-  }
+  const btn = document.getElementById('btn-native-share');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ ...'; }
+  withShortenedLink(function(url) {
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Share'; }
+    if (navigator.share) {
+      navigator.share({
+        title: 'Beast Mode Plan',
+        text: 'Your Beast Mode plan: ' + url,
+        url: url
+      }).catch(() => {/* user cancelled — no-op */});
+    } else {
+      // Desktop: no native share — copy link to clipboard with a clear notice.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(showLinkCopyConfirm).catch(() => fallbackCopyText(url, showLinkCopyConfirm));
+      } else {
+        fallbackCopyText(url, showLinkCopyConfirm);
+      }
+    }
+  });
 }
 
-function sharePlanEmail() {
-  const code = document.getElementById('export-code').value;
-  const subject = encodeURIComponent(`Beast Mode Plan from Your Trainer`);
-  const body = encodeURIComponent(`Here's your Beast Mode plan:\n\n${code}\n\nOpen Beast Mode and import this code.`);
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
-}
-
+// SMS — opens the device's messaging app (mobile only) with the link pre-filled.
 function sharePlanSMS() {
-  const code = document.getElementById('export-code').value;
-  const message = encodeURIComponent(`Beast Mode Plan: ${code}`);
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-    window.location.href = `sms:?body=${message}`;
-  } else {
-    alert('SMS sharing is available on mobile devices. Copy the code and send manually.');
-  }
+  const btn = document.getElementById('btn-share-sms');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ ...'; }
+  withShortenedLink(function(url) {
+    if (btn) { btn.disabled = false; btn.textContent = '💬 Text (SMS)'; }
+    const msg = 'Your Beast Mode plan: ' + url;
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      window.location.href = 'sms:?body=' + encodeURIComponent(msg);
+    } else {
+      // Desktop fallback: copy the message to clipboard so the trainer can paste it
+      // wherever they send texts from.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(msg);
+      }
+      alert('SMS sharing needs a mobile device. The message has been copied to your clipboard:\n\n' + msg);
+    }
+  });
+}
+
+// Email — opens the user's mail client with the link pre-filled in the body.
+function sharePlanEmail() {
+  const btn = document.getElementById('btn-share-email');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ ...'; }
+  withShortenedLink(function(url) {
+    if (btn) { btn.disabled = false; btn.textContent = '✉️ Email'; }
+    const subject = encodeURIComponent('Beast Mode Plan from Your Trainer');
+    const body = encodeURIComponent(
+      "Here's your Beast Mode plan:\n\n" + url + "\n\nTap the link to open it."
+    );
+    window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
+  });
 }
 
 function openLibraryPicker(containerId, catIdx) {
