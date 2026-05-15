@@ -814,89 +814,103 @@
 
 <div class="modal-overlay" id="modal-add-client">
   <div class="modal" style="max-width:900px;">
-    <h3>Add New Client</h3>
+    <h3 style="margin-bottom:4px;">New Client</h3>
+    <p style="font-size:.85rem;color:var(--text2);margin-bottom:16px;">Just a name is required — everything else can be added later from the client's Profile tab.</p>
 
-    <div style="background:var(--bg);border-radius:8px;padding:16px;margin-bottom:16px;border:1px solid var(--border);">
-      <h4 style="font-size:.95rem;margin-bottom:12px;color:var(--accent);">Client Profile</h4>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="form-group">
-          <label>Name <span style="color:var(--red);">*</span></label>
-          <input type="text" id="ac-name" placeholder="Client's name" style="width:100%;">
-        </div>
-        <div class="form-group">
-          <label>Sport / Position</label>
-          <input type="text" id="ac-sport" placeholder="e.g., Baseball Pitcher" style="width:100%;">
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-        <div class="form-group">
-          <label>Height</label>
-          <input type="text" id="ac-height" placeholder="e.g., 5'10&quot;" style="width:100%;">
-        </div>
-        <div class="form-group">
-          <label>Weight (lbs)</label>
-          <input type="number" id="ac-weight" placeholder="0" style="width:100%;">
-        </div>
-        <div class="form-group">
-          <label>Birthday</label>
-          <input type="date" id="ac-birthday" style="width:100%;">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Motivation / Why</label>
-        <input type="text" id="ac-why" placeholder="What drives this client?" style="width:100%;">
-      </div>
-      <div class="form-group">
-        <label>Avatar</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="ac-avatar-picker"></div>
-      </div>
-      <div class="form-group">
-        <label>Goals (one per line)</label>
-        <textarea id="ac-goals" placeholder="e.g., Increase vertical jump&#10;Run a 6-minute mile&#10;Build core strength" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;"></textarea>
+    <!-- Name (only required field) -->
+    <div style="background:var(--bg);border-radius:8px;padding:16px;margin-bottom:14px;border:1px solid var(--border);">
+      <div class="form-group" style="margin-bottom:0;">
+        <label style="font-size:1rem;font-weight:600;">Name <span style="color:var(--red);">*</span></label>
+        <input type="text" id="ac-name" placeholder="Client's name" style="width:100%;font-size:1rem;padding:10px 12px;">
       </div>
     </div>
 
-    <div style="background:var(--bg);border-radius:8px;padding:16px;margin-bottom:16px;border:1px solid var(--border);">
-      <h4 style="font-size:.95rem;margin-bottom:12px;color:var(--accent);">Exercise Plan</h4>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="radio" name="ac-plan-source" value="scratch" checked onchange="updateAcPlanSource()">
-          <span style="font-size:.85rem;">Start from Scratch</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="radio" name="ac-plan-source" value="template" onchange="updateAcPlanSource()">
-          <span style="font-size:.85rem;">Use Template</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="radio" name="ac-plan-source" value="client" onchange="updateAcPlanSource()">
-          <span style="font-size:.85rem;">Copy from Client</span>
-        </label>
+    <!-- Profile details (collapsed by default) -->
+    <details style="background:var(--bg);border-radius:8px;margin-bottom:14px;border:1px solid var(--border);">
+      <summary style="cursor:pointer;padding:14px 16px;font-size:.95rem;color:var(--accent);user-select:none;">Profile details (optional)</summary>
+      <div style="padding:0 16px 16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Sport / Position</label>
+            <input type="text" id="ac-sport" placeholder="e.g., Baseball Pitcher" style="width:100%;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Birthday</label>
+            <input type="date" id="ac-birthday" style="width:100%;">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Height</label>
+            <input type="text" id="ac-height" placeholder="e.g., 5'10&quot;" style="width:100%;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Weight (lbs)</label>
+            <input type="number" id="ac-weight" placeholder="0" style="width:100%;">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Motivation / Why</label>
+          <input type="text" id="ac-why" placeholder="What drives this client?" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Avatar</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;" id="ac-avatar-picker"></div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Goals (one per line)</label>
+          <textarea id="ac-goals" placeholder="e.g., Increase vertical jump&#10;Run a 6-minute mile&#10;Build core strength" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;"></textarea>
+        </div>
       </div>
-      <div id="ac-template-selector" style="display:none;margin-bottom:12px;">
-        <select id="ac-selected-template" onchange="loadTemplateIntoAc()" style="width:100%;">
-          <option value="">-- Choose a template --</option>
-        </select>
-      </div>
-      <div id="ac-client-selector" style="display:none;margin-bottom:12px;">
-        <select id="ac-selected-client" onchange="loadClientIntoAc()" style="width:100%;">
-          <option value="">-- Choose a client --</option>
-        </select>
-      </div>
-      <div id="ac-exercise-builder" class="exercise-builder"></div>
-      <button class="btn btn-secondary add-category-btn" onclick="addCategoryToAcBuilder()">+ Add Category</button>
-    </div>
+    </details>
 
-    <div style="background:var(--bg);border-radius:8px;padding:16px;margin-bottom:16px;border:1px solid var(--border);">
-      <h4 style="font-size:.95rem;margin-bottom:12px;color:var(--green);">Supplement Plan</h4>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
-        <select id="ac-stack-select" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;">
-          <option value="">Load a preset stack...</option>
-        </select>
-        <button class="btn btn-success btn-small" onclick="var s=document.getElementById('ac-stack-select');if(s.value){loadSupplementStack('ac-supplement-builder',s.value);s.value='';}">Load Stack</button>
+    <!-- Exercise plan (collapsed by default) -->
+    <details style="background:var(--bg);border-radius:8px;margin-bottom:14px;border:1px solid var(--border);">
+      <summary style="cursor:pointer;padding:14px 16px;font-size:.95rem;color:var(--accent);user-select:none;">Exercise plan (optional)</summary>
+      <div style="padding:0 16px 16px;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="ac-plan-source" value="scratch" checked onchange="updateAcPlanSource()">
+            <span style="font-size:.85rem;">Start from Scratch</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="ac-plan-source" value="template" onchange="updateAcPlanSource()">
+            <span style="font-size:.85rem;">Use Template</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="ac-plan-source" value="client" onchange="updateAcPlanSource()">
+            <span style="font-size:.85rem;">Copy from Client</span>
+          </label>
+        </div>
+        <div id="ac-template-selector" style="display:none;margin-bottom:12px;">
+          <select id="ac-selected-template" onchange="loadTemplateIntoAc()" style="width:100%;">
+            <option value="">-- Choose a template --</option>
+          </select>
+        </div>
+        <div id="ac-client-selector" style="display:none;margin-bottom:12px;">
+          <select id="ac-selected-client" onchange="loadClientIntoAc()" style="width:100%;">
+            <option value="">-- Choose a client --</option>
+          </select>
+        </div>
+        <div id="ac-exercise-builder" class="exercise-builder"></div>
+        <button class="btn btn-secondary add-category-btn" onclick="addCategoryToAcBuilder()">+ Add Category</button>
       </div>
-      <div id="ac-supplement-builder" class="supplement-builder"></div>
-      <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addSupplementToAcBuilder()">+ Add Supplement</button>
-    </div>
+    </details>
+
+    <!-- Supplements (collapsed by default) -->
+    <details style="background:var(--bg);border-radius:8px;margin-bottom:14px;border:1px solid var(--border);">
+      <summary style="cursor:pointer;padding:14px 16px;font-size:.95rem;color:var(--green);user-select:none;">Supplements (optional)</summary>
+      <div style="padding:0 16px 16px;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+          <select id="ac-stack-select" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;">
+            <option value="">Load a preset stack...</option>
+          </select>
+          <button class="btn btn-success btn-small" onclick="var s=document.getElementById('ac-stack-select');if(s.value){loadSupplementStack('ac-supplement-builder',s.value);s.value='';}">Load Stack</button>
+        </div>
+        <div id="ac-supplement-builder" class="supplement-builder"></div>
+        <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addSupplementToAcBuilder()">+ Add Supplement</button>
+      </div>
+    </details>
 
     <div class="modal-actions" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
       <button class="btn btn-secondary" onclick="closeModal('modal-add-client')">Cancel</button>
@@ -1065,6 +1079,9 @@
     </div>
   </div>
 </div>
+
+<!-- Global autosave toast (fixed position so it's visible regardless of modal scroll) -->
+<div id="autosave-toast" style="position:fixed;bottom:24px;right:24px;background:var(--green,#16a34a);color:white;padding:10px 18px;border-radius:8px;font-size:.9rem;font-weight:600;opacity:0;transition:opacity 0.25s ease-out;pointer-events:none;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,0.35);">✓ Saved</div>
 
 <div class="modal-overlay" id="modal-library-picker">
   <div class="modal" style="max-width: 600px;">
@@ -2069,6 +2086,12 @@ function saveNewTemplate() {
 }
 
 function openPlanBuilderModal(clientName) {
+  // Guard: suppress autosave during initial open so the very first render
+  // doesn't flash a "✓ Saved" toast (nothing has actually changed).
+  // Cleared on the next event-loop tick once render side-effects have settled.
+  _planBuilderInitializing = true;
+  setTimeout(() => { _planBuilderInitializing = false; }, 0);
+
   currentPlanClientName = clientName;
   currentPlanData = clients[clientName] || null;
 
@@ -2081,6 +2104,15 @@ function openPlanBuilderModal(clientName) {
   if (!_planModal._autosaveHooked) {
     _planModal.addEventListener('input', schedulePlanBuilderAutosave);
     _planModal.addEventListener('change', schedulePlanBuilderAutosave);
+    // MutationObserver catches structural mutations from button-driven
+    // actions (Add Category, Add Exercise, Remove, Duplicate, Reorder, day-pill
+    // toggle, etc.) — those re-render the builder and don't fire input/change.
+    const _planObserver = new MutationObserver(() => schedulePlanBuilderAutosave());
+    ['plan-daily-builder', 'plan-weekly-builder', 'plan-supplement-builder'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) _planObserver.observe(el, { childList: true, subtree: true });
+    });
+    _planModal._autosaveObserver = _planObserver;
     _planModal._autosaveHooked = true;
   }
 
@@ -2186,28 +2218,50 @@ function generatePlanCode() {
 // "✓ Saved" indicator in the modal header. Wrapped in try/catch so a partial
 // DOM state (mid-typing) can never throw and break the modal.
 let planBuilderAutosaveTimer = null;
+let _planBuilderInitializing = false;
 function schedulePlanBuilderAutosave() {
+  // Suppress autosave fires during initial modal open (first render of an
+  // existing plan would otherwise look like a user edit).
+  if (_planBuilderInitializing) return;
   const modal = document.getElementById('modal-plan-builder');
   if (!modal || !modal.classList.contains('open')) return;
   if (!currentPlanClientName || !clients[currentPlanClientName]) return;
   clearTimeout(planBuilderAutosaveTimer);
   planBuilderAutosaveTimer = setTimeout(() => {
     try {
-      const merged = mergePlanCategories();
+      // IMPORTANT: do NOT call mergePlanCategories here — it would invoke
+      // flushPendingExercises, which commits whatever's typed in the "Add
+      // Exercise" pending input as a brand-new exercise. On every keystroke
+      // that means a fresh exercise gets pushed per character typed. The
+      // pending flush is only safe inside explicit Save/Send actions
+      // (savePlan, generatePlanCode, buildClientPackageFromForm).
+      // Here we only sync existing exercises from the DOM.
+      syncBuilderFromUI('plan-daily-builder');
+      syncBuilderFromUI('plan-weekly-builder');
+      planDailyCategories.forEach(c => { c.freqType = 'daily'; c.freqNum = 7; c.days = [0,1,2,3,4,5,6]; });
+      planWeeklyCategories.forEach(c => { if (!c.freqType || c.freqType === 'daily') c.freqType = 'custom'; c.freqNum = c.days.length; });
+      const merged = [...planDailyCategories, ...planWeeklyCategories];
       syncSupplementsFromUI('plan-supplement-builder');
       clients[currentPlanClientName].categories = merged;
       clients[currentPlanClientName].supplements = planBuilderSupplements.filter(s => s.name.trim());
       clients[currentPlanClientName].ts = new Date().toISOString();
       saveClients();
-      const indicator = document.getElementById('plan-autosave-indicator');
-      if (indicator) {
-        indicator.style.opacity = '1';
-        setTimeout(() => { if (indicator) indicator.style.opacity = '0'; }, 1500);
-      }
+      showAutosaveToast();
     } catch (e) {
       console.warn('Plan-builder autosave skipped:', e);
     }
   }, 600);
+}
+
+// Generic autosave toast — fixed-position bottom-right of the viewport so it's
+// visible regardless of modal scroll position. Replaces the per-modal header
+// indicators which were getting scrolled off-screen.
+function showAutosaveToast() {
+  const toast = document.getElementById('autosave-toast');
+  if (!toast) return;
+  toast.style.opacity = '1';
+  clearTimeout(toast._fadeTimer);
+  toast._fadeTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1500);
 }
 
 function generateClientCode(clientName, type) {
@@ -2957,6 +3011,7 @@ function showDetail(name) {
   document.getElementById('detail-tabs').innerHTML = [0,1,2,3].map(w =>
     `<button class="detail-tab ${w === (data.currentWeek||0) ? 'active' : ''}" onclick="showWeekDetail('${name.replace(/'/g, "\\'")}', ${w})"">Week ${w+1}</button>`
   ).join('') + `<button class="detail-tab" onclick="showSummaryDetail('${name.replace(/'/g, "\\'")}')">Summary</button>`
+    + `<button class="detail-tab" onclick="showProfileDetail('${name.replace(/'/g, "\\'")}')">👤 Profile</button>`
     + `<button class="detail-tab" onclick="showEditPlanDetail('${name.replace(/'/g, "\\'")}')">🎛️ Toggle Exercises</button>`
     + `<button class="btn btn-danger btn-small" style="margin-left:auto;" onclick="removeClient('${name.replace(/'/g, "\\'")}')">Remove Client</button>`;
 
@@ -3212,6 +3267,153 @@ function bulkToggleAllExercises(name, enable) {
   });
   saveClients();
   showEditPlanDetail(name);
+}
+
+// ── Profile tab (Item 3): edit client profile fields inline ─────────────────
+
+// Tiny helper for safe interpolation of user-provided strings into HTML.
+function escHTMLAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function showProfileDetail(name) {
+  document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.detail-tab').forEach(t => { if (t.textContent === '👤 Profile') t.classList.add('active'); });
+
+  selectedClient = name;
+  const data = clients[name];
+  if (!data) return;
+  const profile = data.profile || {};
+  const currentAvatar = profile.avatar || AVATARS[0];
+
+  const avatarPickerHtml = AVATARS.map(av => {
+    const isSelected = av === currentAvatar;
+    return `<button type="button" class="btn profile-avatar-btn" data-avatar="${escHTMLAttr(av)}" style="padding:8px 12px;font-size:1.2rem;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};background:transparent;border-radius:8px;cursor:pointer;" onclick="selectProfileAvatar(this, '${name.replace(/'/g, "\'")}', '${escHTMLAttr(av)}')">${av}</button>`;
+  }).join('');
+
+  const goalsText = (profile.goals || []).join('\n');
+
+  const html = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <h3 style="font-size:1rem;margin:0;flex:1;">Client Profile</h3>
+      <span id="profile-autosave-indicator" style="font-size:.78rem;color:var(--green);opacity:0;transition:opacity 0.3s;font-weight:600;">✓ Saved</span>
+    </div>
+    <div style="background:var(--surface2);border-radius:var(--radius);padding:16px;margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Name</label>
+          <input type="text" value="${escHTMLAttr(name)}" readonly style="width:100%;opacity:.65;cursor:not-allowed;background:var(--bg);">
+          <div style="font-size:.72rem;color:var(--text2);margin-top:3px;">Name can't be edited here — remove and re-add the client if needed.</div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Sport / Position</label>
+          <input type="text" id="profile-sport" value="${escHTMLAttr(profile.sport)}" placeholder="e.g., Baseball Pitcher" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Height</label>
+          <input type="text" id="profile-height" value="${escHTMLAttr(profile.height)}" placeholder="e.g., 5'10&quot;" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Weight (lbs)</label>
+          <input type="number" id="profile-weight" value="${profile.weight || ''}" placeholder="0" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Birthday</label>
+          <input type="date" id="profile-birthday" value="${escHTMLAttr(profile.birthday)}" style="width:100%;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Motivation / Why</label>
+        <input type="text" id="profile-why" value="${escHTMLAttr(profile.why)}" placeholder="What drives this client?" style="width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Avatar</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="profile-avatar-picker">${avatarPickerHtml}</div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Goals (one per line)</label>
+        <textarea id="profile-goals" placeholder="e.g., Increase vertical jump&#10;Run a 6-minute mile" style="width:100%;height:90px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;">${escHTMLAttr(goalsText)}</textarea>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('detail-body').innerHTML = html;
+
+  // Hook autosave on each editable field
+  ['profile-sport', 'profile-height', 'profile-weight', 'profile-birthday', 'profile-why', 'profile-goals'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      const fire = () => scheduleProfileAutosave(name);
+      el.addEventListener('input', fire);
+      el.addEventListener('change', fire);
+    }
+  });
+}
+
+function selectProfileAvatar(btn, name, avatar) {
+  document.querySelectorAll('.profile-avatar-btn').forEach(b => { b.style.borderColor = 'var(--border)'; });
+  btn.style.borderColor = 'var(--accent)';
+  const data = clients[name];
+  if (!data) return;
+  if (!data.profile) data.profile = {};
+  data.profile.avatar = avatar;
+  data.ts = new Date().toISOString();
+  saveClients();
+  renderAll();
+  showProfileSaveIndicator();
+}
+
+let profileAutosaveTimer = null;
+function scheduleProfileAutosave(name) {
+  clearTimeout(profileAutosaveTimer);
+  profileAutosaveTimer = setTimeout(() => {
+    try {
+      const data = clients[name];
+      if (!data) return;
+      if (!data.profile) data.profile = {};
+      const sport = document.getElementById('profile-sport');
+      const height = document.getElementById('profile-height');
+      const weight = document.getElementById('profile-weight');
+      const birthday = document.getElementById('profile-birthday');
+      const why = document.getElementById('profile-why');
+      const goals = document.getElementById('profile-goals');
+      if (sport) data.profile.sport = sport.value;
+      if (height) data.profile.height = height.value;
+      if (weight) data.profile.weight = Number(weight.value) || 0;
+      if (birthday) data.profile.birthday = birthday.value;
+      if (why) data.profile.why = why.value;
+      if (goals) {
+        const lines = goals.value.split('\n').map(g => g.trim()).filter(Boolean);
+        const prevLen = (data.profile.goals || []).length;
+        data.profile.goals = lines;
+        // Keep goalsDone aligned with goals length
+        if (!Array.isArray(data.goalsDone)) data.goalsDone = [];
+        if (lines.length > prevLen) {
+          data.goalsDone = data.goalsDone.concat(Array(lines.length - prevLen).fill(false));
+        } else if (lines.length < prevLen) {
+          data.goalsDone = data.goalsDone.slice(0, lines.length);
+        }
+      }
+      data.ts = new Date().toISOString();
+      saveClients();
+      renderAll(); // re-render client card with updated sport/weight/why
+      showProfileSaveIndicator();
+    } catch (e) {
+      console.warn('Profile autosave skipped:', e);
+    }
+  }, 600);
+}
+
+function showProfileSaveIndicator() {
+  // Route through the shared toast so the user sees it even when the goals
+  // textarea or other lower fields are scrolled below the form header.
+  showAutosaveToast();
 }
 
 function quickUpdateClientPlan(name) {
