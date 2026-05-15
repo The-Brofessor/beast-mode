@@ -1,0 +1,23 @@
+# Local-only project files — kept in the working tree for context and tooling,
+# but never pushed to GitHub Pages.
+
+# Project notes for Claude (loaded at session start)
+CLAUDE.md
+ENHANCEMENTS.md
+.claude/
+
+# Local validator + skill (developer-only)
+sync-check.js
+finance-tool-builder.skill
+
+# User-facing docs that don't belong on the public site
+Beast_Mode_Quick_Start_Guide.docx
+
+# Unrelated standalone tools that share this folder
+fitness-twitter-eval-review.html
+workout-nutrition-tool.html
+
+# Backup files created by editors / scripts
+*.bak*
+*.tmp_*
+*.tmp
