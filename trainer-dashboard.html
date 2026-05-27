@@ -757,6 +757,9 @@
   .supplement-row .supp-dosage-input { flex: 1; min-width: 100px; }
   .supplement-row .supp-timing-select { flex: 1; min-width: 120px; }
   .supplement-row .supp-notes-input { width: 100%; margin-top: 6px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 4px; font-size: .82rem; }
+  .supplement-row .supp-days-row { width: 100%; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: .78rem; color: var(--text2); }
+  .supplement-row .supp-days-row label { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: .78rem; color: var(--text); }
+  .supplement-row .supp-days-row label input { accent-color: var(--accent); }
   .quick-add-supplement { display: flex; gap: 8px; align-items: center; padding: 8px; background: var(--bg); border-radius: 6px; margin-top: 8px; }
   .quick-add-supplement input { flex: 1; background: transparent; border: 1px dashed var(--border); color: var(--text); padding: 6px 8px; border-radius: 4px; font-size: .85rem; }
   .quick-add-supplement input:focus { outline: none; border-color: var(--accent); }
@@ -3510,6 +3513,10 @@ function renderSupplementBuilder(containerId, supplements) {
   container.innerHTML = supplements.map((supp, idx) => {
     const timingIsCustom = isCustomTiming(supp.timing) || (supp.timing === 'custom');
     const timingVal = (supp.timing && !SUPPLEMENT_TIMINGS[supp.timing]) ? 'custom' : (supp.timing || 'morning');
+    const suppDays = Array.isArray(supp.days) && supp.days.length ? supp.days : [0,1,2,3,4,5,6];
+    const daysCheckboxesHtml = DAYS_SHORT.map((d, di) =>
+      `<label><input type="checkbox" class="supp-day-cb" data-day="${di}" ${suppDays.includes(di) ? 'checked' : ''}>${d}</label>`
+    ).join('');
     return `
     <div class="supplement-row" data-supp-idx="${idx}">
       <input type="text" class="supp-name-input" value="${escapeHtml(supp.name)}" placeholder="Supplement name" data-field="name">
@@ -3525,6 +3532,7 @@ function renderSupplementBuilder(containerId, supplements) {
         <button type="button" class="remove-exercise-btn" onclick="removeSupplementFromBuilder('${containerId}', ${idx})">✕</button>
       </div>
       <input type="text" class="supp-notes-input" value="${escapeHtml(supp.notes || '')}" placeholder="Notes for client (optional)" data-field="notes">
+      <div class="supp-days-row"><span style="margin-right:4px;">Days:</span>${daysCheckboxesHtml}</div>
     </div>
   `}).join('');
 }
@@ -3541,6 +3549,9 @@ function getSupplementsFromBuilder(containerId) {
     const notesInput = row.querySelector('.supp-notes-input');
     const customTimingInput = row.querySelector('.supp-custom-timing');
     const timing = timingSelect.value;
+    const dayCbs = row.querySelectorAll('.supp-day-cb');
+    let days = [...dayCbs].filter(cb => cb.checked).map(cb => parseInt(cb.dataset.day, 10));
+    if (days.length === 0) days = [0,1,2,3,4,5,6];
     supplements.push({
       id: 'supp-' + Math.random().toString(36).substr(2, 9),
       name: nameInput.value.trim(),
@@ -3548,7 +3559,8 @@ function getSupplementsFromBuilder(containerId) {
       timing: timing,
       customTiming: (timing === 'custom' && customTimingInput) ? customTimingInput.value.trim() : '',
       notes: notesInput.value.trim(),
-      trainerAssigned: true
+      trainerAssigned: true,
+      days: days
     });
   });
   return supplements;
@@ -3563,12 +3575,12 @@ function syncSupplementsFromUI(containerId) {
 }
 
 function addSupplementToAcBuilder() {
-  acSupplements.push({ id: 'supp-' + Math.random().toString(36).substr(2, 9), name: '', dosage: '', timing: 'morning', notes: '', trainerAssigned: true });
+  acSupplements.push({ id: 'supp-' + Math.random().toString(36).substr(2, 9), name: '', dosage: '', timing: 'morning', notes: '', trainerAssigned: true, days: [0,1,2,3,4,5,6] });
   renderSupplementBuilder('ac-supplement-builder', acSupplements);
 }
 
 function addSupplementToPlanBuilder() {
-  planBuilderSupplements.push({ id: 'supp-' + Math.random().toString(36).substr(2, 9), name: '', dosage: '', timing: 'morning', notes: '', trainerAssigned: true });
+  planBuilderSupplements.push({ id: 'supp-' + Math.random().toString(36).substr(2, 9), name: '', dosage: '', timing: 'morning', notes: '', trainerAssigned: true, days: [0,1,2,3,4,5,6] });
   renderSupplementBuilder('plan-supplement-builder', planBuilderSupplements);
 }
 
@@ -3643,7 +3655,8 @@ function loadSupplementStack(containerId, stackId) {
       timing: s.timing,
       notes: s.notes || '',
       customTiming: '',
-      trainerAssigned: true
+      trainerAssigned: true,
+      days: Array.isArray(s.days) && s.days.length ? s.days.slice() : [0,1,2,3,4,5,6]
     });
   });
   setSupplementArray(containerId, arr);

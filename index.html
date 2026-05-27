@@ -873,6 +873,32 @@
     font-weight: 500;
     cursor: pointer;
   }
+  /* Supplement scheduling indicators (desktop + mobile share these) */
+  .supp-schedule-hint {
+    font-size: .72rem;
+    color: var(--accent);
+    margin-top: 6px;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .supp-off-badge {
+    font-size: .68rem;
+    color: var(--text2);
+    background: var(--surface2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .supp-check.supp-check-off {
+    opacity: 0.45;
+  }
+  .supp-check.supp-check-off label {
+    color: var(--text2);
+  }
+  .bm-supp-card-off {
+    opacity: 0.6;
+  }
   /* ── Supplements ── */
   .supp-card {
     background: var(--surface);
@@ -1388,6 +1414,8 @@
       <option value="with-meals">With Meals</option>
       <option value="as-needed">As Needed</option>
     </select>
+    <label>Days of Week</label>
+    <div id="new-supp-days" style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;"></div>
     <label>Trainer Notes (optional)</label>
     <textarea id="new-supp-notes" placeholder="Why you're taking this, benefits, tips..."></textarea>
     <div class="modal-actions">
@@ -1527,6 +1555,7 @@ function migrateState(state) {
   // Ensure supplements array and supplementLog exist
   if (!state.supplements) state.supplements = [];
   if (!state.supplementLog) state.supplementLog = {};
+  state.supplements = normalizeSupplements(state.supplements);
   return state;
 }
 
@@ -1848,6 +1877,19 @@ function normalizeCategories(categories) {
       cat.freqNum = cat.days ? cat.days.length : (cat.freqType === 'daily' ? 7 : 3);
     }
     return cat;
+  });
+}
+
+// Ensure every supplement has a `days` array (defaults to all 7 = daily).
+// Pre-feature supplements lack this field; new ones include it from the trainer
+// or from the client's Add Custom Supplement modal.
+function normalizeSupplements(supplements) {
+  if (!Array.isArray(supplements)) return [];
+  return supplements.map(s => {
+    if (!Array.isArray(s.days) || s.days.length === 0) {
+      s.days = [0,1,2,3,4,5,6];
+    }
+    return s;
   });
 }
 
@@ -2866,7 +2908,7 @@ function processTrainerCode() {
         state.categories = normalizeCategories(data.categories);
       }
       if (data.supplements) {
-        state.supplements = data.supplements;
+        state.supplements = normalizeSupplements(data.supplements);
       }
 
       saveState();
@@ -2899,7 +2941,7 @@ function processTrainerCode() {
       } else if (parsed.categories) {
         state.categories = normalizeCategories(parsed.categories);
         if (parsed.supplements) {
-          state.supplements = parsed.supplements;
+          state.supplements = normalizeSupplements(parsed.supplements);
         }
         // Merge profile data if included — fills in missing fields without overwriting
         mergeProfileFromUpdate(parsed.profile);
@@ -3015,6 +3057,7 @@ function openAddSupplementModal() {
   document.getElementById('new-supp-dosage').value = '';
   document.getElementById('new-supp-timing').value = 'morning';
   document.getElementById('new-supp-notes').value = '';
+  renderDayCheckboxes('new-supp-days', [0,1,2,3,4,5,6]);
   document.getElementById('modal-add-supplement').classList.add('open');
 }
 
@@ -3023,6 +3066,8 @@ function addCustomSupplement() {
   const dosage = document.getElementById('new-supp-dosage').value.trim();
   const timing = document.getElementById('new-supp-timing').value;
   const notes = document.getElementById('new-supp-notes').value.trim();
+  let days = getSelectedDays('new-supp-days');
+  if (days.length === 0) days = [0,1,2,3,4,5,6];
 
   if (!name) {
     alert('Please enter a supplement name');
@@ -3035,7 +3080,8 @@ function addCustomSupplement() {
     dosage: dosage,
     timing: timing,
     notes: notes,
-    trainerAssigned: false
+    trainerAssigned: false,
+    days: days
   };
 
   state.supplements.push(newSupp);
@@ -3067,19 +3113,20 @@ function toggleSupplementDay(suppId, week, day) {
 // Note: getWeekDates is defined once above (in tracker section) and reused here for supplements
 
 function calcSupplementCompletion(week) {
-  if (state.supplements.length === 0) return 100;
+  if (state.supplements.length === 0) return 0;
 
   let totalChecks = 0;
   let checkedCount = 0;
 
   state.supplements.forEach(supp => {
-    for (let day = 0; day < 7; day++) {
+    const days = Array.isArray(supp.days) && supp.days.length ? supp.days : [0,1,2,3,4,5,6];
+    days.forEach(day => {
       const logKey = `supp|${supp.id}|w${week}d${day}`;
       totalChecks++;
       if (state.supplementLog[logKey]?.taken) {
         checkedCount++;
       }
-    }
+    });
   });
 
   return totalChecks > 0 ? Math.round((checkedCount / totalChecks) * 100) : 0;
@@ -3141,6 +3188,11 @@ function renderMobileSupplements(week, dayIdx) {
     const timingLabel = supp.timing === 'custom'
       ? (supp.customTiming || 'Custom')
       : (TIMING_LABELS[supp.timing] || supp.timing);
+    const suppDays = Array.isArray(supp.days) && supp.days.length ? supp.days : [0,1,2,3,4,5,6];
+    const isDaily = suppDays.length === 7;
+    const isScheduledToday = suppDays.includes(dayIdx);
+    const scheduleHint = isDaily ? '' : '<div class="supp-schedule-hint">Scheduled: ' + suppDays.map(i => DAYS[i]).join(' ') + '</div>';
+    const offBadge = !isScheduledToday ? '<span class="supp-off-badge">Not scheduled today</span>' : '';
     const logKey = 'supp|' + supp.id + '|w' + week + 'd' + dayIdx;
     const isChecked = (state.supplementLog[logKey] && state.supplementLog[logKey].taken) || false;
     const notesHtml = supp.notes ? '<div class="bm-exercise-notes">' + supp.notes + '</div>' : '';
@@ -3149,13 +3201,16 @@ function renderMobileSupplements(week, dayIdx) {
       : '';
     const dosageHtml = supp.dosage ? '<span class="supp-dosage">' + supp.dosage + '</span>' : '';
     const inputId = 'supp-take-' + supp.id + '-d' + dayIdx;
+    const cardClass = 'bm-exercise-card' + (isScheduledToday ? '' : ' bm-supp-card-off');
 
-    return '<div class="bm-exercise-card">' +
+    return '<div class="' + cardClass + '">' +
       '<div class="bm-exercise-name">' + supp.name + '</div>' +
       '<div class="bm-supp-meta">' +
         '<span class="supp-timing-badge ' + timingBadgeClass + '">' + timingLabel + '</span>' +
         dosageHtml +
+        offBadge +
       '</div>' +
+      scheduleHint +
       notesHtml +
       '<div class="bm-supp-take">' +
         '<input type="checkbox" id="' + inputId + '" ' + (isChecked ? 'checked' : '') +
@@ -3179,24 +3234,29 @@ function renderSupplements() {
 
   document.getElementById('supp-week-label').textContent = `${weekStartDate} - ${weekEndDate}`;
 
-  renderSupplementSummary(week);
-
   const body = document.getElementById('supplements-tracker-body');
 
   if (state.supplements.length === 0) {
+    document.getElementById('supp-summary-container').innerHTML = '';
     body.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px;"><p>No supplements yet. Add one to get started!</p></div>';
     return;
   }
 
+  renderSupplementSummary(week);
+
   const supplementCards = state.supplements.map(supp => {
     const timingBadgeClass = `supp-timing-${supp.timing}`;
     const timingLabel = supp.timing === 'custom' ? (supp.customTiming || 'Custom') : (TIMING_LABELS[supp.timing] || supp.timing);
+    const suppDays = Array.isArray(supp.days) && supp.days.length ? supp.days : [0,1,2,3,4,5,6];
+    const isDaily = suppDays.length === 7;
+    const scheduleHint = isDaily ? '' : `<div class="supp-schedule-hint">Scheduled: ${suppDays.map(i => DAYS[i]).join(' ')}</div>`;
 
     const checksHtml = DAYS.map((day, idx) => {
       const logKey = `supp|${supp.id}|w${week}d${idx}`;
       const isChecked = state.supplementLog[logKey]?.taken || false;
+      const isScheduled = suppDays.includes(idx);
       return `
-        <div class="supp-check">
+        <div class="supp-check${isScheduled ? '' : ' supp-check-off'}">
           <label>${day}</label>
           <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSupplementDay('${supp.id}', ${week}, ${idx})">
         </div>
@@ -3214,6 +3274,7 @@ function renderSupplements() {
           </div>
           <span class="supp-timing-badge ${timingBadgeClass}">${timingLabel}</span>
         </div>
+        ${scheduleHint}
         ${supp.notes ? `<div class="supp-notes">${supp.notes}</div>` : ''}
         <div class="supp-checklist">
           ${checksHtml}
@@ -3274,7 +3335,7 @@ function checkUrlForPlan() {
     if (!confirm(`Your trainer sent a new workout plan!\n\n${categories.length} categories: ${catNames}\n${exCount} total exercises\n\nImport this plan? (Your current exercises will be replaced, but your logged progress stays.)`)) return;
 
     state.categories = normalizeCategories(categories);
-    if (supplements) state.supplements = supplements;
+    if (supplements) state.supplements = normalizeSupplements(supplements);
     // Merge profile data if included — fills in missing fields without overwriting
     if (!Array.isArray(parsed)) mergeProfileFromUpdate(parsed.profile);
     saveState();
@@ -3341,7 +3402,7 @@ function checkUrlForSetup() {
       state.categories = normalizeCategories(data.categories);
     }
     if (data.supplements) {
-      state.supplements = data.supplements;
+      state.supplements = normalizeSupplements(data.supplements);
     }
 
     saveState();
@@ -3460,7 +3521,7 @@ function checkHashForImport() {
         state.categories = normalizeCategories(data.categories);
       }
       if (data.supplements) {
-        state.supplements = data.supplements;
+        state.supplements = normalizeSupplements(data.supplements);
       }
 
       saveState();
@@ -3507,7 +3568,7 @@ function checkHashForImport() {
       } else if (parsed.categories) {
         state.categories = normalizeCategories(parsed.categories);
         if (parsed.supplements) {
-          state.supplements = parsed.supplements;
+          state.supplements = normalizeSupplements(parsed.supplements);
         }
       }
 
