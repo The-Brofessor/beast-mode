@@ -690,6 +690,160 @@
     .progress-label { font-size: .78rem; }
     h2 { font-size: 1.1rem; }
   }
+
+  /* ── Item 4: mobile tracker (one day at a time) ───────────────────────── */
+  .tracker-mobile-view { display: none; }
+  .tracker-desktop-view { display: block; }
+  @media (max-width: 480px) {
+    .tracker-desktop-view { display: none; }
+    .tracker-mobile-view { display: block; }
+  }
+
+  .bm-day-picker {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 14px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding: 8px 0;
+    z-index: 5;
+  }
+  .bm-day-pill {
+    background: transparent;
+    border: 1px solid var(--surface2);
+    color: var(--text2);
+    border-radius: 8px;
+    padding: 8px 0 6px;
+    text-align: center;
+    font-size: .68rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .bm-day-pill .bm-day-num {
+    display: block;
+    font-size: .82rem;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .bm-day-pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .bm-day-pill.active .bm-day-num { color: #fff; }
+
+  .bm-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+    font-size: .95rem;
+    font-weight: 500;
+  }
+  .bm-today-badge {
+    font-size: .72rem;
+    color: var(--green, #22c55e);
+    background: rgba(34, 197, 94, 0.15);
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-weight: 500;
+  }
+
+  .bm-cat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 0 10px;
+  }
+  .bm-cat-header h3 {
+    font-size: .9rem;
+    font-weight: 500;
+    margin: 0;
+  }
+  .bm-cat-header .badge {
+    font-size: .68rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .bm-exercise-card {
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .bm-exercise-name {
+    font-size: .9rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .bm-exercise-goal {
+    font-size: .72rem;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .bm-exercise-notes {
+    font-size: .72rem;
+    color: var(--text2);
+    font-style: italic;
+    margin-bottom: 10px;
+    padding-left: 8px;
+    border-left: 2px solid var(--surface2);
+  }
+  .bm-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  /* Override the inline width:38px / width:40px from renderMetricInputs so
+     the inputs are thumb-friendly in mobile cards. */
+  .bm-input-row input[type="checkbox"] {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .bm-input-row input[type="number"],
+  .bm-input-row input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 6px;
+    font-size: .9rem;
+    width: 56px !important;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .bm-input-row .bm-times {
+    color: var(--text2);
+    font-size: .9rem;
+  }
+  .bm-rest-card {
+    background: var(--surface);
+    border: 1px dashed var(--surface2);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 10px;
+    text-align: center;
+    color: var(--text2);
+    font-size: .78rem;
+    font-style: italic;
+  }
+
+  /* Item 4 polish: lock body scroll while a modal is open on mobile so
+     the page behind doesn't scroll-tap when the user means to scroll the
+     modal. Uses :has() — supported in modern Edge, Chrome, and Safari. */
+  @media (max-width: 480px) {
+    body:has(.modal-overlay.open),
+    body:has(.setup-overlay.open),
+    body:has(.modal.open) {
+      overflow: hidden;
+    }
+  }
   /* ── Supplements ── */
   .supp-card {
     background: var(--surface);
@@ -1775,6 +1929,94 @@ function removeExercise(catId, idx) {
 // ═══════════════════════════════════════════
 // RENDER: TRACKER
 // ═══════════════════════════════════════════
+// Item 4: selected day for the mobile tracker (Mon=0 .. Sun=6).
+// Defaults to today's local day-of-week so most clients land on "today" first.
+let selectedTrackerDay = (() => {
+  const jsDay = new Date().getDay(); // 0=Sun .. 6=Sat
+  return jsDay === 0 ? 6 : jsDay - 1; // remap to 0=Mon .. 6=Sun
+})();
+
+function selectMobileDay(dayIdx) {
+  if (dayIdx < 0 || dayIdx > 6) return;
+  selectedTrackerDay = dayIdx;
+  renderTracker();
+}
+
+// Returns true if `d` matches the user's local today.
+function _isLocalToday(d) {
+  if (!(d instanceof Date)) return false;
+  const today = new Date();
+  return d.getFullYear() === today.getFullYear()
+    && d.getMonth() === today.getMonth()
+    && d.getDate() === today.getDate();
+}
+
+// Render the mobile tracker for one tab (daily or weekly).
+function renderMobileTracker(weekIdx, dates, categories) {
+  if (!categories || categories.length === 0) return '';
+
+  // Day picker pills — 7 pills across, sticky to top
+  const pickerHtml = '<div class="bm-day-picker">' +
+    DAYS_SHORT.map((d, idx) => {
+      const isActive = idx === selectedTrackerDay;
+      return '<button type="button" class="bm-day-pill ' + (isActive ? 'active' : '') + '"' +
+        ' onclick="selectMobileDay(' + idx + ')">' +
+        '<span class="bm-day-num">' + dates[idx].getDate() + '</span>' + d +
+        '</button>';
+    }).join('') +
+    '</div>';
+
+  // Selected-day header
+  const sel = dates[selectedTrackerDay];
+  const monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const isToday = _isLocalToday(sel);
+  const headerHtml = '<div class="bm-day-header">' +
+    '<span>' + DAYS[selectedTrackerDay] + ', ' + monthsShort[sel.getMonth()] + ' ' + sel.getDate() + '</span>' +
+    (isToday ? '<span class="bm-today-badge">Today</span>' : '') +
+    '</div>';
+
+  // Per-category cards for the selected day
+  const catsHtml = categories
+    .filter(cat => cat.exercises && cat.exercises.length > 0)
+    .map(cat => renderCategoryDayCards(cat, weekIdx, selectedTrackerDay))
+    .join('');
+
+  return pickerHtml + headerHtml + catsHtml;
+}
+
+function renderCategoryDayCards(cat, weekIdx, dayIdx) {
+  const badgeClass = cat.freqType === 'daily' ? 'badge-daily' : 'badge-weekly';
+  const badgeText = cat.freqType === 'daily' ? 'Daily' : (cat.freqNum + 'x/wk');
+  let html = '<div class="bm-cat-header">' +
+    '<h3>' + cat.name + '</h3>' +
+    '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
+    '</div>';
+
+  const isScheduled = cat.days && cat.days.includes(dayIdx);
+  if (!isScheduled) {
+    html += '<div class="bm-rest-card">Rest day for ' + cat.name + ' — nothing scheduled</div>';
+    return html;
+  }
+
+  html += cat.exercises.map(ex => {
+    const key = cat.id + '|' + ex.name + '|w' + weekIdx + 'd' + dayIdx;
+    const logged = state.log[key];
+    const val = logged || getTargetDefaults(ex.metric, ex.target);
+    const tgtLabel = formatTargetDisplay(ex.metric, ex.target);
+    const tgtHtml = tgtLabel ? '<div class="bm-exercise-goal">Goal: ' + tgtLabel + '</div>' : '';
+    const notesHtml = ex.trainerNotes
+      ? '<div class="bm-exercise-notes">' + ex.trainerNotes + '</div>'
+      : '';
+    return '<div class="bm-exercise-card">' +
+      '<div class="bm-exercise-name">' + ex.name + '</div>' +
+      tgtHtml + notesHtml +
+      '<div class="bm-input-row">' + renderMetricInputs(ex.metric, key, val) + '</div>' +
+      '</div>';
+  }).join('');
+
+  return html;
+}
+
 function renderTracker() {
   renderDailyTracker();
   renderWeeklyTracker();
@@ -1824,7 +2066,10 @@ function renderDailyTracker() {
     body.innerHTML = '<div class="card"><p style="color:var(--text2)">No daily categories yet. Go to Categories tab to add one.</p></div>';
     return;
   }
-  body.innerHTML = dailyCats.map(cat => renderCategoryTracker(cat, weekIdx, dates)).join('');
+  const desktopHtml = dailyCats.map(cat => renderCategoryTracker(cat, weekIdx, dates)).join('');
+  const mobileHtml = renderMobileTracker(weekIdx, dates, dailyCats);
+  body.innerHTML = '<div class="tracker-desktop-view">' + desktopHtml + '</div>' +
+                   '<div class="tracker-mobile-view">' + mobileHtml + '</div>';
 }
 
 function renderWeeklyTracker() {
@@ -1838,7 +2083,10 @@ function renderWeeklyTracker() {
     body.innerHTML = '<div class="card"><p style="color:var(--text2)">No weekly categories yet. Go to Categories tab to add one.</p></div>';
     return;
   }
-  body.innerHTML = weeklyCats.map(cat => renderCategoryTracker(cat, weekIdx, dates)).join('');
+  const desktopHtml = weeklyCats.map(cat => renderCategoryTracker(cat, weekIdx, dates)).join('');
+  const mobileHtml = renderMobileTracker(weekIdx, dates, weeklyCats);
+  body.innerHTML = '<div class="tracker-desktop-view">' + desktopHtml + '</div>' +
+                   '<div class="tracker-mobile-view">' + mobileHtml + '</div>';
 }
 
 function renderMetricInputs(metric, key, val) {
