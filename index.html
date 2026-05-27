@@ -839,10 +839,39 @@
      modal. Uses :has() — supported in modern Edge, Chrome, and Safari. */
   @media (max-width: 480px) {
     body:has(.modal-overlay.open),
-    body:has(.setup-overlay.open),
-    body:has(.modal.open) {
+    body:has(.setup-overlay.open) {
       overflow: hidden;
     }
+  }
+
+  /* Mobile supplement card — reuses .bm-exercise-card shell from tracker */
+  .bm-supp-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .bm-supp-meta .supp-dosage { font-size: .78rem; }
+  .bm-supp-take {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--surface2);
+  }
+  .bm-supp-take input[type="checkbox"] {
+    width: 32px !important;
+    height: 32px !important;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  .bm-supp-take label {
+    font-size: .9rem;
+    color: var(--text);
+    font-weight: 500;
+    cursor: pointer;
   }
   /* ── Supplements ── */
   .supp-card {
@@ -1940,6 +1969,7 @@ function selectMobileDay(dayIdx) {
   if (dayIdx < 0 || dayIdx > 6) return;
   selectedTrackerDay = dayIdx;
   renderTracker();
+  renderSupplements();
 }
 
 // Returns true if `d` matches the user's local today.
@@ -2924,9 +2954,35 @@ function importFromFile() {
 }
 
 function resetAllData() {
-  if (!confirm('Reset ALL data? This cannot be undone.')) return;
-  if (!confirm('Are you really sure?')) return;
-  state = { categories: defaultCategories(), log: {}, videos: defaultVideos(), currentWeek: 0 };
+  const catCount = (state.categories || []).length;
+  const exCount = (state.categories || []).reduce((sum, c) => sum + ((c.exercises || []).length), 0);
+  const suppCount = (state.supplements || []).length;
+  const logCount = Object.keys(state.log || {}).length;
+  const suppLogCount = Object.keys(state.supplementLog || {}).length;
+  const profileName = (state.profile && state.profile.name) ? state.profile.name : '(unnamed)';
+
+  const summary =
+    'RESET ALL DATA?\n\n' +
+    'This will permanently delete:\n' +
+    '  • Profile: ' + profileName + '\n' +
+    '  • ' + catCount + ' workout categor' + (catCount === 1 ? 'y' : 'ies') + ' (' + exCount + ' exercises)\n' +
+    '  • ' + suppCount + ' supplement' + (suppCount === 1 ? '' : 's') + '\n' +
+    '  • ' + logCount + ' exercise log entr' + (logCount === 1 ? 'y' : 'ies') + '\n' +
+    '  • ' + suppLogCount + ' supplement log entr' + (suppLogCount === 1 ? 'y' : 'ies') + '\n\n' +
+    'This CANNOT be undone. Continue?';
+
+  if (!confirm(summary)) return;
+  if (!confirm('Last chance — really wipe everything?')) return;
+
+  state = {
+    categories: defaultCategories(),
+    log: {},
+    supplementLog: {},
+    supplements: [],
+    videos: defaultVideos(),
+    currentWeek: 0,
+    profile: { name: '', height: '', weight: '', sport: '', birthday: '', why: '', avatar: AVATARS[0], startDate: todayLocal(), currentWeight: '', goals: [], theme: 'default' }
+  };
   saveState();
   renderAll();
 }
@@ -3058,6 +3114,61 @@ function nextSupplementWeek() {
   renderSupplements();
 }
 
+function renderMobileSupplements(week, dayIdx) {
+  if (!state.supplements || state.supplements.length === 0) return '';
+
+  const dates = getWeekDates(week);
+  const pickerHtml = '<div class="bm-day-picker">' +
+    DAYS.map((d, idx) => {
+      const isActive = idx === dayIdx;
+      return '<button type="button" class="bm-day-pill ' + (isActive ? 'active' : '') + '"' +
+        ' onclick="selectMobileDay(' + idx + ')">' +
+        '<span class="bm-day-num">' + dates[idx].getDate() + '</span>' + d +
+        '</button>';
+    }).join('') +
+    '</div>';
+
+  const sel = dates[dayIdx];
+  const monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const isToday = _isLocalToday(sel);
+  const headerHtml = '<div class="bm-day-header">' +
+    '<span>' + DAYS[dayIdx] + ', ' + monthsShort[sel.getMonth()] + ' ' + sel.getDate() + '</span>' +
+    (isToday ? '<span class="bm-today-badge">Today</span>' : '') +
+    '</div>';
+
+  const cardsHtml = state.supplements.map(supp => {
+    const timingBadgeClass = 'supp-timing-' + supp.timing;
+    const timingLabel = supp.timing === 'custom'
+      ? (supp.customTiming || 'Custom')
+      : (TIMING_LABELS[supp.timing] || supp.timing);
+    const logKey = 'supp|' + supp.id + '|w' + week + 'd' + dayIdx;
+    const isChecked = (state.supplementLog[logKey] && state.supplementLog[logKey].taken) || false;
+    const notesHtml = supp.notes ? '<div class="bm-exercise-notes">' + supp.notes + '</div>' : '';
+    const removeBtn = !supp.trainerAssigned
+      ? '<div style="margin-top:10px;text-align:right;"><button class="btn btn-danger btn-small" onclick="removeCustomSupplement(\'' + supp.id + '\')">Remove</button></div>'
+      : '';
+    const dosageHtml = supp.dosage ? '<span class="supp-dosage">' + supp.dosage + '</span>' : '';
+    const inputId = 'supp-take-' + supp.id + '-d' + dayIdx;
+
+    return '<div class="bm-exercise-card">' +
+      '<div class="bm-exercise-name">' + supp.name + '</div>' +
+      '<div class="bm-supp-meta">' +
+        '<span class="supp-timing-badge ' + timingBadgeClass + '">' + timingLabel + '</span>' +
+        dosageHtml +
+      '</div>' +
+      notesHtml +
+      '<div class="bm-supp-take">' +
+        '<input type="checkbox" id="' + inputId + '" ' + (isChecked ? 'checked' : '') +
+        ' onchange="toggleSupplementDay(\'' + supp.id + '\', ' + week + ', ' + dayIdx + ')">' +
+        '<label for="' + inputId + '">Taken</label>' +
+      '</div>' +
+      removeBtn +
+      '</div>';
+  }).join('');
+
+  return pickerHtml + headerHtml + cardsHtml;
+}
+
 function renderSupplements() {
   if (!document.getElementById('tab-supplements')) return;
 
@@ -3112,7 +3223,10 @@ function renderSupplements() {
     `;
   }).join('');
 
-  body.innerHTML = supplementCards;
+  const mobileHtml = renderMobileSupplements(week, selectedTrackerDay);
+
+  body.innerHTML = '<div class="tracker-desktop-view">' + supplementCards + '</div>' +
+                   '<div class="tracker-mobile-view">' + mobileHtml + '</div>';
 }
 
 // ═══════════════════════════════════════════
