@@ -1957,7 +1957,7 @@ function renderMobileTracker(weekIdx, dates, categories) {
 
   // Day picker pills — 7 pills across, sticky to top
   const pickerHtml = '<div class="bm-day-picker">' +
-    DAYS_SHORT.map((d, idx) => {
+    DAYS.map((d, idx) => {
       const isActive = idx === selectedTrackerDay;
       return '<button type="button" class="bm-day-pill ' + (isActive ? 'active' : '') + '"' +
         ' onclick="selectMobileDay(' + idx + ')">' +
