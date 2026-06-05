@@ -90,6 +90,21 @@
   .tab:hover:not(.active) { color: var(--text); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
+  /* Tab-strip overflow fade: when the strip scrolls horizontally and isn't at
+     the end, fade the right edge so it's obvious more tabs exist. Class toggled
+     by updateTabFade(). Applies on narrow screens where the 7 tabs overflow. */
+  @media (max-width: 768px) {
+    .tabs.tabs-overflow:not(.at-end) {
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent 100%);
+      mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent 100%);
+    }
+  }
+  /* Responsive button labels: full text on desktop, short on phones. */
+  .lbl-short { display: none; }
+  @media (max-width: 480px) {
+    .lbl-full { display: none; }
+    .lbl-short { display: inline; }
+  }
   /* ── Cards ── */
   .card {
     background: var(--surface);
@@ -1117,7 +1132,7 @@
   <h1><span>&#128170;</span> Beast Mode</h1>
   <div class="top-bar-actions">
     <button class="btn btn-success" onclick="shareWithTrainer()">&#128172; Share</button>
-    <button class="btn btn-primary" onclick="syncToTrainer()">&#128232; Sync to Trainer</button>
+    <button class="btn btn-primary" onclick="syncToTrainer()">&#128232; <span class="lbl-full">Sync to Trainer</span><span class="lbl-short">Sync</span></button>
     <button class="btn btn-secondary" onclick="exportData()">&#128190; Export</button>
     <button class="btn btn-secondary" onclick="importData()">&#128194; Import</button>
     <button class="btn btn-danger btn-small" onclick="resetAllData()">Reset All</button>
@@ -1830,9 +1845,29 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    // Ensure the tapped tab is fully visible in the scrollable strip (mobile).
+    tab.scrollIntoView({ inline: 'nearest', block: 'nearest' });
     renderAll();
   });
 });
+
+// Tab-strip overflow-fade affordance: toggles classes that drive the right-edge
+// fade mask so users can tell the tab strip scrolls to more tabs.
+function updateTabFade() {
+  const tabs = document.querySelector('.tabs');
+  if (!tabs) return;
+  const overflow = tabs.scrollWidth > tabs.clientWidth + 2;
+  const atEnd = tabs.scrollLeft + tabs.clientWidth >= tabs.scrollWidth - 2;
+  tabs.classList.toggle('tabs-overflow', overflow);
+  tabs.classList.toggle('at-end', atEnd);
+}
+(function initTabFade() {
+  const tabs = document.querySelector('.tabs');
+  if (tabs) tabs.addEventListener('scroll', updateTabFade, { passive: true });
+  window.addEventListener('resize', updateTabFade);
+  updateTabFade();
+  requestAnimationFrame(updateTabFade);
+})();
 
 // ═══════════════════════════════════════════
 // WEEK NAVIGATION
