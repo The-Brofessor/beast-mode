@@ -1024,11 +1024,6 @@
     <!-- Primary: Send to client -->
     <div style="text-align:center;margin-bottom:20px;">
       <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px;">Send this link to your client via text, email, or any messaging app:</p>
-      <div style="margin-bottom:12px;">
-        <label style="font-size:.8rem;color:var(--text2);display:block;margin-bottom:4px;">Custom link name <span style="font-size:.75rem;opacity:.7;">(optional)</span></label>
-        <input type="text" id="custom-slug-input" placeholder="e.g. BeastMode_Sarah" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text1);font-size:.9rem;box-sizing:border-box;" maxlength="30" oninput="sanitizeSlugInput(this)">
-        <div style="font-size:.72rem;color:var(--text2);margin-top:3px;">Letters, numbers, and underscores only. Leave blank for a random short link.</div>
-      </div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;">
         <button class="btn btn-primary" style="font-size:1rem;padding:12px 28px;" onclick="shortenAndCopyLink()" id="btn-shorten-link">📋 Copy Link to Send</button>
         <button class="btn btn-secondary" style="font-size:1rem;padding:12px 20px;" onclick="sharePlanNative()" id="btn-native-share">📤 Share</button>
@@ -2335,10 +2330,6 @@ function showShareModal(code, clientName, type) {
   document.getElementById('share-modal-title').textContent = type === 'update' ? `Updated Plan for ${clientName}` : `Send to ${clientName}`;
   currentShareClientName = clientName;
 
-  // Slug input stays empty by default — placeholder communicates the format.
-  // Trainer fills it in if they want a branded link; blank means random short link.
-  document.getElementById('custom-slug-input').value = '';
-
   // Build the shareable URL with the code in the hash
   // LZString compressToEncodedURIComponent output is already URL-safe (A-Z, a-z, 0-9, +, -, $)
   // so we avoid double-encoding compressed codes — keeps URLs short enough for QR codes
@@ -2403,11 +2394,6 @@ function copyCode() {
 // withShortenedLink so the client always receives a short, clickable URL —
 // never the raw BMPLAN/BMNEW code.
 
-function sanitizeSlugInput(el) {
-  // is.gd allows only a-z, 0-9, underscore — auto-convert hyphens to underscores
-  el.value = el.value.replace(/-/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-}
-
 function showLinkCopyConfirm() {
   const el = document.getElementById('link-copy-confirm');
   if (!el) return;
@@ -2442,22 +2428,19 @@ function fallbackCopyText(text, onSuccess) {
 // Module-level guard so double-clicking share buttons doesn't fire shorten twice.
 let _shareInFlight = false;
 
-// Shorten the current share URL, then invoke callback(shortUrl).
-// Slug rules:
-//   - Custom slug present → is.gd. On collision, append random suffix and retry once.
-//     On any other error, fall back to the full URL.
-//   - No slug → TinyURL directly. On failure, fall back to the full URL.
+// Shorten the current share URL via TinyURL, then invoke callback(shortUrl).
+// TinyURL is the only shortener we call: it works from the browser (sends CORS
+// headers) and preserves the #import= fragment across the redirect. The old
+// custom-slug path used is.gd, which is CORS-blocked from the browser — it
+// always failed and silently fell back to the full multi-hundred-char URL, so
+// it was removed. If TinyURL itself is ever unreachable, we fall back to the
+// full link so sharing never hard-fails.
 function withShortenedLink(callback) {
   if (!currentShareUrl) return;
   if (_shareInFlight) return;
   _shareInFlight = true;
 
   const statusEl = document.getElementById('shorten-status');
-  const slugInput = document.getElementById('custom-slug-input');
-  const customSlug = slugInput
-    ? slugInput.value.trim().replace(/-/g, '_').replace(/[^a-zA-Z0-9_]/g, '')
-    : '';
-
   const setStatus = (msg, color) => {
     if (!statusEl) return;
     statusEl.style.display = 'block';
@@ -2481,49 +2464,15 @@ function withShortenedLink(callback) {
     callback(currentShareUrl);
   };
 
-  // No custom slug → TinyURL only.
-  if (!customSlug) {
-    setStatus('Creating short link...', 'var(--text2)');
-    fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(currentShareUrl))
-      .then(r => { if (!r.ok) throw new Error('TinyURL request failed'); return r.text(); })
-      .then(shortUrl => {
-        shortUrl = (shortUrl || '').trim();
-        if (!shortUrl.startsWith('http')) throw new Error('Invalid TinyURL response');
-        done(shortUrl, '✓ Short link: <strong>' + shortUrl + '</strong>');
-      })
-      .catch(() => fail('Shortener unavailable — using full link.'));
-    return;
-  }
-
-  // Custom slug → is.gd (with one retry using a random suffix on collision).
-  const baseSlug = customSlug.length < 5 ? customSlug + '_plan' : customSlug;
-  setStatus('Creating custom link "' + baseSlug + '"...', 'var(--text2)');
-  const tryIsGd = (slug, isRetry) => {
-    return fetch('https://is.gd/create.php?format=json&url='
-        + encodeURIComponent(currentShareUrl)
-        + '&shorturl=' + encodeURIComponent(slug))
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.shorturl) {
-          done(data.shorturl, '✓ Short link: <strong>' + data.shorturl + '</strong>');
-          return;
-        }
-        const taken = data && data.errormessage && data.errormessage.includes('already exists');
-        if (taken && !isRetry) {
-          const retrySlug = slug + '_' + Math.random().toString(36).substring(2, 5);
-          setStatus('"' + slug + '" was taken — trying "' + retrySlug + '"...', 'var(--text2)');
-          return tryIsGd(retrySlug, true);
-        }
-        if (taken) {
-          fail('"' + slug + '" was taken (retry also failed) — using full link.');
-        } else if (data && data.errormessage) {
-          fail(data.errormessage + ' — using full link.');
-        } else {
-          fail('Custom-link service returned an unexpected response — using full link.');
-        }
-      });
-  };
-  tryIsGd(baseSlug, false).catch(() => fail('Custom-link service unreachable — using full link.'));
+  setStatus('Creating short link...', 'var(--text2)');
+  fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(currentShareUrl))
+    .then(r => { if (!r.ok) throw new Error('TinyURL request failed'); return r.text(); })
+    .then(shortUrl => {
+      shortUrl = (shortUrl || '').trim();
+      if (!shortUrl.startsWith('http')) throw new Error('Invalid TinyURL response');
+      done(shortUrl, '✓ Short link: <strong>' + shortUrl + '</strong>');
+    })
+    .catch(() => fail('Shortener unavailable — using full link.'));
 }
 
 // Primary action — Copy Link.
