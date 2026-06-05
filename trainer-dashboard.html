@@ -3168,11 +3168,14 @@ function showSummaryDetail(name) {
     html += '<h3 style="margin-bottom:10px;margin-top:20px;">Supplement Plan</h3>';
     html += '<div style="background:var(--surface2);border-radius:var(--radius);padding:16px;">';
     data.supplements.forEach(supp => {
+      const sDays = Array.isArray(supp.days) && supp.days.length ? supp.days : [0,1,2,3,4,5,6];
+      const schedule = sDays.length === 7 ? 'Daily' : sDays.map(i => DAYS[i]).join(' ');
       html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;margin-bottom:8px;background:var(--bg);border-radius:6px;">
         <div style="flex:1;">
           <div style="font-weight:600;font-size:.9rem;">${escapeHtml(supp.name)}</div>
           ${supp.dosage ? `<div style="font-size:.8rem;color:var(--text2);">Dosage: ${escapeHtml(supp.dosage)}</div>` : ''}
           ${supp.timing ? `<div style="font-size:.8rem;color:var(--text2);">Timing: ${supp.timing === 'custom' ? escapeHtml(supp.customTiming || 'Custom') : (SUPPLEMENT_TIMINGS[supp.timing] || supp.timing)}</div>` : ''}
+          <div style="font-size:.8rem;color:var(--accent);">Schedule: ${schedule}</div>
           ${supp.notes ? `<div style="font-size:.8rem;color:var(--text2);font-style:italic;margin-top:4px;">${escapeHtml(supp.notes)}</div>` : ''}
         </div>
       </div>`;
@@ -3481,8 +3484,17 @@ function exportAllCSV() {
 }
 
 function clearAllClients() {
-  if (!confirm('Remove ALL client data from the dashboard?')) return;
-  if (!confirm('Are you sure? This cannot be undone.')) return;
+  const names = Object.keys(clients).sort();
+  if (names.length === 0) { alert('There are no clients to clear.'); return; }
+
+  const list = names.length <= 12
+    ? names.map(n => '  • ' + n).join('\n')
+    : names.slice(0, 12).map(n => '  • ' + n).join('\n') + '\n  …and ' + (names.length - 12) + ' more';
+  const summary = 'Remove ALL ' + names.length + ' client' + (names.length === 1 ? '' : 's') +
+    ' from the dashboard?\n\n' + list + '\n\nThis CANNOT be undone. Continue?';
+  if (!confirm(summary)) return;
+  if (!confirm('Last chance — permanently delete all ' + names.length + ' client' + (names.length === 1 ? '' : 's') + '?')) return;
+
   clients = {};
   saveClients();
   closeDetail();
