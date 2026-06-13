@@ -888,6 +888,21 @@
     font-weight: 500;
     cursor: pointer;
   }
+  /* Completion timestamps (Item: time stamp on every completed task/supplement) */
+  .bm-timestamp {
+    font-size: .72rem;
+    color: var(--green);
+    font-weight: 500;
+    margin-top: 8px;
+  }
+  .bm-supp-take .bm-timestamp { margin-top: 0; margin-left: auto; }
+  .bm-timestamp-sm {
+    display: block;
+    font-size: .58rem;
+    color: var(--green);
+    margin-top: 1px;
+    white-space: nowrap;
+  }
   /* Supplement scheduling indicators (desktop + mobile share these) */
   .supp-schedule-hint {
     font-size: .72rem;
@@ -2049,6 +2064,19 @@ function selectMobileDay(dayIdx) {
   renderSupplements();
 }
 
+// Format an ISO timestamp as a short local time, e.g. "7:42 AM". Returns '' if
+// missing/invalid. Used to show when each task/supplement was marked complete.
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  let h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return h + ':' + (m < 10 ? '0' : '') + m + ' ' + ampm;
+}
+
 // Returns true if `d` matches the user's local today.
 function _isLocalToday(d) {
   if (!(d instanceof Date)) return false;
@@ -2124,10 +2152,14 @@ function renderCategoryDayCards(cat, weekIdx, dayIdx) {
     const notesHtml = ex.trainerNotes
       ? '<div class="bm-exercise-notes">' + ex.trainerNotes + '</div>'
       : '';
+    const tsHtml = (logged && logged.done && logged.completedAt)
+      ? '<div class="bm-timestamp">✓ Completed ' + formatTime(logged.completedAt) + '</div>'
+      : '';
     return '<div class="bm-exercise-card">' +
       '<div class="bm-exercise-name">' + ex.name + '</div>' +
       tgtHtml + notesHtml +
       '<div class="bm-input-row">' + renderMetricInputs(ex.metric, key, val) + '</div>' +
+      tsHtml +
       '</div>';
   }).join('');
 
@@ -2158,7 +2190,9 @@ function renderCategoryTracker(cat, weekIdx, dates) {
       const logged = state.log[key];
       const val = logged || getTargetDefaults(ex.metric, ex.target);
       if (!isScheduled) return `<td class="rest-day">&mdash;</td>`;
-      return `<td class="scheduled-day"><div class="day-cell">${renderMetricInputs(ex.metric, key, val)}</div></td>`;
+      const tsHtml = (logged && logged.done && logged.completedAt)
+        ? `<div class="bm-timestamp-sm">${formatTime(logged.completedAt)}</div>` : '';
+      return `<td class="scheduled-day"><div class="day-cell">${renderMetricInputs(ex.metric, key, val)}${tsHtml}</div></td>`;
     }).join('');
     const tgtLabel = formatTargetDisplay(ex.metric, ex.target);
     const tgtHtml = tgtLabel ? `<div style="font-size:.72rem;color:var(--accent);margin-top:1px;">Goal: ${tgtLabel}</div>` : '';
@@ -2259,6 +2293,11 @@ function renderMetricInputs(metric, key, val) {
 function logField(key, field, value) {
   if (!state.log[key]) state.log[key] = {};
   state.log[key][field] = value;
+  // Stamp the completion time when an item is checked done; clear it when unchecked.
+  if (field === 'done') {
+    if (value) state.log[key].completedAt = new Date().toISOString();
+    else delete state.log[key].completedAt;
+  }
   saveState();
   // Update dashboard if visible
   if (document.getElementById('tab-dashboard').classList.contains('active')) {
@@ -3151,6 +3190,12 @@ function toggleSupplementDay(suppId, week, day) {
     state.supplementLog[logKey] = { taken: false };
   }
   state.supplementLog[logKey].taken = !state.supplementLog[logKey].taken;
+  // Stamp the time the supplement was marked taken; clear it when un-taken.
+  if (state.supplementLog[logKey].taken) {
+    state.supplementLog[logKey].takenAt = new Date().toISOString();
+  } else {
+    delete state.supplementLog[logKey].takenAt;
+  }
   saveState();
   renderSupplements();
 }
@@ -3261,6 +3306,8 @@ function renderMobileSupplements(week, dayIdx) {
         '<input type="checkbox" id="' + inputId + '" ' + (isChecked ? 'checked' : '') +
         ' onchange="toggleSupplementDay(\'' + supp.id + '\', ' + week + ', ' + dayIdx + ')">' +
         '<label for="' + inputId + '">Taken</label>' +
+        (isChecked && state.supplementLog[logKey] && state.supplementLog[logKey].takenAt
+          ? '<span class="bm-timestamp">✓ ' + formatTime(state.supplementLog[logKey].takenAt) + '</span>' : '') +
       '</div>' +
       removeBtn +
       '</div>';
@@ -3298,12 +3345,16 @@ function renderSupplements() {
 
     const checksHtml = DAYS.map((day, idx) => {
       const logKey = `supp|${supp.id}|w${week}d${idx}`;
-      const isChecked = state.supplementLog[logKey]?.taken || false;
+      const logEntry = state.supplementLog[logKey];
+      const isChecked = logEntry?.taken || false;
       const isScheduled = suppDays.includes(idx);
+      const tsHtml = (isChecked && logEntry?.takenAt)
+        ? `<span class="bm-timestamp-sm">${formatTime(logEntry.takenAt)}</span>` : '';
       return `
         <div class="supp-check${isScheduled ? '' : ' supp-check-off'}">
           <label>${day}</label>
           <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSupplementDay('${supp.id}', ${week}, ${idx})">
+          ${tsHtml}
         </div>
       `;
     }).join('');
