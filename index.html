@@ -903,6 +903,21 @@
     margin-top: 1px;
     white-space: nowrap;
   }
+  /* Flexible-category weekly progress ("2 of 3 done this week") */
+  .bm-flex-progress {
+    font-size: .78rem;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 4px 0 10px;
+    padding: 6px 10px;
+    background: #3b82f622;
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .bm-flex-progress.complete {
+    color: var(--green);
+    background: #22c55e22;
+  }
   /* Supplement scheduling indicators (desktop + mobile share these) */
   .supp-schedule-hint {
     font-size: .72rem;
@@ -1992,7 +2007,7 @@ function renderCategories() {
   const grid = document.getElementById('category-grid');
   grid.innerHTML = state.categories.map(cat => {
     const freqLabel = cat.freqType === 'daily' ? 'Daily (7x/week)' : `${cat.freqNum}x/week`;
-    const dayLabels = cat.days.map(d => DAYS[d]).join(', ');
+    const dayLabels = cat.freqType === 'flexible' ? 'Any day you choose' : cat.days.map(d => DAYS[d]).join(', ');
     const exerciseHtml = cat.exercises.length === 0
       ? '<p style="color:var(--text2);font-size:.82rem;font-style:italic;">No exercises added yet</p>'
       : `<ul class="exercise-list">${cat.exercises.map((ex, ei) => {
@@ -2077,6 +2092,22 @@ function formatTime(iso) {
   return h + ':' + (m < 10 ? '0' : '') + m + ' ' + ampm;
 }
 
+// For a flexible category (N times/week, any day), count how many days this
+// week the client has completed it — a day counts when ALL of the category's
+// exercises are checked done that day.
+function flexibleProgress(cat, weekIdx) {
+  if (!cat.exercises || cat.exercises.length === 0) return 0;
+  let count = 0;
+  for (let d = 0; d < 7; d++) {
+    const allDone = cat.exercises.every(ex => {
+      const key = cat.id + '|' + ex.name + '|w' + weekIdx + 'd' + d;
+      return state.log[key] && state.log[key].done;
+    });
+    if (allDone) count++;
+  }
+  return count;
+}
+
 // Returns true if `d` matches the user's local today.
 function _isLocalToday(d) {
   if (!(d instanceof Date)) return false;
@@ -2123,12 +2154,25 @@ function renderMobileTracker(weekIdx, dates, categories) {
 }
 
 function renderCategoryDayCards(cat, weekIdx, dayIdx) {
+  const isFlexible = cat.freqType === 'flexible';
   const badgeClass = cat.freqType === 'daily' ? 'badge-daily' : 'badge-weekly';
-  const badgeText = cat.freqType === 'daily' ? 'Daily' : (cat.freqNum + 'x/wk');
+  const badgeText = cat.freqType === 'daily' ? 'Daily'
+    : isFlexible ? (cat.freqNum + 'x/wk · any day')
+    : (cat.freqNum + 'x/wk');
   let html = '<div class="bm-cat-header">' +
     '<h3>' + cat.name + '</h3>' +
     '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
     '</div>';
+
+  // Flexible categories show weekly progress toward the target count.
+  if (isFlexible && cat.exercises && cat.exercises.length > 0) {
+    const done = flexibleProgress(cat, weekIdx);
+    const target = cat.freqNum || 1;
+    const complete = done >= target;
+    html += '<div class="bm-flex-progress' + (complete ? ' complete' : '') + '">' +
+      (complete ? '✓ ' : '') + done + ' of ' + target + ' done this week' +
+      '</div>';
+  }
 
   // Empty category — clear note instead of a blank area (mobile parity with the
   // desktop tracker, which shows an empty-state message for 0-exercise categories).
@@ -2174,7 +2218,7 @@ function renderTracker() {
 function renderCategoryTracker(cat, weekIdx, dates) {
   if (cat.exercises.length === 0) {
     return `<div class="tracker-section"><div class="card">
-      <h3>${cat.name} <span class="badge ${cat.freqType === 'daily' ? 'badge-daily' : 'badge-weekly'}">${cat.freqType === 'daily' ? 'Daily' : cat.freqNum + 'x/wk'}</span></h3>
+      <h3>${cat.name} <span class="badge ${cat.freqType === 'daily' ? 'badge-daily' : 'badge-weekly'}">${cat.freqType === 'daily' ? 'Daily' : cat.freqType === 'flexible' ? cat.freqNum + 'x/wk · any day' : cat.freqNum + 'x/wk'}</span></h3>
       <p style="color:var(--text2);font-size:.85rem;">No exercises added yet. Go to Categories tab to add exercises.</p>
     </div></div>`;
   }
@@ -2200,8 +2244,19 @@ function renderCategoryTracker(cat, weekIdx, dates) {
     return `<tr><td>${ex.name}${tgtHtml}${notesHtml}</td>${cells}</tr>`;
   }).join('');
 
+  const isFlexible = cat.freqType === 'flexible';
+  const badgeText = cat.freqType === 'daily' ? 'Daily' : isFlexible ? cat.freqNum + 'x/wk · any day' : cat.freqNum + 'x/wk';
+  let flexHtml = '';
+  if (isFlexible) {
+    const done = flexibleProgress(cat, weekIdx);
+    const target = cat.freqNum || 1;
+    const complete = done >= target;
+    flexHtml = `<div class="bm-flex-progress${complete ? ' complete' : ''}">${complete ? '✓ ' : ''}${done} of ${target} done this week</div>`;
+  }
+
   return `<div class="tracker-section"><div class="card">
-    <h3>${cat.name} <span class="badge ${cat.freqType === 'daily' ? 'badge-daily' : 'badge-weekly'}">${cat.freqType === 'daily' ? 'Daily' : cat.freqNum + 'x/wk'}</span></h3>
+    <h3>${cat.name} <span class="badge ${cat.freqType === 'daily' ? 'badge-daily' : 'badge-weekly'}">${badgeText}</span></h3>
+    ${flexHtml}
     <div class="tracker-table-wrap"><table class="tracker-table">${headerRow}${rows}</table></div>
   </div></div>`;
 }
