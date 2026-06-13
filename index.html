@@ -2082,9 +2082,12 @@ function renderMobileTracker(weekIdx, dates, categories) {
     (isToday ? '<span class="bm-today-badge">Today</span>' : '') +
     '</div>';
 
-  // Per-category cards for the selected day
+  // Per-category cards for the selected day. Empty categories are kept (not
+  // filtered out) so renderCategoryDayCards can show a clear "no exercises yet"
+  // note. Filtering them out left the day picker sitting above a blank area,
+  // which reads as broken — the desktop tracker already shows an empty-state
+  // message, so this brings mobile to parity.
   const catsHtml = categories
-    .filter(cat => cat.exercises && cat.exercises.length > 0)
     .map(cat => renderCategoryDayCards(cat, weekIdx, selectedTrackerDay))
     .join('');
 
@@ -2098,6 +2101,13 @@ function renderCategoryDayCards(cat, weekIdx, dayIdx) {
     '<h3>' + cat.name + '</h3>' +
     '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
     '</div>';
+
+  // Empty category — clear note instead of a blank area (mobile parity with the
+  // desktop tracker, which shows an empty-state message for 0-exercise categories).
+  if (!cat.exercises || cat.exercises.length === 0) {
+    html += '<div class="bm-rest-card">No exercises added yet.</div>';
+    return html;
+  }
 
   const isScheduled = cat.days && cat.days.includes(dayIdx);
   if (!isScheduled) {
