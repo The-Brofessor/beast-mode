@@ -1124,37 +1124,17 @@
     <div class="tagline">Unleash Your Inner Beast!!</div>
   </div>
   <div class="setup-container">
-    <h2>Welcome! Let's set up your profile.</h2>
-    <p class="setup-subtitle">Fill in what you can — you can always update it later in the Profile tab.</p>
-    <form class="setup-form" onsubmit="return false;">
-      <label>Name <span style="color:var(--red);">*</span></label>
-      <input type="text" id="setup-name" placeholder="Your name" required>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div>
-          <label>Height</label>
-          <input type="text" id="setup-height" placeholder="e.g., 5'10&quot;">
-        </div>
-        <div>
-          <label>Weight (lbs)</label>
-          <input type="number" id="setup-weight" placeholder="0">
-        </div>
+    <h2>Welcome!</h2>
+    <p class="setup-subtitle">Your trainer sets up your plan and sends it to you — there's nothing to fill in here.</p>
+    <div style="background:var(--surface);border:1px solid var(--surface2);border-radius:12px;padding:24px;text-align:center;margin-top:8px;">
+      <div style="font-size:2.6rem;margin-bottom:12px;">&#128241;</div>
+      <p style="font-size:1.05rem;font-weight:600;margin-bottom:8px;">Tap your trainer's link to load your plan</p>
+      <p style="font-size:.9rem;color:var(--text2);margin-bottom:16px;">Your trainer will text or email you a link. Tapping it loads your personalized plan right here.</p>
+      <div style="text-align:left;background:#ffffff08;border-radius:8px;padding:14px;font-size:.85rem;color:var(--text2);">
+        <strong style="color:var(--text);">Don't see your plan after tapping the link?</strong><br>
+        Open the link in your normal browser (Safari or Chrome — not the preview inside your email/text app), then use the browser menu to <strong style="color:var(--text);">"Add to Home Screen."</strong> That keeps your plan saved between visits.
       </div>
-
-      <label>Sport / Position</label>
-      <input type="text" id="setup-sport" placeholder="e.g., Baseball Pitcher">
-
-      <label>Birthday</label>
-      <input type="date" id="setup-birthday">
-
-      <label>What drives you? <span style="font-size:.8rem;color:var(--text2);font-weight:400;">(Why are you training?)</span></label>
-      <textarea id="setup-why" placeholder="Share your motivation..."></textarea>
-
-      <label>Pick Your Avatar</label>
-      <div class="avatar-picker" id="avatar-picker"></div>
-
-      <button class="btn btn-success" style="width:100%;margin-top:20px;font-size:1rem;padding:12px;" onclick="completeSetup()">&#128170; Let's Go!</button>
-    </form>
+    </div>
   </div>
 </div>
 
@@ -1165,7 +1145,6 @@
     <button class="btn btn-primary" onclick="syncToTrainer()">&#128232; <span class="lbl-full">Sync to Trainer</span><span class="lbl-short">Sync</span></button>
     <button class="btn btn-secondary" onclick="exportData()">&#128190; Export</button>
     <button class="btn btn-secondary" onclick="importData()">&#128194; Import</button>
-    <button class="btn btn-danger btn-small" onclick="resetAllData()">Reset All</button>
   </div>
 </div>
 
@@ -1175,7 +1154,6 @@
     <button class="tab active" data-tab="dashboard">Dashboard</button>
     <button class="tab" data-tab="daily">Daily Tracker</button>
     <button class="tab" data-tab="weekly">Weekly Tracker</button>
-    <button class="tab" data-tab="categories">Categories &amp; Exercises</button>
     <button class="tab" data-tab="motivation">Motivation</button>
     <button class="tab" data-tab="supplements">Supplements</button>
     <button class="tab" data-tab="profile">Profile &amp; Settings</button>
@@ -1238,9 +1216,6 @@
     <div id="motivation-quote-area"></div>
     <h2 style="margin-bottom:16px;">Workout Videos</h2>
     <div class="video-grid" id="video-grid"></div>
-    <div style="margin-top:20px;text-align:center;">
-      <button class="btn btn-primary" onclick="openAddVideoModal()">+ Add Video</button>
-    </div>
   </div>
 
   <!-- ═══════ SUPPLEMENTS ═══════ -->
@@ -1257,9 +1232,6 @@
     </div>
     <div id="supp-summary-container"></div>
     <div id="supplements-tracker-body"></div>
-    <div style="margin-top:20px;text-align:center;">
-      <button class="btn btn-primary" onclick="openAddSupplementModal()">+ Add Custom Supplement</button>
-    </div>
   </div>
 
   <!-- ═══════ PROFILE & SETTINGS ═══════ -->
@@ -1289,7 +1261,7 @@
         <label style="color:var(--text2);font-size:.85rem;">Your Why</label>
         <div style="font-style:italic;margin-top:4px;padding:10px;background:#ffffff08;border-radius:6px;" id="profile-display-why"></div>
       </div>
-      <button class="btn btn-secondary" style="margin-top:16px;" onclick="openEditProfileModal()">✎ Edit Profile</button>
+      <p style="margin-top:16px;font-size:.8rem;color:var(--text2);">Your trainer manages your profile details.</p>
     </div>
 
     <h3 style="margin-top:28px;margin-bottom:16px;">Progress Measurements</h3>
@@ -1681,21 +1653,9 @@ function getUrlParams() {
 }
 
 function showSetupScreen() {
-  const params = getUrlParams();
-  const overlay = document.getElementById('setup-overlay');
-
-  // Pre-fill from URL params if available
-  if (params.name) document.getElementById('setup-name').value = params.name;
-  if (params.height) document.getElementById('setup-height').value = params.height;
-  if (params.weight) document.getElementById('setup-weight').value = params.weight;
-  if (params.sport) document.getElementById('setup-sport').value = params.sport;
-  if (params.birthday) document.getElementById('setup-birthday').value = params.birthday;
-  if (params.why) document.getElementById('setup-why').value = params.why;
-
-  // Render avatar picker
-  renderAvatarPicker('avatar-picker', AVATARS[0]);
-
-  overlay.classList.add('open');
+  // Client setup is trainer-driven now: no form, just the "tap your trainer's
+  // link" waiting screen. The profile arrives via the imported plan.
+  document.getElementById('setup-overlay').classList.add('open');
 }
 
 function renderAvatarPicker(containerId, selectedAvatar) {
@@ -3341,9 +3301,7 @@ function renderMobileSupplements(week, dayIdx) {
     const logKey = 'supp|' + supp.id + '|w' + week + 'd' + dayIdx;
     const isChecked = (state.supplementLog[logKey] && state.supplementLog[logKey].taken) || false;
     const notesHtml = supp.notes ? '<div class="bm-exercise-notes">' + supp.notes + '</div>' : '';
-    const removeBtn = !supp.trainerAssigned
-      ? '<div style="margin-top:10px;text-align:right;"><button class="btn btn-danger btn-small" onclick="removeCustomSupplement(\'' + supp.id + '\')">Remove</button></div>'
-      : '';
+    const removeBtn = ''; // Client lockdown: supplements are trainer-managed.
     const dosageHtml = supp.dosage ? '<span class="supp-dosage">' + supp.dosage + '</span>' : '';
     const inputId = 'supp-take-' + supp.id + '-d' + dayIdx;
     const cardClass = 'bm-exercise-card' + (isScheduledToday ? '' : ' bm-supp-card-off');
@@ -3414,7 +3372,7 @@ function renderSupplements() {
       `;
     }).join('');
 
-    const removeBtn = !supp.trainerAssigned ? `<button class="btn btn-danger btn-small" onclick="removeCustomSupplement('${supp.id}')">Remove</button>` : '';
+    const removeBtn = ''; // Client lockdown: supplements are trainer-managed.
 
     return `
       <div class="supp-card">
