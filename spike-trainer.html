@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spike: Trainer</title>
+<!-- Phase 1a spike. Deliberately ugly. Proves the spine: build a plan, emit a
+     link, hand off to the client app. Deleted when Phase 3 lands. -->
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 20px; background: #0f172a; color: #e2e8f0; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+  input, select { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; padding: 7px 9px; font: inherit; }
+  input[type=text] { flex: 1; min-width: 160px; }
+  button { background: #3b82f6; color: #fff; border: 0; border-radius: 6px; padding: 9px 14px; font: inherit; cursor: pointer; }
+  button.ghost { background: #334155; }
+  label { font-size: 13px; color: #94a3b8; display: flex; gap: 5px; align-items: center; }
+  #out { margin-top: 18px; padding: 12px; background: #1e293b; border-radius: 8px; word-break: break-all; font-size: 12px; display: none; }
+  #out a { color: #60a5fa; }
+  .warn { color: #fbbf24; }
+  .err { color: #f87171; }
+</style>
+</head>
+<body>
+<h1>Spike: Trainer</h1>
+<div class="sub">Phase 1a. Build a plan, get a link.</div>
+
+<div id="builder"></div>
+<div class="row">
+  <button class="ghost" onclick="addRow()">+ Add item</button>
+  <button onclick="makeLink()">Generate client link</button>
+</div>
+
+<div id="out"></div>
+
+<script src="lz-string.min.js"></script>
+<script src="beast-core.js"></script>
+<script>
+var BUILT_AGAINST = '2.0.0';
+if (BeastCore.VERSION !== BUILT_AGAINST) {
+  document.body.innerHTML = '<p class="err">Beast Mode was updated. Reload this page.</p>';
+}
+
+var SEED = [
+  { name: 'Zone 2, 20 min fasted', kind: 'habit',      core: true,  dueBy: '08:00' },
+  { name: 'Barbell Bench Press',   kind: 'exercise',   core: false, dueBy: '' },
+  { name: 'Creatine 5g',           kind: 'supplement', core: false, dueBy: '' }
+];
+
+function addRow(seed) {
+  var d = document.createElement('div');
+  d.className = 'row';
+  d.innerHTML =
+    '<input type="text" class="n" placeholder="Item name">' +
+    '<select class="k">' + BeastCore.KINDS.map(function (k) {
+      return '<option value="' + k + '">' + k + '</option>';
+    }).join('') + '</select>' +
+    '<input type="text" class="u" placeholder="dueBy HH:MM" size="10">' +
+    '<label><input type="checkbox" class="c"> core</label>' +
+    '<button class="ghost" onclick="this.parentNode.remove()">x</button>';
+  document.getElementById('builder').appendChild(d);
+  if (seed) {
+    d.querySelector('.n').value = seed.name;
+    d.querySelector('.k').value = seed.kind;
+    d.querySelector('.u').value = seed.dueBy;
+    d.querySelector('.c').checked = seed.core;
+  }
+}
+
+SEED.forEach(addRow);
+
+function makeLink() {
+  var rows = [].slice.call(document.querySelectorAll('#builder .row'));
+  var raw = rows.map(function (r) {
+    return {
+      name: r.querySelector('.n').value.trim(),
+      kind: r.querySelector('.k').value,
+      dueBy: r.querySelector('.u').value.trim(),
+      core: r.querySelector('.c').checked,
+      freq: 'daily'
+    };
+  }).filter(function (x) { return x.name; });
+
+  var out = document.getElementById('out');
+  if (!raw.length) {
+    out.style.display = 'block';
+    out.innerHTML = '<span class="err">Add at least one item first.</span>';
+    return;
+  }
+
+  var items = BeastCore.normalizeItems(raw, { addedAt: BeastCore.todayLocal() });
+  var code = BeastCore.encodePayload('setup', {
+    items: items,
+    goals: BeastCore.normalizeGoals(['Prove the spine works']),
+    profile: { name: 'Spike Client', startDate: BeastCore.todayLocal() }
+  });
+
+  var base = location.href.replace(/spike-trainer\.html.*$/, 'spike-client.html');
+  var url = base + '#import=' + code;
+  var len = BeastCore.shareUrlLength(base, code);
+  var size = len > BeastCore.SHARE_LIMITS.maxUrl
+    ? '<div class="err">' + len + ' chars: too long to shorten.</div>'
+    : len > BeastCore.SHARE_LIMITS.warnUrl
+      ? '<div class="warn">' + len + ' chars: close to the shortener limit.</div>'
+      : '<div>' + len + ' chars, fits a shortener.</div>';
+
+  out.style.display = 'block';
+  out.innerHTML = '<div><strong>' + items.length + ' items, perfectWeek ' +
+    BeastCore.perfectWeek(items) + '</strong></div>' + size +
+    '<p><a href="' + BeastCore.escHTMLAttr(url) + '">Open as the client</a></p>' +
+    '<div>' + BeastCore.escapeHtml(code) + '</div>';
+}
+</script>
+</body>
+</html>
