@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Beast Mode">
 <title>Beast Mode</title>
 <style>
 :root {
@@ -161,6 +166,16 @@ nav button.active { color: var(--accent); }
 .avatars { display: flex; gap: 8px; flex-wrap: wrap; }
 .avatars button { width: 44px; height: 44px; font-size: 22px; background: var(--surface2); border: 2px solid transparent; }
 .avatars button.sel { border-color: var(--accent); }
+
+.install {
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 13px; margin: 14px 0; display: flex; gap: 12px; align-items: center;
+}
+.install .ico { font-size: 26px; flex: 0 0 auto; }
+.install .txt { flex: 1; min-width: 0; font-size: 13px; }
+.install .txt b { display: block; font-size: 15px; margin-bottom: 2px; }
+.install button { background: var(--accent); color: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+.install button.x { background: none; color: var(--text2); padding: 8px; }
 
 .toast {
   position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);
@@ -532,6 +547,65 @@ function checkMilestones() {
   });
 }
 
+/* ── install ───────────────────────────────────────────────────────────── */
+
+var deferredPrompt = null;
+var DISMISS_KEY = 'bm2.installDismissed';
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true;
+}
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+function installDismissed() {
+  try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch (e) { return false; }
+}
+
+function dismissInstall() {
+  try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+  render();
+}
+
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  deferredPrompt = e;
+  render();
+});
+
+window.addEventListener('appinstalled', function () {
+  deferredPrompt = null;
+  render();
+});
+
+function doInstall() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function () { deferredPrompt = null; render(); });
+}
+
+function installCard() {
+  if (isStandalone() || installDismissed()) return '';
+
+  // iOS has no install prompt event. Adding to the home screen is a manual
+  // Share then Add to Home Screen, and on iOS it is also the only way to get
+  // reminders later, so the instructions are worth showing.
+  if (isIOS()) {
+    return '<div class="install"><div class="ico">\u{1F4F1}</div>' +
+      '<div class="txt"><b>Put this on your home screen</b>' +
+      'Tap Share at the bottom of Safari, then Add to Home Screen.</div>' +
+      '<button class="x" onclick="dismissInstall()">✕</button></div>';
+  }
+  if (!deferredPrompt) return '';
+  return '<div class="install"><div class="ico">\u{1F4F1}</div>' +
+    '<div class="txt"><b>Install Beast Mode</b>Opens straight to your list, works without signal.</div>' +
+    '<button onclick="doInstall()">Install</button>' +
+    '<button class="x" onclick="dismissInstall()">✕</button></div>';
+}
+
 /* ── rendering ─────────────────────────────────────────────────────────── */
 
 function esc(s) { return BeastCore.escapeHtml(s); }
@@ -608,7 +682,7 @@ function todayTab() {
   var pct = next && next.points > floor
     ? Math.round(((p.points - floor) / (next.points - floor)) * 100) : 100;
 
-  var html =
+  var html = installCard() +
     '<div class="stats">' +
       '<div class="stat"><b>' + p.points + '</b><span>Points</span></div>' +
       '<div class="stat flame"><b>' + p.streak + '</b><span>Streak</span></div>' +
@@ -800,6 +874,14 @@ window.addEventListener('hashchange', function () {
   if (state && intake) clearIntakeSilently();
   if (!handleImport()) render();
 })();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {
+      // No worker means no offline. The app still works, so this is quiet.
+    });
+  });
+}
 
 function clearIntakeSilently() {
   try { localStorage.removeItem(INTAKE_KEY); } catch (e) {}
