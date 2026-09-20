@@ -19,7 +19,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.2.0';
+  var VERSION = '2.3.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -679,6 +679,109 @@ var BeastCore = (function () {
     return { ok: false, error: 'That does not look like a Beast Mode link.' };
   }
 
+  // ── Intake ────────────────────────────────────────────────────────────────
+  // The field list is the one brofessor-project-instructions.md tells the coach
+  // to ask for before writing a plan, so a finished intake pastes into the
+  // Project with no gaps left for Chris to fill by hand.
+
+  var INTAKE_SECTIONS = [
+    { title: 'You', fields: [
+      { key: 'age', label: 'Age', type: 'number' },
+      { key: 'sex', label: 'Sex', type: 'select', options: ['male', 'female'] },
+      { key: 'height', label: 'Height', type: 'text', hint: "5'11 or 180cm" },
+      { key: 'weight', label: 'Current weight', type: 'number' },
+      { key: 'goalWeight', label: 'Goal weight', type: 'number' },
+      { key: 'birthday', label: 'Birthday', type: 'text', hint: 'YYYY-MM-DD' }
+    ] },
+    { title: 'Your day', fields: [
+      { key: 'job', label: 'What do you do all day?', type: 'text', hint: 'Desk job, on your feet, trades' },
+      { key: 'activity', label: 'How active is that?', type: 'select',
+        options: ['mostly sitting', 'up and down', 'on my feet all day', 'physical work'] },
+      { key: 'wakeTime', label: 'Usual wake time', type: 'text', hint: '05:30' },
+      { key: 'workHours', label: 'Work hours', type: 'text', hint: '8 to 5' },
+      { key: 'bedTime', label: 'Usual bed time', type: 'text', hint: '22:30' }
+    ] },
+    { title: 'Training', fields: [
+      { key: 'experience', label: 'Training experience', type: 'select',
+        options: ['never really trained', 'on and off', 'a year or two', 'years of it'] },
+      { key: 'daysPerWeek', label: 'Days a week you can train', type: 'number' },
+      { key: 'sessionLength', label: 'Minutes per session', type: 'number' },
+      { key: 'equipment', label: 'What do you have access to?', type: 'textarea',
+        hint: 'Full gym, home rack, dumbbells, bands' }
+    ] },
+    { title: 'Health', fields: [
+      { key: 'injuries', label: 'Injuries or anything that hurts', type: 'textarea', hint: 'Write none if none' },
+      { key: 'conditions', label: 'Medical conditions', type: 'textarea', hint: 'Write none if none' },
+      { key: 'foodsAvoided', label: 'Foods you will not eat', type: 'textarea' },
+      { key: 'supplements', label: 'Supplements you take now', type: 'textarea', hint: 'Name and dose' },
+      { key: 'ancillaries', label: 'Anything prescribed', type: 'textarea',
+        hint: 'GLP-1, TRT, thyroid, blood pressure. Dose and schedule. This stays between you and Chris.' }
+    ] },
+    { title: 'Goals', fields: [
+      { key: 'shortGoals', label: 'Next 4 weeks', type: 'textarea', hint: 'One per line, up to three' },
+      { key: 'longGoals', label: 'Next 6 to 12 months', type: 'textarea', hint: 'One per line, up to three' },
+      { key: 'whyNow', label: 'Why is now the right time?', type: 'textarea' },
+      { key: 'obstacle', label: 'What has stopped you before?', type: 'textarea' },
+      { key: 'habitKeep', label: 'One habit you want to keep', type: 'text' },
+      { key: 'habitBreak', label: 'One habit you want to break', type: 'text' }
+    ] },
+    { title: 'Music', fields: [
+      { key: 'musicService', label: 'Spotify or Apple Music?', type: 'select',
+        options: ['Spotify', 'Apple Music', 'something else', 'I train in silence'] },
+      { key: 'songs', label: 'Three songs you train to', type: 'textarea', hint: 'One per line' }
+    ] },
+    { title: 'Test prep', optional: true, hint: 'Only if you have a fitness test coming up.', fields: [
+      { key: 'testEvents', label: 'Events', type: 'textarea', hint: 'Push-ups, sit-ups, 1.5 mile run' },
+      { key: 'testDate', label: 'Test date', type: 'text', hint: 'YYYY-MM-DD' },
+      { key: 'testScores', label: 'Current scores', type: 'textarea' },
+      { key: 'testVenue', label: 'Where is it', type: 'text' }
+    ] }
+  ];
+
+  function intakeFields() {
+    return INTAKE_SECTIONS.reduce(function (all, s) { return all.concat(s.fields); }, []);
+  }
+
+  // Plain text block Chris pastes straight into the Claude Project.
+  function formatIntakeForCoach(name, answers) {
+    var out = ['INTAKE: ' + (name || 'new client'), ''];
+    INTAKE_SECTIONS.forEach(function (sec) {
+      var lines = sec.fields.filter(function (f) {
+        var v = answers[f.key];
+        return v !== undefined && String(v).trim() !== '';
+      }).map(function (f) {
+        var v = String(answers[f.key]).trim().replace(/\n+/g, '; ');
+        return f.label + ': ' + v;
+      });
+      if (!lines.length) return;
+      out.push(sec.title.toUpperCase());
+      out = out.concat(lines);
+      out.push('');
+    });
+    return out.join('\n').trim();
+  }
+
+  // The goals a client typed become the structured goals the plan carries.
+  function goalsFromIntake(answers) {
+    var mk = function (text, term) {
+      return String(text || '').split('\n').map(function (s) { return s.trim(); })
+        .filter(Boolean).map(function (t) { return { text: t, term: term }; });
+    };
+    return normalizeGoals(mk(answers.shortGoals, 'short').concat(mk(answers.longGoals, 'long')));
+  }
+
+  // The intake fields that belong on the client's profile from day one.
+  function profileFromIntake(name, answers) {
+    return {
+      name: name || '',
+      height: answers.height || '',
+      weight: answers.weight || '',
+      goalWeight: answers.goalWeight || '',
+      birthday: answers.birthday || '',
+      why: answers.whyNow || ''
+    };
+  }
+
   // ── Brofessor drafts ──────────────────────────────────────────────────────
   // A draft is hand-written JSON from the coach. It is checked strictly and
   // rejected with messages naming the offending item and field, because the
@@ -817,7 +920,10 @@ var BeastCore = (function () {
 
     encodePayload: encodePayload, decodePayload: decodePayload,
     packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength,
-    validateDraft: validateDraft, mergeDraft: mergeDraft
+    validateDraft: validateDraft, mergeDraft: mergeDraft,
+    INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
+    formatIntakeForCoach: formatIntakeForCoach,
+    goalsFromIntake: goalsFromIntake, profileFromIntake: profileFromIntake
   };
 })();
 

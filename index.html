@@ -198,7 +198,7 @@ nav button.active { color: var(--accent); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.2.0';
+var BUILT_AGAINST = '2.3.0';
 var KEY = 'bm2.client';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -237,6 +237,120 @@ function readHash() {
   var res = BeastCore.decodePayload(decodeURIComponent(m[1]));
   history.replaceState(null, '', location.pathname + location.search);
   return res;
+}
+
+/* ── intake questionnaire ──────────────────────────────────────────────── */
+
+var INTAKE_KEY = 'bm2.intake';
+var intake = null;   // { clientName, step, answers, code }
+
+function loadIntake() {
+  try { intake = JSON.parse(localStorage.getItem(INTAKE_KEY) || 'null'); }
+  catch (e) { intake = null; }
+}
+
+function saveIntake() {
+  // A half-finished form survives a closed tab. The answers stay on the phone
+  // until the client chooses to send them.
+  try { localStorage.setItem(INTAKE_KEY, JSON.stringify(intake)); } catch (e) {}
+}
+
+function startIntake(data) {
+  intake = { clientName: (data.profile && data.profile.name) || data.name || '',
+             step: 0, answers: {}, code: null };
+  saveIntake();
+}
+
+function setAnswer(key, value) { intake.answers[key] = value; saveIntake(); }
+
+function intakeStep(delta) {
+  var total = BeastCore.INTAKE_SECTIONS.length;
+  intake.step = Math.max(0, Math.min(total - 1, intake.step + delta));
+  saveIntake();
+  window.scrollTo(0, 0);
+  render();
+}
+
+function submitIntake() {
+  intake.code = BeastCore.encodePayload('intake', {
+    name: intake.clientName, answers: intake.answers
+  });
+  saveIntake();
+  render();
+}
+
+function clearIntake() {
+  try { localStorage.removeItem(INTAKE_KEY); } catch (e) {}
+  intake = null;
+  render();
+}
+
+function jsq(s) { return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
+
+function intakeMsg() {
+  return 'Beast Mode intake for ' + (intake.clientName || 'me') + ':\n\n' + intake.code;
+}
+
+function copyIntake() {
+  if (navigator.clipboard) navigator.clipboard.writeText(intake.code).then(function () { toast('Copied'); });
+  else toast('Select the code below and copy it');
+}
+
+function shareIntake() {
+  if (navigator.share) navigator.share({ text: intakeMsg() }).catch(function () {});
+  else copyIntake();
+}
+
+function intakeScreen() {
+  if (intake.code) {
+    return '<div class="wrap"><div class="card" style="margin-top:30px">' +
+      '<h2 style="font-size:20px;margin-bottom:8px">Done. Send it to Chris.</h2>' +
+      '<p class="imeta">He loads this and builds your plan.</p>' +
+      '<button class="btn" onclick="copyIntake()">Copy the code</button>' +
+      '<button class="btn" style="background:var(--surface2)" onclick="location.href=' +
+        jsq('sms:?&body=' + encodeURIComponent(intakeMsg())) + '">Text it to Chris</button>' +
+      '<button class="btn" style="background:var(--surface2)" onclick="shareIntake()">Share</button>' +
+      '<div class="inotes" style="word-break:break-all;margin-top:14px">' + esc(intake.code) + '</div>' +
+      '<button class="btn" style="background:var(--surface2)" onclick="clearIntake()">Start over</button>' +
+      '</div></div>';
+  }
+
+  var secs = BeastCore.INTAKE_SECTIONS;
+  var sec = secs[intake.step];
+  var last = intake.step === secs.length - 1;
+
+  var fields = sec.fields.map(function (f) {
+    var v = intake.answers[f.key] == null ? '' : intake.answers[f.key];
+    var on = 'onchange="setAnswer(\'' + attr(f.key) + '\',this.value)"';
+    var input;
+    if (f.type === 'textarea') {
+      input = '<textarea rows="3" ' + on + '>' + esc(v) + '</textarea>';
+    } else if (f.type === 'select') {
+      input = '<select ' + on + '><option value="">Pick one</option>' +
+        f.options.map(function (o) {
+          return '<option value="' + attr(o) + '"' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
+        }).join('') + '</select>';
+    } else {
+      input = '<input type="' + (f.type === 'number' ? 'number' : 'text') + '"' +
+        (f.type === 'number' ? ' inputmode="decimal"' : '') +
+        ' value="' + attr(v) + '" ' + on + '>';
+    }
+    return '<div class="field"><label>' + esc(f.label) + '</label>' + input +
+      (f.hint ? '<div class="imeta">' + esc(f.hint) + '</div>' : '') + '</div>';
+  }).join('');
+
+  return '<div class="wrap">' +
+    '<div style="margin:22px 0 4px"><div class="imeta">Step ' + (intake.step + 1) + ' of ' + secs.length + '</div>' +
+      '<div class="bar" style="margin-top:8px"><i style="width:' +
+        Math.round(((intake.step + 1) / secs.length) * 100) + '%"></i></div></div>' +
+    '<div class="card" style="margin-top:16px">' +
+      '<h2 style="font-size:20px;margin-bottom:4px">' + esc(sec.title) + '</h2>' +
+      (sec.hint ? '<p class="imeta" style="margin-bottom:12px">' + esc(sec.hint) + '</p>' : '<div style="height:10px"></div>') +
+      fields +
+      '<button class="btn" onclick="' + (last ? 'submitIntake()' : 'intakeStep(1)') + '">' +
+        (last ? 'Send to Chris' : 'Next') + '</button>' +
+      (intake.step > 0 ? '<button class="btn" style="background:var(--surface2)" onclick="intakeStep(-1)">Back</button>' : '') +
+    '</div></div>';
 }
 
 function applySetup(data) {
@@ -432,6 +546,9 @@ function render() {
       '<p>Close this page and open it again to get the new version.</p></div></div>';
     return;
   }
+  // A questionnaire in progress outranks everything: the client has not been
+  // sent a plan yet, so there is nothing else for them to look at.
+  if (intake && !state) { root.innerHTML = intakeScreen(); return; }
   if (!state) { root.innerHTML = setupScreen(); return; }
   if (!state.goalsAgreedAt) { root.innerHTML = agreementScreen(); return; }
 
@@ -659,7 +776,8 @@ function handleImport() {
       '<h2>That link did not work</h2><p>' + esc(imported.error) + '</p></div></div>';
     return true;
   }
-  if (imported.kind === 'setup' || !state) applySetup(imported.data);
+  if (imported.kind === 'ask') startIntake(imported.data);
+  else if (imported.kind === 'setup' || !state) applySetup(imported.data);
   else if (imported.kind === 'plan') applyPlanUpdate(imported.data);
 
   render();
@@ -676,8 +794,17 @@ window.addEventListener('hashchange', function () {
 
 (function boot() {
   load();
+  loadIntake();
+  // A plan supersedes a questionnaire: once Chris has sent the plan, the form
+  // has done its job.
+  if (state && intake) clearIntakeSilently();
   if (!handleImport()) render();
 })();
+
+function clearIntakeSilently() {
+  try { localStorage.removeItem(INTAKE_KEY); } catch (e) {}
+  intake = null;
+}
 </script>
 </body>
 </html>

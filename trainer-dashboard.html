@@ -135,7 +135,7 @@ header h1 span { color: var(--accent); }
    All contract logic lives in BeastCore. Metric names, timings, frequencies,
    log keys and payload prefixes are never written inline here. See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.2.0';
+var BUILT_AGAINST = '2.3.0';
 var KEY = 'bm2.trainer';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -303,6 +303,80 @@ function applyScheduleToGroup(cid, id) {
   save();
   renderPanel();
   toast(n + ' item' + (n === 1 ? '' : 's') + ' updated');
+}
+
+/* ── intake ────────────────────────────────────────────────────────────── */
+
+function sendIntakeForm(cid) {
+  var c = client(cid);
+  var code = BeastCore.encodePayload('ask', { profile: { name: c.name } });
+  var base = clientBaseUrl();
+  var full = base + '#import=' + code;
+  var msg = 'Before I build your plan, fill this in. Takes five minutes: ' + full;
+
+  showModal('<h2>Intake form for ' + esc(c.name) + '</h2>' +
+    '<p class="muted">' + BeastCore.INTAKE_SECTIONS.length + ' short steps, ' +
+      BeastCore.intakeFields().length + ' questions. They send the answers back as a code.</p>' +
+    '<button class="btn full" onclick="copyText(' + jsq(full) + ')">Copy the link</button>' +
+    '<button class="btn grey full" onclick="shareNative(' + jsq(msg) + ')">Share</button>' +
+    '<button class="btn grey full" onclick="location.href=' +
+      jsq('sms:?&body=' + encodeURIComponent(msg)) + '">Text it</button>' +
+    '<button class="btn grey full" onclick="closeModal()">Close</button>');
+}
+
+function openIntakeImport(cid) {
+  showModal('<h2>Import intake answers</h2>' +
+    '<p class="muted">Paste the code the client sent back.</p>' +
+    '<div class="field" style="margin-top:12px"><textarea id="intakecode" rows="5"></textarea></div>' +
+    '<div id="intakeout"></div>' +
+    '<button class="btn full" onclick="readIntake(\'' + attr(cid) + '\')">Read it</button>' +
+    '<button class="btn grey full" onclick="closeModal()">Cancel</button>');
+}
+
+function readIntake(cid) {
+  var c = client(cid);
+  var out = document.getElementById('intakeout');
+  var res = BeastCore.decodePayload(document.getElementById('intakecode').value.trim());
+
+  if (!res.ok) { out.innerHTML = '<p class="err">' + esc(res.error) + '</p>'; return; }
+  if (res.kind !== 'intake') {
+    out.innerHTML = '<p class="err">That is a ' + esc(res.kind) + ' code, not an intake.</p>';
+    return;
+  }
+
+  var answers = res.data.answers || {};
+  var block = BeastCore.formatIntakeForCoach(c.name, answers);
+  var goals = BeastCore.goalsFromIntake(answers);
+  window._intake = { cid: cid, answers: answers, goals: goals, block: block };
+
+  var all = BeastCore.intakeFields();
+  var answered = all.filter(function (f) {
+    return answers[f.key] !== undefined && String(answers[f.key]).trim() !== '';
+  }).length;
+
+  out.innerHTML = '<p class="ok">' + answered + ' of ' + all.length +
+      ' questions answered. ' + goals.length + ' goals.</p>' +
+    '<div class="code" style="max-height:220px;white-space:pre-wrap">' + esc(block) + '</div>' +
+    '<button class="btn full" id="copyintake">Copy for The Brofessor</button>' +
+    '<button class="btn green full" onclick="applyIntake()">Save to ' + esc(c.name) + '</button>';
+
+  // The block holds quotes and newlines, so the handler is attached rather
+  // than inlined into an onclick attribute.
+  document.getElementById('copyintake').onclick = function () { copyText(block); };
+  // Attached rather than inlined: the block holds quotes and newlines.
+}
+
+function applyIntake() {
+  var d = window._intake;
+  var c = client(d.cid);
+  c.intake = d.answers;
+  if (d.goals.length) c.goals = d.goals;
+  var p = BeastCore.profileFromIntake(c.name, d.answers);
+  Object.keys(p).forEach(function (k) { if (p[k] !== '') c.profile[k] = p[k]; });
+  save();
+  closeModal();
+  renderPanel();
+  toast('Intake saved');
 }
 
 /* ── Brofessor drafts ──────────────────────────────────────────────────── */
@@ -555,7 +629,8 @@ function clientCard(c) {
     '<div class="top"><div class="av">' + esc(c.profile.avatar || AVATARS[0]) + '</div>' +
     '<div><div class="nm">' + esc(c.name) + '</div>' +
     '<div class="sub">' + (c.lastSent ? 'Sent ' + esc(c.lastSent.slice(0, 10)) : 'Not sent yet') + '</div></div></div>' +
-    '<div class="sub">' + c.items.length + ' items, ' + core + ' core</div>' +
+    '<div class="sub">' + c.items.length + ' items, ' + core + ' core' +
+      (c.intake ? ' \u00B7 intake in' : '') + '</div>' +
     '<div class="sub">Perfect week ' + BeastCore.perfectWeek(c.items) + '</div></div>';
 }
 
@@ -578,7 +653,8 @@ function renderPanel() {
   var c = client(openId);
   if (!c) { closePanel(); return; }
 
-  var tabs = [['plan', 'Plan'], ['goals', 'Goals'], ['profile', 'Profile'], ['preview', 'Preview']];
+  var tabs = [['plan', 'Plan'], ['intake', 'Intake'], ['goals', 'Goals'],
+              ['profile', 'Profile'], ['preview', 'Preview']];
   document.getElementById('panel').innerHTML =
     '<div class="panel"><header><div class="wrap">' +
       '<button class="btn grey sm" onclick="closePanel()">‹ Back</button>' +
@@ -588,7 +664,8 @@ function renderPanel() {
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="' + (panelTab === t[0] ? 'active' : '') + '" onclick="setPanelTab(\'' + t[0] + '\')">' + t[1] + '</button>';
       }).join('') + '</div>' +
-      (panelTab === 'plan' ? planTab(c) : panelTab === 'goals' ? goalsTab(c) :
+      (panelTab === 'plan' ? planTab(c) : panelTab === 'intake' ? intakeTab(c) :
+       panelTab === 'goals' ? goalsTab(c) :
        panelTab === 'profile' ? profileTab(c) : previewTab(c)) +
     '</div></div>';
 }
@@ -689,6 +766,33 @@ function itemRow(c, it) {
       '<label style="grid-column:1/-1">Note for the client<input value="' + attr(it.notes) +
         '" onchange="' + f('notes') + '"></label>' +
     '</div></div>';
+}
+
+function copyIntakeBlock(cid) {
+  var c = client(cid);
+  copyText(BeastCore.formatIntakeForCoach(c.name, c.intake || {}));
+}
+
+function intakeTab(c) {
+  var all = BeastCore.intakeFields();
+  if (!c.intake) {
+    return '<div class="empty"><div class="big">\u{1F4CB}</div><h2>No intake yet</h2>' +
+      '<p>Send ' + esc(c.name) + ' the form, then paste what comes back.</p>' +
+      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px">' +
+        '<button class="btn" onclick="sendIntakeForm(\'' + attr(c.id) + '\')">Send the form</button>' +
+        '<button class="btn grey" onclick="openIntakeImport(\'' + attr(c.id) + '\')">Paste answers</button>' +
+      '</div></div>';
+  }
+
+  var answered = all.filter(function (f) {
+    return c.intake[f.key] !== undefined && String(c.intake[f.key]).trim() !== '';
+  }).length;
+
+  return '<p class="muted">' + answered + ' of ' + all.length + ' answered.</p>' +
+    '<div class="code" style="max-height:340px;white-space:pre-wrap;margin-top:12px">' +
+      esc(BeastCore.formatIntakeForCoach(c.name, c.intake)) + '</div>' +
+    '<button class="btn full" onclick="copyIntakeBlock(\'' + attr(c.id) + '\')">Copy for The Brofessor</button>' +
+    '<button class="btn grey full" onclick="openIntakeImport(\'' + attr(c.id) + '\')">Replace with a new intake</button>';
 }
 
 function goalsTab(c) {
