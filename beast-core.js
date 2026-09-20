@@ -19,7 +19,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.6.0';
+  var VERSION = '2.7.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -739,6 +739,81 @@ var BeastCore = (function () {
     return { ok: false, error: 'That does not look like a Beast Mode link.' };
   }
 
+  // ── Trainer backup ────────────────────────────────────────────────────────
+  // The dashboard is the only copy of every client, plan, intake and report.
+  // A client can always be re-sent a link; the trainer has no such fallback,
+  // so the roster gets a file.
+
+  var BACKUP_TYPE = 'beast-mode-trainer-backup';
+
+  function buildBackup(db, coreVersion) {
+    return {
+      type: BACKUP_TYPE,
+      v: PAYLOAD_VERSION,
+      core: coreVersion || VERSION,
+      exportedAt: new Date().toISOString(),
+      clients: (db && db.clients) || []
+    };
+  }
+
+  function backupFilename(now) {
+    return 'beast-mode-backup-' + dateToLocal(now || new Date()) + '.json';
+  }
+
+  // Strict, because the thing on the other side of a bad restore is every
+  // client Chris has.
+  function readBackup(text) {
+    var data;
+    try { data = typeof text === 'string' ? JSON.parse(text) : text; }
+    catch (e) { return { ok: false, error: 'That file is not valid JSON.' }; }
+
+    if (!data || typeof data !== 'object') {
+      return { ok: false, error: 'That file is not a Beast Mode backup.' };
+    }
+    if (data.type !== BACKUP_TYPE) {
+      return { ok: false, error: 'That is not a trainer backup. Trainer backups start with "' + BACKUP_TYPE + '".' };
+    }
+    if (Number(data.v) > PAYLOAD_VERSION) {
+      return { ok: false, error: 'That backup was made by a newer version of Beast Mode.' };
+    }
+    if (!Array.isArray(data.clients)) {
+      return { ok: false, error: 'That backup has no client list.' };
+    }
+
+    var clients = data.clients.map(function (c) {
+      return Object.assign({}, c, {
+        id: isValidId(c && c.id) ? c.id : newId(),
+        name: c && c.name ? String(c.name) : 'Unnamed',
+        items: normalizeItems(c && c.items),
+        goals: normalizeGoals(c && c.goals),
+        profile: (c && c.profile) || {},
+        reports: (c && c.reports) || {}
+      });
+    });
+
+    return { ok: true, clients: clients, exportedAt: data.exportedAt || null, core: data.core || null };
+  }
+
+  // What a restore would do, worked out before anything is written.
+  function backupDiff(current, incoming) {
+    var byId = {};
+    (current || []).forEach(function (c) { byId[c.id] = c; });
+    var add = [], overlap = [];
+    (incoming || []).forEach(function (c) {
+      (byId[c.id] ? overlap : add).push(c.name);
+    });
+    var onlyHere = (current || []).filter(function (c) {
+      return !(incoming || []).some(function (i) { return i.id === c.id; });
+    }).map(function (c) { return c.name; });
+    return { add: add, overlap: overlap, onlyHere: onlyHere };
+  }
+
+  function daysSince(iso, today) {
+    if (!iso) return null;
+    var d = localDateOf(iso);
+    return d ? daysBetween(d, today || todayLocal()) : null;
+  }
+
   // ── Reminders ─────────────────────────────────────────────────────────────
   // The server is told only which clock times to ping a phone at. Which items
   // are due, and their names, are worked out on the device when the push
@@ -1085,6 +1160,8 @@ var BeastCore = (function () {
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
     packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
+    buildBackup: buildBackup, readBackup: readBackup, backupDiff: backupDiff,
+    backupFilename: backupFilename, daysSince: daysSince, BACKUP_TYPE: BACKUP_TYPE,
     reminderSlots: reminderSlots, dueAtSlot: dueAtSlot,
     reminderText: reminderText, inQuietHours: inQuietHours,
     buildReport: buildReport, reportSummary: reportSummary,

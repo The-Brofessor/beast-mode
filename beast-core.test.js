@@ -716,3 +716,65 @@ test('quiet hours handle a window that wraps past midnight', () => {
   assert.strictEqual(C.inQuietHours('13:00', { from: '12:00', to: '14:00' }), true);
   assert.strictEqual(C.inQuietHours('13:00', null), false);
 });
+
+// ── trainer backup ─────────────────────────────────────────────────────────
+
+const ROSTER = () => ({ clients: [
+  { id: 'c1', name: 'Vince', items: C.normalizeItems([{ name: 'Zone 2', kind: 'habit', addedAt: '2026-09-14' }]),
+    goals: C.normalizeGoals([{ text: 'Pass the PFRA', term: 'short' }]),
+    profile: { name: 'Vince', weight: 202 }, reports: { '2026-09-19': { date: '2026-09-19', stats: { done: 5 } } } },
+  { id: 'c2', name: 'Dana', items: [], goals: [], profile: {}, reports: {} }
+] });
+
+test('a backup round trips the whole roster', () => {
+  const file = JSON.stringify(C.buildBackup(ROSTER(), '2.7.0'));
+  const r = C.readBackup(file);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.clients.length, 2);
+  assert.strictEqual(r.clients[0].name, 'Vince');
+  assert.strictEqual(r.clients[0].items[0].addedAt, '2026-09-14');   // dates survive
+  assert.strictEqual(r.clients[0].goals[0].text, 'Pass the PFRA');
+  assert.deepStrictEqual(Object.keys(r.clients[0].reports), ['2026-09-19']);
+});
+
+test('a restore refuses anything that is not a trainer backup', () => {
+  assert.match(C.readBackup('not json').error, /not valid JSON/);
+  assert.match(C.readBackup('{}').error, /not a trainer backup/);
+  assert.match(C.readBackup(JSON.stringify({ type: C.BACKUP_TYPE, v: 99, clients: [] })).error, /newer version/);
+  assert.match(C.readBackup(JSON.stringify({ type: C.BACKUP_TYPE, v: 2 })).error, /no client list/);
+  // A client payload is not a trainer backup, however similar it looks.
+  assert.strictEqual(C.readBackup(JSON.stringify({ v: 2, items: [] })).ok, false);
+});
+
+test('a damaged client in a backup is repaired rather than dropped', () => {
+  const r = C.readBackup(JSON.stringify({
+    type: C.BACKUP_TYPE, v: 2,
+    clients: [{ id: 'bad|id', items: null, goals: ['Lose 10 lb'] }]
+  }));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.clients[0].id.indexOf('|'), -1);
+  assert.strictEqual(r.clients[0].name, 'Unnamed');
+  assert.deepStrictEqual(r.clients[0].items, []);
+  assert.strictEqual(r.clients[0].goals[0].text, 'Lose 10 lb');
+});
+
+test('the diff says what a restore would add, overwrite and leave behind', () => {
+  const current = ROSTER().clients;
+  const incoming = [
+    { id: 'c1', name: 'Vince' },      // already here
+    { id: 'c3', name: 'Marcus' }      // new
+  ];                                   // c2 Dana is only in the browser
+  const d = C.backupDiff(current, incoming);
+  assert.deepStrictEqual(d.overlap, ['Vince']);
+  assert.deepStrictEqual(d.add, ['Marcus']);
+  assert.deepStrictEqual(d.onlyHere, ['Dana']);
+});
+
+test('the filename carries the local date', () => {
+  assert.strictEqual(C.backupFilename(new Date(2026, 8, 20)), 'beast-mode-backup-2026-09-20.json');
+});
+
+test('daysSince measures staleness in local days', () => {
+  assert.strictEqual(C.daysSince('2026-09-14T09:00:00Z', '2026-09-20'), 6);
+  assert.strictEqual(C.daysSince(null), null);
+});

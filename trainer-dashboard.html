@@ -135,7 +135,7 @@ header h1 span { color: var(--accent); }
    All contract logic lives in BeastCore. Metric names, timings, frequencies,
    log keys and payload prefixes are never written inline here. See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.6.0';
+var BUILT_AGAINST = '2.7.0';
 var KEY = 'bm2.trainer';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -304,6 +304,120 @@ function applyScheduleToGroup(cid, id) {
   save();
   renderPanel();
   toast(n + ' item' + (n === 1 ? '' : 's') + ' updated');
+}
+
+/* ── backup ────────────────────────────────────────────────────────────── */
+
+// This dashboard is the only copy of every client, plan, intake and report.
+// A client can always be sent a new link; there is no equivalent for the
+// roster, so it gets a file.
+
+function downloadBackup() {
+  var payload = JSON.stringify(BeastCore.buildBackup(db, BeastCore.VERSION), null, 2);
+  var blob = new Blob([payload], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = BeastCore.backupFilename();
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+
+  db.lastBackupAt = new Date().toISOString();
+  save();
+  render();
+  toast('Backup downloaded');
+}
+
+function openRestore() {
+  showModal('<h2>Restore from a backup</h2>' +
+    '<p class="muted">Pick a backup file. Nothing changes until you see what it would do.</p>' +
+    '<div class="field" style="margin-top:12px">' +
+      '<input type="file" id="backupfile" accept="application/json,.json" onchange="readBackupFile()"></div>' +
+    '<div id="restoreout"></div>' +
+    '<button class="btn grey full" onclick="closeModal()">Cancel</button>');
+}
+
+function readBackupFile() {
+  var f = (document.getElementById('backupfile').files || [])[0];
+  var out = document.getElementById('restoreout');
+  if (!f) return;
+
+  var reader = new FileReader();
+  reader.onload = function () {
+    var res = BeastCore.readBackup(reader.result);
+    if (!res.ok) { out.innerHTML = '<p class="err">' + esc(res.error) + '</p>'; return; }
+
+    var d = BeastCore.backupDiff(db.clients, res.clients);
+    window._restore = res;
+
+    var line = function (label, names, cls) {
+      if (!names.length) return '';
+      return '<p class="' + cls + '"><strong>' + label + ' (' + names.length + '):</strong> ' +
+        esc(names.join(', ')) + '</p>';
+    };
+
+    out.innerHTML = '<div class="field">' +
+      '<p class="muted">' + res.clients.length + ' client' + (res.clients.length === 1 ? '' : 's') +
+        ' in the file' + (res.exportedAt ? ', saved ' + esc(res.exportedAt.slice(0, 10)) : '') + '.</p>' +
+      line('New to this browser', d.add, 'ok') +
+      line('Already here, would be overwritten', d.overlap, 'warn') +
+      line('Here but not in the file', d.onlyHere, 'err') +
+      '<button class="btn green full" onclick="restoreMerge()">Add only the ' + d.add.length +
+        ' new one' + (d.add.length === 1 ? '' : 's') + '</button>' +
+      '<button class="btn danger full" onclick="restoreReplace()">Replace everything with the file</button>' +
+      '</div>';
+  };
+  reader.onerror = function () { out.innerHTML = '<p class="err">Could not read that file.</p>'; };
+  reader.readAsText(f);
+}
+
+// The safe one: nothing already here is touched.
+function restoreMerge() {
+  var have = {};
+  db.clients.forEach(function (c) { have[c.id] = true; });
+  var added = window._restore.clients.filter(function (c) { return !have[c.id]; });
+  db.clients = db.clients.concat(added);
+  save();
+  closeModal();
+  render();
+  toast(added.length + ' client' + (added.length === 1 ? '' : 's') + ' added');
+}
+
+// The destructive one, so it says out loud what it is about to lose.
+function restoreReplace() {
+  var d = BeastCore.backupDiff(db.clients, window._restore.clients);
+  var warning = 'Replace the whole roster with the file?';
+  if (d.onlyHere.length) {
+    warning += '\n\nThese are here but NOT in the file, and will be lost:\n  ' +
+      d.onlyHere.join('\n  ');
+  }
+  if (!confirm(warning)) return;
+  db.clients = window._restore.clients;
+  save();
+  closeModal();
+  render();
+  toast('Roster replaced');
+}
+
+function backupBanner() {
+  var days = BeastCore.daysSince(db.lastBackupAt);
+  if (!db.clients.length) return '';
+
+  // A backup button nobody presses is worth nothing, so the roster says how
+  // long it has been.
+  var state, cls;
+  if (days === null) { state = 'Never backed up.'; cls = 'err'; }
+  else if (days === 0) { state = 'Backed up today.'; cls = 'ok'; }
+  else if (days < 7) { state = 'Backed up ' + days + ' day' + (days === 1 ? '' : 's') + ' ago.'; cls = 'ok'; }
+  else { state = 'Last backup was ' + days + ' days ago.'; cls = 'warn'; }
+
+  return '<div class="preview-note" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+    '<span class="' + cls + '" style="flex:1;min-width:200px">' + state +
+      ' This browser is the only copy of your ' + db.clients.length + ' client' +
+      (db.clients.length === 1 ? '' : 's') + '.</span>' +
+    '<button class="btn sm" onclick="downloadBackup()">Download backup</button>' +
+    '<button class="btn grey sm" onclick="openRestore()">Restore</button>' +
+    '</div>';
 }
 
 /* ── daily reports ─────────────────────────────────────────────────────── */
@@ -700,9 +814,11 @@ function render() {
         '<div class="stat"><b>' + withPlan + '</b><span>With a plan</span></div>' +
         '<div class="stat"><b>' + sent + '</b><span>Sent</span></div>' +
       '</div>' +
+      backupBanner() +
       (db.clients.length ? '<div class="grid">' + db.clients.map(clientCard).join('') + '</div>'
         : '<div class="empty"><div class="big">\u{1F4AA}</div><h2>No clients yet</h2>' +
-          '<p>Add a client, build their checklist, send them the link.</p></div>') +
+          '<p>Add a client, build their checklist, send them the link.</p>' +
+          '<button class="btn grey" style="margin-top:16px" onclick="openRestore()">Restore from a backup</button></div>') +
     '</div>';
 }
 
