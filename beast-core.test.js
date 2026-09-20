@@ -158,7 +158,12 @@ test('formatTarget renders each metric and stays empty when unset', () => {
   assert.strictEqual(C.formatTarget({ metric: 'sets_reps', target: { sets: 3, reps: 12 } }), '3 x 12');
   assert.strictEqual(C.formatTarget({ metric: 'sets_reps_weight', target: { sets: 3, reps: 12, weight: 135 } }), '3 x 12 @ 135');
   assert.strictEqual(C.formatTarget({ metric: 'sets_reps_weight', target: { sets: 3, reps: 12 } }), '3 x 12');
-  assert.strictEqual(C.formatTarget({ metric: 'time', target: { minutes: 20 } }), '20 min');
+  assert.strictEqual(C.formatTarget({ metric: 'duration', target: { minutes: 20 } }), '20 min');
+  assert.strictEqual(C.formatTarget({ metric: 'duration', target: { seconds: 45 } }), '45 sec');
+  assert.strictEqual(C.formatTarget({ metric: 'duration', target: { minutes: 12, seconds: 30 } }), '12:30');
+  assert.strictEqual(C.formatTarget({ metric: 'sets_duration', target: { sets: 3, seconds: 45 } }), '3 x 45 sec');
+  assert.strictEqual(C.formatTarget({ metric: 'distance_time', target: { distance: 1.5, minutes: 12, seconds: 30 } }), '1.5 in 12:30');
+  assert.strictEqual(C.formatTarget({ metric: 'makes_attempts', target: { makes: 8, attempts: 10 } }), '8 / 10');
   assert.strictEqual(C.formatTarget({ metric: 'notes', target: {} }), '');
   assert.strictEqual(C.formatTarget({ metric: 'sets_reps', target: {} }), '');
   assert.strictEqual(C.formatTarget(null), '');
@@ -168,6 +173,19 @@ test('every metric has target fields and a label', () => {
   C.METRICS.forEach(m => {
     assert.ok(Array.isArray(C.targetFields(m)), m + ' has no target fields');
     assert.notStrictEqual(C.metricLabel(m), m, m + ' has no label');
+  });
+});
+
+test('the vocabulary matches what brofessor-methods.md tells the coach to write', () => {
+  // Renaming either list silently invalidates every plan draft. These are the
+  // names the methods file uses, so they are part of the contract.
+  ['reps','sets_reps','sets_reps_weight','duration','sets_duration',
+   'distance_time','makes_attempts','notes'].forEach(m => {
+    assert.ok(C.METRICS.indexOf(m) !== -1, 'missing metric ' + m);
+  });
+  ['morning','pre-workout','intra-workout','post-workout',
+   'evening','before-bed','with-meals'].forEach(t => {
+    assert.ok(C.TIMINGS.indexOf(t) !== -1, 'missing timing ' + t);
   });
 });
 
@@ -425,6 +443,98 @@ test('every payload kind has a prefix and decodes back to its kind', () => {
     assert.strictEqual(out.ok, true);
     assert.strictEqual(out.kind, kind);
   });
+});
+
+// ── Brofessor drafts ───────────────────────────────────────────────────────
+
+const GOOD_DRAFT = {
+  items: [
+    { name: 'Zone 2, 20 min fasted', kind: 'habit', group: 'Morning', core: true, dueBy: '08:00' },
+    { name: 'Barbell Bench Press', kind: 'exercise', group: 'Push Day', freq: 'weekly', days: [0, 3],
+      detail: { metric: 'sets_reps_weight', target: { sets: 3, reps: 12, weight: 135 } } },
+    { name: 'Creatine 5g', kind: 'supplement', group: 'Morning', detail: { dosage: '5g', timing: 'morning' } }
+  ],
+  goals: [{ text: 'Lose 17 lb before the PFRA', term: 'short' }]
+};
+
+test('a clean draft validates and normalizes', () => {
+  const r = C.validateDraft(GOOD_DRAFT);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.items.length, 3);
+  assert.strictEqual(r.goals.length, 1);
+  assert.strictEqual(r.items[0].core, true);
+});
+
+test('a draft can be pasted as a JSON string', () => {
+  assert.strictEqual(C.validateDraft(JSON.stringify(GOOD_DRAFT)).ok, true);
+});
+
+test('broken JSON is refused with a readable message', () => {
+  const r = C.validateDraft('{ "items": [ }');
+  assert.strictEqual(r.ok, false);
+  assert.match(r.errors[0], /valid JSON/);
+});
+
+test('an empty or missing items list is refused', () => {
+  assert.match(C.validateDraft({ items: [] }).errors[0], /no "items" list/);
+  assert.match(C.validateDraft({}).errors[0], /no "items" list/);
+});
+
+test('every bad field is named with the item it belongs to', () => {
+  const r = C.validateDraft({ items: [
+    { name: 'Bad kind', kind: 'stretching' },
+    { name: 'Bad freq', freq: 'fortnightly' },
+    { name: 'Bad time', dueBy: '25:00' },
+    { name: 'Bad day', freq: 'weekly', days: [0, 9] },
+    { name: 'Bad metric', kind: 'exercise', detail: { metric: 'vibes' } },
+    { name: 'Bad timing', kind: 'supplement', detail: { timing: 'whenever' } },
+    { kind: 'habit' }
+  ] });
+  assert.strictEqual(r.ok, false);
+  const joined = r.errors.join(' | ');
+  assert.match(joined, /"Bad kind": kind "stretching"/);
+  assert.match(joined, /"Bad freq": freq "fortnightly"/);
+  assert.match(joined, /"Bad time": dueBy "25:00"/);
+  assert.match(joined, /"Bad day": day "9"/);
+  assert.match(joined, /"Bad metric": metric "vibes"/);
+  assert.match(joined, /"Bad timing": timing "whenever"/);
+  assert.match(joined, /Item 7 has no name/);
+});
+
+test('re-importing the same draft is a no-op', () => {
+  const first = C.mergeDraft([], C.validateDraft(GOOD_DRAFT).items, '2026-09-14');
+  const again = C.mergeDraft(first.items, C.validateDraft(GOOD_DRAFT).items, '2026-09-20');
+  assert.deepStrictEqual(again.added, []);
+  assert.deepStrictEqual(again.removed, []);
+  assert.deepStrictEqual(again.changed, []);
+  assert.strictEqual(again.kept.length, 3);
+  // Ids and addedAt survive, so the client's log and streak survive with them.
+  assert.deepStrictEqual(again.items.map(i => i.id), first.items.map(i => i.id));
+  assert.ok(again.items.every(i => i.addedAt === '2026-09-14'));
+});
+
+test('a draft reports what it adds, changes and removes', () => {
+  const first = C.mergeDraft([], C.validateDraft(GOOD_DRAFT).items, '2026-09-14');
+  const edited = JSON.parse(JSON.stringify(GOOD_DRAFT));
+  edited.items[0].dueBy = '07:30';                 // changed
+  edited.items.push({ name: 'Floss', kind: 'habit', core: false });  // added
+  edited.items.splice(2, 1);                        // Creatine removed
+
+  const r = C.mergeDraft(first.items, C.validateDraft(edited).items, '2026-09-20');
+  assert.deepStrictEqual(r.changed, ['Zone 2, 20 min fasted']);
+  assert.deepStrictEqual(r.added, ['Floss']);
+  assert.deepStrictEqual(r.removed, ['Creatine 5g']);
+  // The new item starts today; the changed one keeps its original date.
+  assert.strictEqual(r.items.filter(i => i.name === 'Floss')[0].addedAt, '2026-09-20');
+  assert.strictEqual(r.items[0].addedAt, '2026-09-14');
+});
+
+test('draft matching ignores case and stray spacing', () => {
+  const first = C.mergeDraft([], C.validateDraft(GOOD_DRAFT).items, '2026-09-14');
+  const retyped = { items: [{ name: '  zone 2, 20 MIN FASTED ', kind: 'habit', core: true, dueBy: '08:00' }] };
+  const r = C.mergeDraft(first.items, C.validateDraft(retyped).items, '2026-09-20');
+  assert.deepStrictEqual(r.added, []);
+  assert.strictEqual(r.items[0].addedAt, '2026-09-14');
 });
 
 // ── escaping ───────────────────────────────────────────────────────────────

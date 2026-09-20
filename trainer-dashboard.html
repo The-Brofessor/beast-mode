@@ -135,7 +135,7 @@ header h1 span { color: var(--accent); }
    All contract logic lives in BeastCore. Metric names, timings, frequencies,
    log keys and payload prefixes are never written inline here. See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.0.0';
+var BUILT_AGAINST = '2.2.0';
 var KEY = 'bm2.trainer';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -303,6 +303,70 @@ function applyScheduleToGroup(cid, id) {
   save();
   renderPanel();
   toast(n + ' item' + (n === 1 ? '' : 's') + ' updated');
+}
+
+/* ── Brofessor drafts ──────────────────────────────────────────────────── */
+
+function openDraft(cid) {
+  showModal(
+    '<h2>Import a Brofessor draft</h2>' +
+    '<p class="muted">Paste the JSON block from The Brofessor. Nothing is applied until you see what changes.</p>' +
+    '<div class="field" style="margin-top:12px">' +
+      '<textarea id="draftjson" rows="10" placeholder=\'{ "items": [ ... ] }\'></textarea></div>' +
+    '<div id="draftout"></div>' +
+    '<button class="btn full" onclick="checkDraft(\'' + attr(cid) + '\')">Check it</button>' +
+    '<button class="btn grey full" onclick="closeModal()">Cancel</button>'
+  );
+}
+
+function checkDraft(cid) {
+  var c = client(cid);
+  var out = document.getElementById('draftout');
+  var res = BeastCore.validateDraft(document.getElementById('draftjson').value);
+
+  if (!res.ok) {
+    out.innerHTML = '<div class="field"><p class="err"><strong>' + res.errors.length +
+      ' problem' + (res.errors.length === 1 ? '' : 's') + ' to fix:</strong></p><ul class="err">' +
+      res.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></div>';
+    return;
+  }
+
+  var merge = BeastCore.mergeDraft(c.items, res.items);
+  window._draft = { cid: cid, merge: merge, goals: res.goals };
+
+  var line = function (label, names, cls) {
+    if (!names.length) return '';
+    return '<p class="' + cls + '"><strong>' + label + ' (' + names.length + '):</strong> ' +
+      esc(names.join(', ')) + '</p>';
+  };
+
+  var body = c.items.length
+    ? line('Added', merge.added, 'ok') + line('Changed', merge.changed, 'warn') +
+      line('Removed', merge.removed, 'err') +
+      (merge.kept.length ? '<p class="muted">' + merge.kept.length + ' unchanged.</p>' : '') +
+      (!merge.added.length && !merge.changed.length && !merge.removed.length
+        ? '<p class="ok">Nothing changes. This is the same plan.</p>' : '')
+    : '<p class="ok">' + merge.items.length + ' items, ' +
+      merge.items.filter(function (i) { return i.core; }).length + ' core.</p>';
+
+  out.innerHTML = '<div class="field">' + body +
+    '<p class="muted">Perfect week goes from ' + BeastCore.perfectWeek(c.items) +
+    ' to ' + BeastCore.perfectWeek(merge.items) + ' points.</p>' +
+    (merge.removed.length
+      ? '<p class="warn">Removed items disappear from the client’s list. What they already logged stays.</p>'
+      : '') +
+    '<button class="btn green full" onclick="applyDraft()">Apply to ' + esc(c.name) + '</button></div>';
+}
+
+function applyDraft() {
+  var d = window._draft;
+  var c = client(d.cid);
+  c.items = d.merge.items;
+  if (d.goals && d.goals.length) c.goals = d.goals;
+  save();
+  closeModal();
+  renderPanel();
+  toast('Draft applied');
 }
 
 /* ── goals ─────────────────────────────────────────────────────────────── */
@@ -536,7 +600,7 @@ function planTab(c) {
 
   if (!c.items.length) {
     html += '<div class="empty"><div class="big">\u{1F4DD}</div><h2>Empty plan</h2>' +
-      '<p>Add the checklist items this client works through.</p></div>';
+      '<p>Paste a draft from The Brofessor, or add items by hand.</p></div>';
   } else {
     var lastGroupName = null;
     html += c.items.map(function (it) {
@@ -552,7 +616,9 @@ function planTab(c) {
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">' +
     BeastCore.KINDS.map(function (k) {
       return '<button class="btn grey" onclick="addItem(\'' + attr(c.id) + '\',\'' + k + '\')">+ ' + esc(k) + '</button>';
-    }).join('') + '</div>' +
+    }).join('') +
+    '<button class="btn" onclick="openDraft(\'' + attr(c.id) + '\')">\u{1F4CB} Import Brofessor draft</button>' +
+    '</div>' +
     '<button class="btn danger full" style="margin-top:26px" onclick="removeClient(\'' + attr(c.id) + '\')">Remove client</button>';
   return html;
 }

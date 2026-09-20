@@ -19,7 +19,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.0.0';
+  var VERSION = '2.2.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -30,48 +30,73 @@ var BeastCore = (function () {
   var KINDS = ['exercise', 'supplement', 'habit'];
   var FREQS = ['daily', 'weekly', 'flexible', 'monthly'];
 
-  var METRICS = ['sets_reps', 'sets_reps_weight', 'time', 'distance', 'reps', 'notes'];
+  // These names are the ones brofessor-methods.md already tells the coach to
+  // use. Renaming them would silently invalidate every plan draft he writes.
+  // Only 'checkbox' is gone from the old list, because a tap now completes any
+  // item whatever its kind.
+  var METRICS = [
+    'reps', 'sets_reps', 'sets_reps_weight',
+    'duration', 'sets_duration', 'distance_time', 'makes_attempts', 'notes'
+  ];
 
   // Which numbers a metric asks for, in display order. Both apps read this
   // rather than hardcoding field names, so a new metric is a one-line change
   // here instead of an edit in three files.
   var TARGET_FIELDS = {
+    reps:             [{ key: 'reps', label: 'Reps' }],
     sets_reps:        [{ key: 'sets', label: 'Sets' }, { key: 'reps', label: 'Reps' }],
     sets_reps_weight: [{ key: 'sets', label: 'Sets' }, { key: 'reps', label: 'Reps' }, { key: 'weight', label: 'Weight' }],
-    time:             [{ key: 'minutes', label: 'Minutes' }],
-    distance:         [{ key: 'distance', label: 'Distance' }],
-    reps:             [{ key: 'reps', label: 'Reps' }],
+    duration:         [{ key: 'minutes', label: 'Min' }, { key: 'seconds', label: 'Sec' }],
+    sets_duration:    [{ key: 'sets', label: 'Sets' }, { key: 'minutes', label: 'Min' }, { key: 'seconds', label: 'Sec' }],
+    distance_time:    [{ key: 'distance', label: 'Distance' }, { key: 'minutes', label: 'Min' }, { key: 'seconds', label: 'Sec' }],
+    makes_attempts:   [{ key: 'makes', label: 'Makes' }, { key: 'attempts', label: 'Attempts' }],
     notes:            []
   };
 
   var METRIC_LABELS = {
-    sets_reps: 'Sets and reps', sets_reps_weight: 'Sets, reps and weight',
-    time: 'Time', distance: 'Distance', reps: 'Reps', notes: 'Notes only'
+    reps: 'Reps', sets_reps: 'Sets x Reps', sets_reps_weight: 'Sets x Reps x Weight',
+    duration: 'Duration', sets_duration: 'Sets x Duration',
+    distance_time: 'Distance and Time', makes_attempts: 'Makes / Attempts',
+    notes: 'Free text notes'
   };
 
   function metricLabel(metric) { return METRIC_LABELS[metric] || metric; }
   function targetFields(metric) { return TARGET_FIELDS[metric] || []; }
 
-  // "3 x 12 @ 135" / "20 min" / "" when nothing is set.
+  function clock(t) {
+    var m = Number(t.minutes) || 0, s = Number(t.seconds) || 0;
+    if (!m && !s) return '';
+    if (!s) return m + ' min';
+    if (!m) return s + ' sec';
+    return m + ':' + pad2(s);
+  }
+
+  // "3 x 12 @ 135" / "20 min" / "1.5 in 12:30" / "" when nothing is set.
   function formatTarget(detail) {
     if (!detail || !detail.target) return '';
     var t = detail.target;
     switch (detail.metric) {
-      case 'sets_reps':
-        return (t.sets && t.reps) ? t.sets + ' x ' + t.reps : '';
+      case 'reps':             return t.reps ? t.reps + ' reps' : '';
+      case 'sets_reps':        return (t.sets && t.reps) ? t.sets + ' x ' + t.reps : '';
       case 'sets_reps_weight':
         if (!t.sets || !t.reps) return '';
         return t.sets + ' x ' + t.reps + (t.weight ? ' @ ' + t.weight : '');
-      case 'time':     return t.minutes ? t.minutes + ' min' : '';
-      case 'distance': return t.distance ? String(t.distance) : '';
-      case 'reps':     return t.reps ? t.reps + ' reps' : '';
-      default:         return '';
+      case 'duration':         return clock(t);
+      case 'sets_duration':    return (t.sets && clock(t)) ? t.sets + ' x ' + clock(t) : '';
+      case 'distance_time':
+        if (!t.distance) return '';
+        return clock(t) ? t.distance + ' in ' + clock(t) : String(t.distance);
+      case 'makes_attempts':   return t.attempts ? (t.makes || 0) + ' / ' + t.attempts : '';
+      default:                 return '';
     }
   }
 
+  // Hyphenated, matching the shipped app and the seven labels in
+  // brofessor-methods.md section 6. 'custom' is gone: it needed a second
+  // free-text field, and 'as-needed' plus the item note covers it.
   var TIMINGS = [
-    'morning', 'pre_workout', 'post_workout',
-    'with_breakfast', 'with_lunch', 'with_dinner', 'evening', 'bedtime'
+    'morning', 'pre-workout', 'intra-workout', 'post-workout',
+    'evening', 'before-bed', 'with-meals', 'as-needed'
   ];
 
   // Monday-aligned. DAYS[0] is Monday so weekday maths matches getWeekDates().
@@ -654,6 +679,109 @@ var BeastCore = (function () {
     return { ok: false, error: 'That does not look like a Beast Mode link.' };
   }
 
+  // ── Brofessor drafts ──────────────────────────────────────────────────────
+  // A draft is hand-written JSON from the coach. It is checked strictly and
+  // rejected with messages naming the offending item and field, because the
+  // alternative is a silently wrong plan reaching a client's phone.
+
+  function draftLabel(raw, i) {
+    var n = raw && raw.name ? String(raw.name).trim() : '';
+    return n ? '"' + n + '"' : 'item ' + (i + 1);
+  }
+
+  function validateDraft(raw) {
+    var errors = [];
+    var parsed = raw;
+
+    if (typeof raw === 'string') {
+      try { parsed = JSON.parse(raw); }
+      catch (e) { return { ok: false, errors: ['That is not valid JSON. Check for a missing comma or bracket.'], items: [], goals: [] }; }
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      return { ok: false, errors: ['The draft should be a JSON object with an "items" list.'], items: [], goals: [] };
+    }
+    if (!Array.isArray(parsed.items) || !parsed.items.length) {
+      return { ok: false, errors: ['The draft has no "items" list, or it is empty.'], items: [], goals: [] };
+    }
+
+    parsed.items.forEach(function (it, i) {
+      var who = draftLabel(it, i);
+      if (!it || typeof it !== 'object') { errors.push(who + ' is not an object.'); return; }
+      if (!it.name || !String(it.name).trim()) errors.push('Item ' + (i + 1) + ' has no name.');
+
+      if (it.kind !== undefined && KINDS.indexOf(it.kind) === -1) {
+        errors.push(who + ': kind "' + it.kind + '" is not one of ' + KINDS.join(', ') + '.');
+      }
+      if (it.freq !== undefined && FREQS.indexOf(it.freq) === -1) {
+        errors.push(who + ': freq "' + it.freq + '" is not one of ' + FREQS.join(', ') + '.');
+      }
+      if (it.dueBy && minutesOfDay(it.dueBy) === null) {
+        errors.push(who + ': dueBy "' + it.dueBy + '" is not a 24-hour HH:MM time.');
+      }
+      if (it.days !== undefined) {
+        if (!Array.isArray(it.days)) errors.push(who + ': days must be a list of 0 to 6, Monday first.');
+        else it.days.forEach(function (d) {
+          if (!Number.isInteger(d) || d < 0 || d > 6) errors.push(who + ': day "' + d + '" is not 0 to 6.');
+        });
+      }
+      var d = it.detail || {};
+      if (it.kind === 'exercise' && d.metric !== undefined && METRICS.indexOf(d.metric) === -1) {
+        errors.push(who + ': metric "' + d.metric + '" is not one of ' + METRICS.join(', ') + '.');
+      }
+      if (it.kind === 'supplement' && d.timing !== undefined && TIMINGS.indexOf(d.timing) === -1) {
+        errors.push(who + ': timing "' + d.timing + '" is not one of ' + TIMINGS.join(', ') + '.');
+      }
+    });
+
+    if (errors.length) return { ok: false, errors: errors, items: [], goals: [] };
+    return {
+      ok: true, errors: [],
+      items: normalizeItems(parsed.items),
+      goals: normalizeGoals(parsed.goals || []),
+      profile: parsed.profile || {}
+    };
+  }
+
+  function matchKey(name) { return String(name || '').trim().toLowerCase(); }
+
+  // Drafts carry no ids, so incoming items are matched to what the client
+  // already has by name. A matched item keeps its id and addedAt, which is
+  // what makes re-importing the same draft a no-op instead of a reset that
+  // wipes the client's history and streak.
+  function mergeDraft(existing, incoming, today) {
+    today = today || todayLocal();
+    var byName = {};
+    (existing || []).forEach(function (it) { byName[matchKey(it.name)] = it; });
+
+    var added = [], kept = [], changed = [];
+    var usedIds = {};
+
+    var items = incoming.map(function (inc) {
+      var prev = byName[matchKey(inc.name)];
+      if (!prev) {
+        added.push(inc.name);
+        return normalizeItem(Object.assign({}, inc, { id: newId(), addedAt: today }));
+      }
+      usedIds[prev.id] = true;
+      var merged = normalizeItem(Object.assign({}, inc, { id: prev.id, addedAt: prev.addedAt }));
+      var diffs = ['core', 'freq', 'dueBy', 'group', 'notes', 'trainerNotes'].filter(function (f) {
+        return JSON.stringify(merged[f]) !== JSON.stringify(prev[f]);
+      });
+      if (diffs.length || JSON.stringify(merged.detail) !== JSON.stringify(prev.detail) ||
+          JSON.stringify(merged.days) !== JSON.stringify(prev.days)) {
+        changed.push(inc.name);
+      } else {
+        kept.push(inc.name);
+      }
+      return merged;
+    });
+
+    var removed = (existing || []).filter(function (it) { return !usedIds[it.id]; })
+      .map(function (it) { return it.name; });
+
+    return { items: items, added: added, removed: removed, changed: changed, kept: kept };
+  }
+
   // ── Public surface ────────────────────────────────────────────────────────
 
   return {
@@ -688,7 +816,8 @@ var BeastCore = (function () {
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,
 
     encodePayload: encodePayload, decodePayload: decodePayload,
-    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength
+    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength,
+    validateDraft: validateDraft, mergeDraft: mergeDraft
   };
 })();
 
