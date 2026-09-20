@@ -177,6 +177,35 @@ nav button.active { color: var(--accent); }
 .install button { background: var(--accent); color: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; flex: 0 0 auto; }
 .install button.x { background: none; color: var(--text2); padding: 8px; }
 
+/* ── coach ─────────────────────────────────────────────────────────────── */
+.coachlog {
+  min-height: 40vh; max-height: calc(100vh - 270px); overflow-y: auto;
+  padding: 12px 0 4px; display: flex; flex-direction: column; gap: 9px;
+}
+.bubble {
+  max-width: 86%; padding: 11px 14px; border-radius: 16px; font-size: 15px;
+  line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+}
+.bubble.me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.bubble.coach { align-self: flex-start; background: var(--surface); border-bottom-left-radius: 5px; }
+.bubble.err { align-self: flex-start; background: #7f1d1d; color: #fecaca; font-size: 14px; }
+.bubble.thinking { color: var(--text2); font-style: italic; }
+.bubble.thinking::after {
+  content: '...'; display: inline-block; width: 1em; text-align: left;
+  animation: dots 1.2s steps(4, end) infinite;
+}
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+.coachbar {
+  position: sticky; bottom: 0; display: flex; gap: 8px; align-items: flex-end;
+  background: var(--bg); padding: 10px 0 12px;
+}
+.coachbar textarea {
+  flex: 1; resize: none; max-height: 120px; border-radius: 20px; padding: 11px 15px;
+  font-size: 16px;   /* under 16px iOS zooms the page on focus */
+}
+.coachbar button:disabled { opacity: .5; }
+
 .toast {
   position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);
   background: var(--green); color: #052e16; font-weight: 700; font-size: 14px;
@@ -236,6 +265,7 @@ function load() {
     state.profile = state.profile || {};
     state.weightLog = state.weightLog || {};
     state.seen = state.seen || [];
+    state.coachLog = state.coachLog || [];
     if (!state.perfectWeek) state.perfectWeek = BeastCore.perfectWeek(state.items);
   }
 }
@@ -380,7 +410,9 @@ function applySetup(data) {
     earnedLevel: 1,
     goalsAgreedAt: null,
     weightLog: {},
-    seen: []
+    seen: [],
+    coachToken: data.coachToken || null,
+    coachLog: []
   };
   save();
 }
@@ -406,6 +438,9 @@ function applyPlanUpdate(data) {
       return Object.assign({}, g, { completed: !!completed[g.id] });
     });
   }
+
+  // A re-issued token replaces the old one; an absent one leaves it alone.
+  if (data.coachToken) state.coachToken = data.coachToken;
 
   // Fill blanks without overwriting anything the client set themselves.
   var incomingProfile = data.profile || {};
@@ -616,11 +651,128 @@ function closeSheet() {
   render();
 }
 
+/* ── the coach ─────────────────────────────────────────────────────────── */
+
+// Set once the coach worker is deployed. Empty means the tab stays hidden, so
+// the app is unchanged for anyone without it.
+var COACH_URL = 'https://coach.thebrofessor.coach';
+
+var coachBusy = false;
+var coachError = '';
+
+function coachAvailable() { return !!(COACH_URL && state && state.coachToken); }
+
+// Only what the coach needs to answer well. No log keys, no timestamps, no
+// history beyond this week.
+function coachState() {
+  var today = BeastCore.todayLocal();
+  var open = [], done = [];
+  state.items.forEach(function (it) {
+    if (!BeastCore.isAvailable(it, today)) return;
+    (BeastCore.isDone(state.log, it.id, today) ? done : open).push(it.name);
+  });
+
+  var missed = [];
+  BeastCore.getWeekDates(today).forEach(function (d) {
+    if (d >= today) return;
+    state.items.forEach(function (it) {
+      if (!it.core || !BeastCore.isScheduled(it, d)) return;
+      if (!BeastCore.isDone(state.log, it.id, d) && missed.indexOf(it.name) === -1) missed.push(it.name);
+    });
+  });
+
+  var p = progress();
+  return {
+    name: state.profile.name || '',
+    day: BeastCore.daysBetween(state.profile.startDate || today, today) + 1,
+    streak: p.streak, points: p.points, rank: p.level.rank,
+    goals: state.goals.filter(function (g) { return !g.completed; }).map(function (g) { return g.text; }),
+    doneToday: done, openToday: open, missedWeek: missed
+  };
+}
+
+async function askCoach() {
+  var box = document.getElementById('coach-input');
+  var text = (box.value || '').trim();
+  if (!text || coachBusy) return;
+
+  state.coachLog.push({ role: 'user', content: text });
+  box.value = '';
+  coachBusy = true;
+  coachError = '';
+  save();
+  render();
+
+  try {
+    var res = await fetch(COACH_URL + '/coach', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        token: state.coachToken,
+        messages: state.coachLog.slice(-20),
+        state: coachState()
+      })
+    });
+    var data = await res.json();
+    if (data.reply) {
+      state.coachLog.push({ role: 'assistant', content: data.reply });
+      state.coachUsage = data.usage || null;
+    } else {
+      coachError = data.error || 'No answer came back. Try again.';
+    }
+  } catch (e) {
+    coachError = 'Could not reach the coach. Check your signal.';
+  }
+
+  coachBusy = false;
+  save();
+  render();
+  setTimeout(function () {
+    var log = document.getElementById('coach-log');
+    if (log) log.scrollTop = log.scrollHeight;
+  }, 30);
+}
+
+function clearCoachLog() {
+  if (!confirm('Clear this conversation? Chris does not see it either way.')) return;
+  state.coachLog = [];
+  save();
+  render();
+}
+
+function coachTab() {
+  if (!coachAvailable()) {
+    return '<div class="empty" style="padding-top:60px"><div class="big">\u{1F4AC}</div>' +
+      '<h2>Not switched on</h2><p>Text Chris if you want this.</p></div>';
+  }
+
+  var bubbles = state.coachLog.length
+    ? state.coachLog.map(function (m) {
+        return '<div class="bubble ' + (m.role === 'user' ? 'me' : 'coach') + '">' +
+          esc(m.content) + '</div>';
+      }).join('')
+    : '<div class="empty"><div class="big">\u{1F4AA}</div>' +
+      '<p>Ask me anything. Training, food, supplements, or whatever else is bugging you.</p></div>';
+
+  return '<div id="coach-log" class="coachlog">' + bubbles +
+      (coachBusy ? '<div class="bubble coach thinking">Thinking</div>' : '') +
+      (coachError ? '<div class="bubble err">' + esc(coachError) + '</div>' : '') +
+    '</div>' +
+    '<div class="coachbar">' +
+      '<textarea id="coach-input" rows="1" placeholder="Ask The Brofessor" ' +
+        'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();askCoach();}"></textarea>' +
+      '<button class="btn" style="width:auto;margin:0;padding:11px 16px" onclick="askCoach()"' +
+        (coachBusy ? ' disabled' : '') + '>Send</button>' +
+    '</div>' +
+    (state.coachLog.length
+      ? '<div style="text-align:center;margin-top:10px"><button class="logbtn" onclick="clearCoachLog()">Clear this chat</button></div>'
+      : '');
+}
+
 /* ── reminders ─────────────────────────────────────────────────────────── */
 
 // Set after you deploy the worker. Empty means reminders stay switched off,
 // so the app works fine for anyone who never sets this up.
-var PUSH_URL = 'https://beast-mode-push.brofessor.workers.dev';
+var PUSH_URL = 'https://push.thebrofessor.coach';
 var VAPID_PUBLIC_KEY = 'BDpOB42o2rDOh6fd0DrTSWRm7rj6LUu3IKcX51r9yA1JOGJEefM1d3PjWek2o3ju9xk7Vyt2vUuzocjqwxFPusE';
 
 var IDB = 'bm2', IDB_STORE = 'reminders';
@@ -845,7 +997,8 @@ function render() {
   if (!state.goalsAgreedAt) { root.innerHTML = agreementScreen(); return; }
 
   root.innerHTML = header() + '<div class="wrap">' +
-    (tab === 'today' ? todayTab() : tab === 'week' ? weekTab() : profileTab()) +
+    (tab === 'today' ? todayTab() : tab === 'week' ? weekTab() :
+     tab === 'coach' ? coachTab() : profileTab()) +
     '</div>' + navBar();
 }
 
@@ -884,7 +1037,10 @@ function header() {
 }
 
 function navBar() {
-  var tabs = [['today', '✓', 'Today'], ['week', '\u{1F4C5}', 'Week'], ['profile', '\u{1F464}', 'Profile']];
+  // The coach tab exists only for a client Chris has switched it on for.
+  var tabs = [['today', '✓', 'Today'], ['week', '\u{1F4C5}', 'Week']];
+  if (coachAvailable()) tabs.push(['coach', '\u{1F4AC}', 'Coach']);
+  tabs.push(['profile', '\u{1F464}', 'Profile']);
   return '<nav>' + tabs.map(function (t) {
     return '<button class="' + (tab === t[0] ? 'active' : '') + '" onclick="go(\'' + t[0] + '\')">' +
       '<span class="ic">' + t[1] + '</span>' + t[2] + '</button>';

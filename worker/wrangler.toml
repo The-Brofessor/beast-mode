@@ -2,6 +2,12 @@ name = "beast-mode-push"
 main = "src/index.js"
 compatibility_date = "2026-09-20"
 
+# A custom domain. wrangler creates the DNS record on deploy, and the
+# workers.dev address keeps working alongside it.
+routes = [
+  { pattern = "push.thebrofessor.coach", custom_domain = true }
+]
+
 # Every 15 minutes. CRON_WINDOW_MIN in src/index.js must match this, or a slot
 # either fires twice or is missed entirely.
 [triggers]

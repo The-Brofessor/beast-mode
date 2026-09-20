@@ -665,7 +665,8 @@ function buildCode(c) {
     code: BeastCore.encodePayload(kind, {
       items: c.items,
       goals: c.goals,
-      profile: c.profile
+      profile: c.profile,
+      coachToken: c.coachToken || undefined
     })
   };
 }
@@ -829,7 +830,8 @@ function clientCard(c) {
     '<div><div class="nm">' + esc(c.name) + '</div>' +
     '<div class="sub">' + (c.lastSent ? 'Sent ' + esc(c.lastSent.slice(0, 10)) : 'Not sent yet') + '</div></div></div>' +
     '<div class="sub">' + c.items.length + ' items, ' + core + ' core' +
-      (c.intake ? ' \u00B7 intake in' : '') + '</div>' +
+      (c.intake ? ' \u00B7 intake in' : '') +
+      (c.coachToken ? ' \u00B7 coach on' : '') + '</div>' +
     '<div class="sub">' + (function () {
       var ds = Object.keys(c.reports || {}).sort();
       if (!ds.length) return 'Perfect week ' + BeastCore.perfectWeek(c.items);
@@ -1031,11 +1033,27 @@ function profileTab(c) {
       return '<div class="field"><label>' + x[1] + '</label><input value="' +
         attr(p[x[0]] || '') + '" onchange="' + f(x[0]) + '"></div>';
     }).join('') +
+    '<div class="field"><label>The Brofessor token</label>' +
+      '<input value="' + attr(c.coachToken || '') + '" placeholder="Leave blank to keep the coach off" ' +
+      'onchange="updateClient(\'' + attr(c.id) + '\',\'coachToken\',this.value.trim())"></div>' +
+    '<p class="muted" style="margin:-6px 0 14px">' +
+      (c.coachToken
+        ? 'The coach tab shows for ' + esc(c.name) + ' on their next plan link.'
+        : 'No coach. Issue a token from the command line, paste it here, then send a plan update.') +
+    '</p>' +
     '<div class="field"><label>Avatar</label><div style="display:flex;gap:8px;flex-wrap:wrap">' +
       AVATARS.map(function (a) {
         return '<button class="btn ' + (p.avatar === a ? '' : 'grey') + '" style="font-size:20px;padding:8px 12px" ' +
           'onclick="updateProfile(\'' + attr(c.id) + '\',\'avatar\',\'' + a + '\')">' + a + '</button>';
       }).join('') + '</div></div>';
+}
+
+// Top-level client fields, as opposed to profile fields.
+function updateClient(cid, key, value) {
+  var c = client(cid);
+  c[key] = value;
+  autosave();
+  renderPanel();
 }
 
 function updateProfile(cid, key, value) {
