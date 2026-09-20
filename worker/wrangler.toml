@@ -1,0 +1,20 @@
+name = "beast-mode-push"
+main = "src/index.js"
+compatibility_date = "2026-09-20"
+
+# Every 15 minutes. CRON_WINDOW_MIN in src/index.js must match this, or a slot
+# either fires twice or is missed entirely.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Create the namespace once and paste the id here:
+#   npx wrangler kv namespace create SUBS
+[[kv_namespaces]]
+binding = "SUBS"
+id = "f7be0a8d97f94ec89920d9a5d00d6838"
+
+[vars]
+# Safe to publish. The matching private key is a secret:
+#   npx wrangler secret put VAPID_PRIVATE_JWK
+VAPID_PUBLIC_KEY = "BDpOB42o2rDOh6fd0DrTSWRm7rj6LUu3IKcX51r9yA1JOGJEefM1d3PjWek2o3ju9xk7Vyt2vUuzocjqwxFPusE"
+VAPID_SUBJECT = "mailto:clinkhorn@gmail.com"

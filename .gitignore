@@ -23,3 +23,8 @@ workout-nutrition-tool.html
 *.bak*
 *.tmp_*
 *.tmp
+
+# Cloudflare worker local state and any key that lands here by accident
+worker/.wrangler/
+worker/node_modules/
+*vapid*private*
