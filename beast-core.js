@@ -32,6 +32,43 @@ var BeastCore = (function () {
 
   var METRICS = ['sets_reps', 'sets_reps_weight', 'time', 'distance', 'reps', 'notes'];
 
+  // Which numbers a metric asks for, in display order. Both apps read this
+  // rather than hardcoding field names, so a new metric is a one-line change
+  // here instead of an edit in three files.
+  var TARGET_FIELDS = {
+    sets_reps:        [{ key: 'sets', label: 'Sets' }, { key: 'reps', label: 'Reps' }],
+    sets_reps_weight: [{ key: 'sets', label: 'Sets' }, { key: 'reps', label: 'Reps' }, { key: 'weight', label: 'Weight' }],
+    time:             [{ key: 'minutes', label: 'Minutes' }],
+    distance:         [{ key: 'distance', label: 'Distance' }],
+    reps:             [{ key: 'reps', label: 'Reps' }],
+    notes:            []
+  };
+
+  var METRIC_LABELS = {
+    sets_reps: 'Sets and reps', sets_reps_weight: 'Sets, reps and weight',
+    time: 'Time', distance: 'Distance', reps: 'Reps', notes: 'Notes only'
+  };
+
+  function metricLabel(metric) { return METRIC_LABELS[metric] || metric; }
+  function targetFields(metric) { return TARGET_FIELDS[metric] || []; }
+
+  // "3 x 12 @ 135" / "20 min" / "" when nothing is set.
+  function formatTarget(detail) {
+    if (!detail || !detail.target) return '';
+    var t = detail.target;
+    switch (detail.metric) {
+      case 'sets_reps':
+        return (t.sets && t.reps) ? t.sets + ' x ' + t.reps : '';
+      case 'sets_reps_weight':
+        if (!t.sets || !t.reps) return '';
+        return t.sets + ' x ' + t.reps + (t.weight ? ' @ ' + t.weight : '');
+      case 'time':     return t.minutes ? t.minutes + ' min' : '';
+      case 'distance': return t.distance ? String(t.distance) : '';
+      case 'reps':     return t.reps ? t.reps + ' reps' : '';
+      default:         return '';
+    }
+  }
+
   var TIMINGS = [
     'morning', 'pre_workout', 'post_workout',
     'with_breakfast', 'with_lunch', 'with_dinner', 'evening', 'bedtime'
@@ -623,6 +660,8 @@ var BeastCore = (function () {
     VERSION: VERSION,
     PAYLOAD_VERSION: PAYLOAD_VERSION,
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
+    TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
+    targetFields: targetFields, formatTarget: formatTarget,
     POINTS: POINTS, LEVELS: LEVELS, PREFIXES: PREFIXES,
     DEFAULT_CORE_BY_KIND: DEFAULT_CORE_BY_KIND, SHARE_LIMITS: SHARE_LIMITS,
 

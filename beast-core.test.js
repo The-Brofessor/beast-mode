@@ -152,6 +152,25 @@ test('normalizeGoals upgrades legacy strings and drops empties', () => {
   assert.ok(C.isValidId(goals[0].id));
 });
 
+// ── metrics and targets ────────────────────────────────────────────────────
+
+test('formatTarget renders each metric and stays empty when unset', () => {
+  assert.strictEqual(C.formatTarget({ metric: 'sets_reps', target: { sets: 3, reps: 12 } }), '3 x 12');
+  assert.strictEqual(C.formatTarget({ metric: 'sets_reps_weight', target: { sets: 3, reps: 12, weight: 135 } }), '3 x 12 @ 135');
+  assert.strictEqual(C.formatTarget({ metric: 'sets_reps_weight', target: { sets: 3, reps: 12 } }), '3 x 12');
+  assert.strictEqual(C.formatTarget({ metric: 'time', target: { minutes: 20 } }), '20 min');
+  assert.strictEqual(C.formatTarget({ metric: 'notes', target: {} }), '');
+  assert.strictEqual(C.formatTarget({ metric: 'sets_reps', target: {} }), '');
+  assert.strictEqual(C.formatTarget(null), '');
+});
+
+test('every metric has target fields and a label', () => {
+  C.METRICS.forEach(m => {
+    assert.ok(Array.isArray(C.targetFields(m)), m + ' has no target fields');
+    assert.notStrictEqual(C.metricLabel(m), m, m + ' has no label');
+  });
+});
+
 // ── scheduling ─────────────────────────────────────────────────────────────
 
 test('addedAt excludes an item from earlier dates', () => {
