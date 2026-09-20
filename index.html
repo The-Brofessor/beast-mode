@@ -214,7 +214,7 @@ nav button.active { color: var(--accent); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.5.0';
+var BUILT_AGAINST = '2.6.0';
 var KEY = 'bm2.client';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -449,6 +449,7 @@ function toggleItem(id, date) {
   var prev = BeastCore.entryFor(state.log, id, date);
   BeastCore.markDone(state.log, it, date, !was, prev && prev.values);
   save();
+  if (remindersOn()) writeMirror();
   checkMilestones();
   render();
 }
@@ -613,6 +614,155 @@ function showSheet(html) {
 function closeSheet() {
   document.getElementById('sheet').innerHTML = '';
   render();
+}
+
+/* ── reminders ─────────────────────────────────────────────────────────── */
+
+// Set after you deploy the worker. Empty means reminders stay switched off,
+// so the app works fine for anyone who never sets this up.
+var PUSH_URL = 'https://beast-mode-push.brofessor.workers.dev';
+var VAPID_PUBLIC_KEY = 'BDpOB42o2rDOh6fd0DrTSWRm7rj6LUu3IKcX51r9yA1JOGJEefM1d3PjWek2o3ju9xk7Vyt2vUuzocjqwxFPusE';
+
+var IDB = 'bm2', IDB_STORE = 'reminders';
+
+function idb() {
+  return new Promise(function (resolve, reject) {
+    var open = indexedDB.open(IDB, 1);
+    open.onupgradeneeded = function () {
+      if (!open.result.objectStoreNames.contains(IDB_STORE)) open.result.createObjectStore(IDB_STORE);
+    };
+    open.onsuccess = function () { resolve(open.result); };
+    open.onerror = function () { reject(open.error); };
+  });
+}
+
+// The service worker cannot read localStorage, so today's reminder text is
+// mirrored into IndexedDB where the push handler can reach it. Only what a
+// notification needs goes in, and it never leaves the device.
+function writeMirror() {
+  var today = BeastCore.todayLocal();
+  var due = BeastCore.reminderSlots(state.items).map(function (slot) {
+    var items = BeastCore.dueAtSlot(state.items, state.log, today, slot);
+    return { date: today, slot: slot, text: BeastCore.reminderText(items, slot) };
+  }).filter(function (r) { return r.text; });
+
+  return idb().then(function (db) {
+    return new Promise(function (resolve) {
+      var tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put({ due: due, writtenAt: new Date().toISOString() }, 'current');
+      tx.oncomplete = function () { resolve(due.length); };
+      tx.onerror = function () { resolve(0); };
+    });
+  }).catch(function () { return 0; });
+}
+
+function urlB64ToUint8(s) {
+  var pad = (s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  var raw = atob(pad);
+  return Uint8Array.from(raw, function (c) { return c.charCodeAt(0); });
+}
+
+function remindersOn() { return !!(state.reminders && state.reminders.on); }
+function pushConfigured() { return !!(PUSH_URL && VAPID_PUBLIC_KEY); }
+
+async function enableReminders() {
+  if (!pushConfigured()) { toast('Reminders are not set up yet'); return; }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    toast('This browser cannot do reminders'); return;
+  }
+  if (isIOS() && !isStandalone()) {
+    toast('Add Beast Mode to your home screen first'); return;
+  }
+
+  var perm = await Notification.requestPermission();
+  if (perm !== 'granted') { toast('Reminders need notification permission'); return; }
+
+  try {
+    var reg = await navigator.serviceWorker.ready;
+    var sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8(VAPID_PUBLIC_KEY)
+    });
+    state.reminders = state.reminders || {};
+    state.reminders.on = true;
+    state.reminders.id = state.reminders.id || BeastCore.newId();
+    state.reminders.quiet = state.reminders.quiet || { from: '22:00', to: '07:00' };
+    save();
+
+    await syncReminders(sub);
+    await writeMirror();
+    toast('Reminders on');
+  } catch (e) {
+    toast('Could not turn reminders on');
+  }
+  render();
+}
+
+function syncReminders(sub) {
+  return fetch(PUSH_URL + '/subscribe', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      id: state.reminders.id,
+      sub: { endpoint: sub.endpoint },
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      slots: BeastCore.reminderSlots(state.items),
+      quiet: state.reminders.quiet
+    })
+  }).catch(function () {});
+}
+
+async function disableReminders() {
+  try {
+    var reg = await navigator.serviceWorker.ready;
+    var sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+    if (PUSH_URL && state.reminders && state.reminders.id) {
+      await fetch(PUSH_URL + '/unsubscribe', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: state.reminders.id })
+      }).catch(function () {});
+    }
+  } catch (e) { /* the subscription may already be gone */ }
+  state.reminders = state.reminders || {};
+  state.reminders.on = false;
+  save();
+  toast('Reminders off');
+  render();
+}
+
+function setQuiet(which, value) {
+  state.reminders = state.reminders || {};
+  state.reminders.quiet = state.reminders.quiet || { from: '22:00', to: '07:00' };
+  state.reminders.quiet[which] = value;
+  save();
+  if (remindersOn()) navigator.serviceWorker.ready.then(function (reg) {
+    return reg.pushManager.getSubscription().then(function (sub) { if (sub) syncReminders(sub); });
+  });
+}
+
+function remindersCard() {
+  var slots = BeastCore.reminderSlots(state.items);
+  if (!pushConfigured()) {
+    return '<div class="card"><h3>Reminders</h3>' +
+      '<p class="imeta">Not set up yet.</p></div>';
+  }
+  if (!slots.length) {
+    return '<div class="card"><h3>Reminders</h3>' +
+      '<p class="imeta">Nothing on your plan has a due-by time, so there is nothing to remind you about.</p></div>';
+  }
+  var q = (state.reminders && state.reminders.quiet) || { from: '22:00', to: '07:00' };
+  return '<div class="card"><h3>Reminders</h3>' +
+    '<p class="imeta">' + slots.map(function (s) { return BeastCore.formatDueBy(s); }).join(', ') +
+      '. Only what is still outstanding gets a nudge.</p>' +
+    (isIOS() && !isStandalone()
+      ? '<p class="imeta">On iPhone, add Beast Mode to your home screen first.</p>' : '') +
+    (remindersOn()
+      ? '<div class="values"><label>Quiet from<input value="' + attr(q.from) +
+          '" onchange="setQuiet(\'from\',this.value)"></label>' +
+        '<label>until<input value="' + attr(q.to) + '" onchange="setQuiet(\'to\',this.value)"></label></div>' +
+        '<button class="btn" style="background:var(--surface2)" onclick="disableReminders()">Turn reminders off</button>'
+      : '<button class="btn" onclick="enableReminders()">Turn reminders on</button>') +
+    '</div>';
 }
 
 /* ── install ───────────────────────────────────────────────────────────── */
@@ -905,6 +1055,8 @@ function profileTab() {
     '<div class="imeta">' + pr.points + ' points, best streak ' + pr.bestStreak + ' days</div>' +
     '<div class="imeta">Perfect week ' + state.perfectWeek + ' points</div>' +
     '<div class="imeta">' + state.items.length + ' items on your plan</div></div>';
+
+  html += remindersCard();
 
   html += '<div class="card"><h3>Danger zone</h3>' +
     '<p class="imeta">Starting over erases everything you have logged.</p>' +

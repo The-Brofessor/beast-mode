@@ -19,7 +19,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.5.0';
+  var VERSION = '2.6.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -739,6 +739,48 @@ var BeastCore = (function () {
     return { ok: false, error: 'That does not look like a Beast Mode link.' };
   }
 
+  // ── Reminders ─────────────────────────────────────────────────────────────
+  // The server is told only which clock times to ping a phone at. Which items
+  // are due, and their names, are worked out on the device when the push
+  // arrives, so no plan data has to leave it.
+
+  // Distinct dueBy times across a plan, earliest first.
+  function reminderSlots(items) {
+    var seen = {};
+    (items || []).forEach(function (it) {
+      if (it.dueBy && minutesOfDay(it.dueBy) !== null) seen[it.dueBy] = true;
+    });
+    return Object.keys(seen).sort();
+  }
+
+  // What is still outstanding at a given slot on a given date. Anything already
+  // done is left out, so a client who finished early is not nagged.
+  function dueAtSlot(items, log, ymd, slot) {
+    return (items || []).filter(function (it) {
+      if (it.dueBy !== slot) return false;
+      if (!isAvailable(it, ymd)) return false;
+      return !isDone(log, it.id, ymd);
+    });
+  }
+
+  // "Zone 2 and 2 more, due by 8am" / "Zone 2, due by 8am"
+  function reminderText(due, slot) {
+    if (!due.length) return '';
+    var head = due[0].name;
+    var rest = due.length - 1;
+    return head + (rest ? ' and ' + rest + ' more' : '') +
+      (slot ? ', due by ' + formatDueBy(slot) : '');
+  }
+
+  // Quiet hours may wrap past midnight, so the comparison is split rather than
+  // a single range check.
+  function inQuietHours(hhmm, quiet) {
+    if (!quiet || !quiet.from || !quiet.to) return false;
+    var t = minutesOfDay(hhmm), a = minutesOfDay(quiet.from), b = minutesOfDay(quiet.to);
+    if (t === null || a === null || b === null) return false;
+    return a <= b ? (t >= a && t < b) : (t >= a || t < b);
+  }
+
   // ── Daily report ──────────────────────────────────────────────────────────
   // One day, sent back to the trainer. Only that day's entries travel, so a
   // report stays small enough for SMS however long the client has been going.
@@ -1043,6 +1085,8 @@ var BeastCore = (function () {
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
     packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
+    reminderSlots: reminderSlots, dueAtSlot: dueAtSlot,
+    reminderText: reminderText, inQuietHours: inQuietHours,
     buildReport: buildReport, reportSummary: reportSummary,
     INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
     formatIntakeForCoach: formatIntakeForCoach,

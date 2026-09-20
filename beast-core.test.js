@@ -655,3 +655,64 @@ test('detailLine covers every kind', () => {
     assert.strictEqual(typeof C.detailLine(C.normalizeItem({ name: 'x', kind: k })), 'string');
   });
 });
+
+// ── reminders ──────────────────────────────────────────────────────────────
+
+const REMINDER_ITEMS = () => C.normalizeItems([
+  { name: 'Zone 2', kind: 'habit', core: true, dueBy: '08:00', addedAt: '2026-09-14' },
+  { name: 'Weigh in', kind: 'habit', core: true, dueBy: '08:00', addedAt: '2026-09-14' },
+  { name: 'Steps', kind: 'habit', core: true, dueBy: '21:00', addedAt: '2026-09-14' },
+  { name: 'Bench', kind: 'exercise', freq: 'weekly', days: [0], addedAt: '2026-09-14' }
+]);
+
+test('reminder slots are the distinct due-by times, in order', () => {
+  assert.deepStrictEqual(C.reminderSlots(REMINDER_ITEMS()), ['08:00', '21:00']);
+  assert.deepStrictEqual(C.reminderSlots([]), []);
+});
+
+test('a slot lists only what is still outstanding', () => {
+  const items = REMINDER_ITEMS();
+  const log = {};
+  assert.strictEqual(C.dueAtSlot(items, log, '2026-09-16', '08:00').length, 2);
+  // Finish one and it drops out; finish both and the slot is silent.
+  log[C.logKey(items[0].id, '2026-09-16')] = { done: true, completedAt: at('2026-09-16', 7, 0) };
+  assert.strictEqual(C.dueAtSlot(items, log, '2026-09-16', '08:00').length, 1);
+  log[C.logKey(items[1].id, '2026-09-16')] = { done: true, completedAt: at('2026-09-16', 7, 5) };
+  assert.strictEqual(C.dueAtSlot(items, log, '2026-09-16', '08:00').length, 0);
+});
+
+test('a slot ignores items not scheduled that day', () => {
+  const items = C.normalizeItems([
+    { name: 'Leg day', kind: 'exercise', freq: 'weekly', days: [0], dueBy: '17:00', addedAt: '2026-09-14' }
+  ]);
+  assert.strictEqual(C.dueAtSlot(items, {}, '2026-09-14', '17:00').length, 1);  // Monday
+  assert.strictEqual(C.dueAtSlot(items, {}, '2026-09-16', '17:00').length, 0);  // Wednesday
+});
+
+test('a slot ignores an item added after the date', () => {
+  const items = C.normalizeItems([
+    { name: 'Floss', kind: 'habit', dueBy: '22:30', addedAt: '2026-09-20' }
+  ]);
+  assert.strictEqual(C.dueAtSlot(items, {}, '2026-09-16', '22:30').length, 0);
+  assert.strictEqual(C.dueAtSlot(items, {}, '2026-09-20', '22:30').length, 1);
+});
+
+test('reminder text names one item and counts the rest', () => {
+  const items = REMINDER_ITEMS();
+  assert.strictEqual(C.reminderText(C.dueAtSlot(items, {}, '2026-09-16', '08:00'), '08:00'),
+    'Zone 2 and 1 more, due by 8am');
+  assert.strictEqual(C.reminderText(C.dueAtSlot(items, {}, '2026-09-16', '21:00'), '21:00'),
+    'Steps, due by 9pm');
+  assert.strictEqual(C.reminderText([], '08:00'), '');
+});
+
+test('quiet hours handle a window that wraps past midnight', () => {
+  const q = { from: '22:00', to: '07:00' };
+  assert.strictEqual(C.inQuietHours('23:30', q), true);
+  assert.strictEqual(C.inQuietHours('02:00', q), true);
+  assert.strictEqual(C.inQuietHours('08:00', q), false);
+  assert.strictEqual(C.inQuietHours('21:59', q), false);
+  // A same-day window still works, and no window means never quiet.
+  assert.strictEqual(C.inQuietHours('13:00', { from: '12:00', to: '14:00' }), true);
+  assert.strictEqual(C.inQuietHours('13:00', null), false);
+});

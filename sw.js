@@ -4,7 +4,7 @@
    revalidation, so without a new cache name an installed app can sit on old
    files well past a push. The deploy checklist in CLAUDE.md names this step. */
 
-var CACHE = 'beast-mode-v2.5.0';
+var CACHE = 'beast-mode-v2.6.0';
 
 // Everything the checklist needs to open with no signal.
 var SHELL = [
@@ -87,4 +87,82 @@ self.addEventListener('fetch', function (e) {
       return hit || net;
     })
   );
+});
+
+/* ── push ─────────────────────────────────────────────────────────────────
+
+   The push arrives with no body. Everything the notification says is read
+   from IndexedDB on this device, which is why no plan data has to sit on the
+   server. localStorage is not available in a worker, so the page keeps a
+   small mirror in IndexedDB for exactly this.                              */
+
+var DB = 'bm2';
+var STORE = 'reminders';
+
+function readMirror() {
+  return new Promise(function (resolve) {
+    var open;
+    try { open = indexedDB.open(DB, 1); } catch (e) { return resolve(null); }
+    open.onupgradeneeded = function () {
+      if (!open.result.objectStoreNames.contains(STORE)) open.result.createObjectStore(STORE);
+    };
+    open.onerror = function () { resolve(null); };
+    open.onsuccess = function () {
+      var db = open.result;
+      if (!db.objectStoreNames.contains(STORE)) { resolve(null); return; }
+      var req = db.transaction(STORE, 'readonly').objectStore(STORE).get('current');
+      req.onsuccess = function () { resolve(req.result || null); };
+      req.onerror = function () { resolve(null); };
+    };
+  });
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+function nowLocal() {
+  var d = new Date();
+  return {
+    date: d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()),
+    hhmm: pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+  };
+}
+
+self.addEventListener('push', function (e) {
+  e.waitUntil(readMirror().then(function (m) {
+    var now = nowLocal();
+    var title = 'Beast Mode';
+    var body = 'You have items due.';
+
+    if (m && Array.isArray(m.due)) {
+      // The page writes one row per slot for today. Pick the slot closest at
+      // or before now, so a push that lands a minute late still matches.
+      var best = null;
+      m.due.forEach(function (row) {
+        if (row.date !== now.date) return;
+        if (row.slot <= now.hhmm && (!best || row.slot > best.slot)) best = row;
+      });
+      if (best && best.text) body = best.text;
+      else if (m.stale) return;   // the mirror predates today; say nothing
+    }
+
+    return self.registration.showNotification(title, {
+      body: body,
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      tag: 'beast-mode-due',      // a second push replaces rather than stacks
+      renotify: true,
+      data: { url: './index.html' }
+    });
+  }));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var url = (e.notification.data && e.notification.data.url) || './index.html';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].url.indexOf('index.html') !== -1 && 'focus' in list[i]) return list[i].focus();
+    }
+    return clients.openWindow(url);
+  }));
 });
