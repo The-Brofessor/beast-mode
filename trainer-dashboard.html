@@ -135,7 +135,7 @@ header h1 span { color: var(--accent); }
    All contract logic lives in BeastCore. Metric names, timings, frequencies,
    log keys and payload prefixes are never written inline here. See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.3.0';
+var BUILT_AGAINST = '2.4.0';
 var KEY = 'bm2.trainer';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -153,6 +153,7 @@ function load() {
     c.items = BeastCore.normalizeItems(c.items);
     c.goals = BeastCore.normalizeGoals(c.goals);
     c.profile = c.profile || {};
+    c.reports = c.reports || {};
     return c;
   });
 }
@@ -305,6 +306,88 @@ function applyScheduleToGroup(cid, id) {
   toast(n + ' item' + (n === 1 ? '' : 's') + ' updated');
 }
 
+/* ── daily reports ─────────────────────────────────────────────────────── */
+
+function openReportImport(cid) {
+  showModal('<h2>Import a daily report</h2>' +
+    '<p class="muted">Paste the code the client texted you.</p>' +
+    '<div class="field" style="margin-top:12px"><textarea id="reportcode" rows="5"></textarea></div>' +
+    '<div id="reportout"></div>' +
+    '<button class="btn full" onclick="readReport(\'' + attr(cid) + '\')">Read it</button>' +
+    '<button class="btn grey full" onclick="closeModal()">Cancel</button>');
+}
+
+function readReport(cid) {
+  var c = client(cid);
+  var out = document.getElementById('reportout');
+  var raw = document.getElementById('reportcode').value.trim();
+  // Clients paste the whole text message, so the code is pulled out of it.
+  var res = BeastCore.decodePayload(BeastCore.extractCode(raw));
+
+  if (!res.ok) { out.innerHTML = '<p class="err">' + esc(res.error) + '</p>'; return; }
+  if (res.kind !== 'report') {
+    out.innerHTML = '<p class="err">That is a ' + esc(res.kind) + ' code, not a daily report.</p>';
+    return;
+  }
+
+  var sum = BeastCore.reportSummary(res.data);
+  window._report = { cid: cid, report: res.data };
+  var known = (c.reports || {})[sum.date];
+
+  out.innerHTML = '<p class="ok">' + esc(sum.date) + ': ' + sum.done + ' of ' + sum.scheduled +
+      ' done, ' + sum.completion + '% complete, ' + sum.onTime + '% on time, ' +
+      sum.streak + ' day streak.</p>' +
+    (sum.gratitude ? '<p class="muted">Grateful for: ' + esc(sum.gratitude) + '</p>' : '') +
+    (known ? '<p class="warn">A report for that day is already saved. This replaces it.</p>' : '') +
+    '<button class="btn green full" onclick="saveReport()">Save to ' + esc(c.name) + '</button>';
+}
+
+function saveReport() {
+  var d = window._report;
+  var c = client(d.cid);
+  c.reports = c.reports || {};
+  c.reports[d.report.date] = d.report;
+  save();
+  closeModal();
+  panelTab = 'history';
+  renderPanel();
+  toast('Report saved');
+}
+
+function historyTab(c) {
+  var dates = Object.keys(c.reports || {}).sort().reverse();
+  if (!dates.length) {
+    return '<div class="empty"><div class="big">\u{1F4C8}</div><h2>No reports yet</h2>' +
+      '<p>When ' + esc(c.name) + ' sends a day, paste it here.</p>' +
+      '<button class="btn" style="margin-top:16px" onclick="openReportImport(\'' + attr(c.id) + '\')">Paste a report</button></div>';
+  }
+
+  var sums = dates.map(function (d) { return BeastCore.reportSummary(c.reports[d]); });
+  var avg = function (k) {
+    return Math.round(sums.reduce(function (n, s) { return n + s[k]; }, 0) / sums.length);
+  };
+  var latest = sums[0];
+
+  return '<div class="stats">' +
+      '<div class="stat"><b>' + avg('completion') + '%</b><span>Avg complete</span></div>' +
+      '<div class="stat"><b>' + avg('onTime') + '%</b><span>Avg on time</span></div>' +
+      '<div class="stat"><b>' + latest.streak + '</b><span>Streak</span></div>' +
+    '</div>' +
+    '<p class="muted">' + dates.length + ' day' + (dates.length === 1 ? '' : 's') +
+      ' reported. Latest rank ' + esc(latest.rank || 'unknown') + '.</p>' +
+    sums.map(function (s) {
+      var colour = s.gate === 'closed' ? 'var(--green)' : s.gate === 'broken' ? 'var(--red)' : 'var(--surface2)';
+      return '<div class="row" style="border-left-color:' + colour + '">' +
+        '<div class="rtop"><strong>' + esc(s.date) + '</strong>' +
+        '<span class="muted" style="margin-left:auto">' + s.done + '/' + s.scheduled +
+          ' \u00B7 ' + s.completion + '% \u00B7 ' + s.onTime + '% on time \u00B7 ' + s.dayPoints + ' pts</span></div>' +
+        (s.gratitude ? '<div class="muted" style="font-style:italic;margin-top:6px">\u201C' +
+          esc(s.gratitude) + '\u201D</div>' : '') +
+        '</div>';
+    }).join('') +
+    '<button class="btn full" onclick="openReportImport(\'' + attr(c.id) + '\')">Paste another report</button>';
+}
+
 /* ── intake ────────────────────────────────────────────────────────────── */
 
 function sendIntakeForm(cid) {
@@ -336,7 +419,7 @@ function openIntakeImport(cid) {
 function readIntake(cid) {
   var c = client(cid);
   var out = document.getElementById('intakeout');
-  var res = BeastCore.decodePayload(document.getElementById('intakecode').value.trim());
+  var res = BeastCore.decodePayload(BeastCore.extractCode(document.getElementById('intakecode').value));
 
   if (!res.ok) { out.innerHTML = '<p class="err">' + esc(res.error) + '</p>'; return; }
   if (res.kind !== 'intake') {
@@ -631,7 +714,12 @@ function clientCard(c) {
     '<div class="sub">' + (c.lastSent ? 'Sent ' + esc(c.lastSent.slice(0, 10)) : 'Not sent yet') + '</div></div></div>' +
     '<div class="sub">' + c.items.length + ' items, ' + core + ' core' +
       (c.intake ? ' \u00B7 intake in' : '') + '</div>' +
-    '<div class="sub">Perfect week ' + BeastCore.perfectWeek(c.items) + '</div></div>';
+    '<div class="sub">' + (function () {
+      var ds = Object.keys(c.reports || {}).sort();
+      if (!ds.length) return 'Perfect week ' + BeastCore.perfectWeek(c.items);
+      var s = BeastCore.reportSummary(c.reports[ds[ds.length - 1]]);
+      return 'Last report ' + s.date + ' \u00B7 ' + s.completion + '%';
+    })() + '</div></div>';
 }
 
 function openAddClient() {
@@ -653,8 +741,8 @@ function renderPanel() {
   var c = client(openId);
   if (!c) { closePanel(); return; }
 
-  var tabs = [['plan', 'Plan'], ['intake', 'Intake'], ['goals', 'Goals'],
-              ['profile', 'Profile'], ['preview', 'Preview']];
+  var tabs = [['plan', 'Plan'], ['history', 'History'], ['intake', 'Intake'],
+              ['goals', 'Goals'], ['profile', 'Profile'], ['preview', 'Preview']];
   document.getElementById('panel').innerHTML =
     '<div class="panel"><header><div class="wrap">' +
       '<button class="btn grey sm" onclick="closePanel()">‹ Back</button>' +
@@ -664,8 +752,8 @@ function renderPanel() {
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="' + (panelTab === t[0] ? 'active' : '') + '" onclick="setPanelTab(\'' + t[0] + '\')">' + t[1] + '</button>';
       }).join('') + '</div>' +
-      (panelTab === 'plan' ? planTab(c) : panelTab === 'intake' ? intakeTab(c) :
-       panelTab === 'goals' ? goalsTab(c) :
+      (panelTab === 'plan' ? planTab(c) : panelTab === 'history' ? historyTab(c) :
+       panelTab === 'intake' ? intakeTab(c) : panelTab === 'goals' ? goalsTab(c) :
        panelTab === 'profile' ? profileTab(c) : previewTab(c)) +
     '</div></div>';
 }

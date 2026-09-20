@@ -19,7 +19,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.3.0';
+  var VERSION = '2.4.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -639,6 +639,20 @@ var BeastCore = (function () {
     return prefix + ':' + b64encode(body);
   }
 
+  // Clients paste whole text messages, not bare codes. This pulls the code out
+  // of surrounding prose so the trainer never has to tell anyone to trim it.
+  function extractCode(text) {
+    var t = String(text || '').trim();
+    var best = null;
+    Object.keys(PREFIXES).forEach(function (k) {
+      // Built from PREFIXES, so a new payload kind is picked up here for free.
+      var re = new RegExp(PREFIXES[k] + 'Z?:[^\\s]+');
+      var m = re.exec(t);
+      if (m && (!best || m[0].length > best.length)) best = m[0];
+    });
+    return best || t;
+  }
+
   function decodePayload(code) {
     var s = String(code || '').trim();
     var kinds = Object.keys(PREFIXES);
@@ -677,6 +691,64 @@ var BeastCore = (function () {
       return { ok: true, kind: k, data: data };
     }
     return { ok: false, error: 'That does not look like a Beast Mode link.' };
+  }
+
+  // ── Daily report ──────────────────────────────────────────────────────────
+  // One day, sent back to the trainer. Only that day's entries travel, so a
+  // report stays small enough for SMS however long the client has been going.
+
+  function buildReport(items, log, date, opts) {
+    opts = opts || {};
+    var day = dayResult(items, log, date);
+    var due = items.filter(function (it) { return isAvailable(it, date); });
+
+    var entries = {};
+    var onTime = 0, done = 0;
+    due.forEach(function (it) {
+      var e = entryFor(log, it.id, date);
+      if (!e || !e.done) return;
+      done++;
+      if (isOnTime(it, e, date)) onTime++;
+      entries[it.id] = { n: it.name, t: e.completedAt || null };
+    });
+
+    return {
+      date: date,
+      name: opts.name || '',
+      gratitude: String(opts.gratitude || '').trim(),
+      entries: entries,
+      stats: {
+        scheduled: due.length,
+        done: done,
+        onTime: onTime,
+        core: day.scheduledCore,
+        gate: day.gate,
+        dayPoints: day.points,
+        points: opts.points != null ? opts.points : totalPoints(items, log, date),
+        streak: opts.streak != null ? opts.streak : currentStreak(items, log, addDays(date, 1)),
+        rank: opts.rank || ''
+      }
+    };
+  }
+
+  // Percentages for the trainer's history view. Guards the empty day, since a
+  // rest day with nothing scheduled is 100% rather than a divide by zero.
+  function reportSummary(r) {
+    var s = r.stats || {};
+    var pct = function (n, d) { return d ? Math.round((n / d) * 100) : 100; };
+    return {
+      date: r.date,
+      completion: pct(s.done, s.scheduled),
+      onTime: pct(s.onTime, s.done),
+      done: s.done,
+      scheduled: s.scheduled,
+      gate: s.gate,
+      points: s.points,
+      dayPoints: s.dayPoints,
+      streak: s.streak,
+      rank: s.rank,
+      gratitude: r.gratitude || ''
+    };
   }
 
   // ── Intake ────────────────────────────────────────────────────────────────
@@ -918,9 +990,10 @@ var BeastCore = (function () {
     totalPoints: totalPoints, perfectWeek: perfectWeek,
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,
 
-    encodePayload: encodePayload, decodePayload: decodePayload,
+    encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
     packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
+    buildReport: buildReport, reportSummary: reportSummary,
     INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
     formatIntakeForCoach: formatIntakeForCoach,
     goalsFromIntake: goalsFromIntake, profileFromIntake: profileFromIntake

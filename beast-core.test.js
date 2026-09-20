@@ -545,3 +545,73 @@ test('escapeHtml neutralises a script tag from a pasted draft', () => {
     '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;'
   );
 });
+
+// ── daily report ───────────────────────────────────────────────────────────
+
+test('a report carries only that day and computes its own percentages', () => {
+  const items = C.normalizeItems([
+    { name: 'Zone 2', kind: 'habit', core: true, dueBy: '08:00', addedAt: '2026-09-14' },
+    { name: 'Steps', kind: 'habit', core: true, dueBy: '21:00', addedAt: '2026-09-14' },
+    { name: 'Floss', kind: 'habit', core: false, dueBy: '22:30', addedAt: '2026-09-14' }
+  ]);
+  const log = {};
+  // Two days of history; only the second should travel.
+  items.forEach(it => { log[C.logKey(it.id, '2026-09-15')] = { done: true, completedAt: at('2026-09-15', 7, 0) }; });
+  log[C.logKey(items[0].id, '2026-09-16')] = { done: true, completedAt: at('2026-09-16', 7, 0) };   // on time
+  log[C.logKey(items[1].id, '2026-09-16')] = { done: true, completedAt: at('2026-09-16', 22, 0) };  // late
+
+  const r = C.buildReport(items, log, '2026-09-16', { name: 'Vince', gratitude: 'Slept 8 hours' });
+  assert.strictEqual(Object.keys(r.entries).length, 2);
+  assert.strictEqual(r.stats.scheduled, 3);
+  assert.strictEqual(r.stats.done, 2);
+  assert.strictEqual(r.stats.onTime, 1);
+  assert.strictEqual(r.stats.gate, 'closed');      // both core items done same-day
+  assert.strictEqual(r.gratitude, 'Slept 8 hours');
+
+  const s = C.reportSummary(r);
+  assert.strictEqual(s.completion, 67);
+  assert.strictEqual(s.onTime, 50);
+});
+
+test('a missed core item shows as a broken day in the report', () => {
+  const items = C.normalizeItems([
+    { name: 'Zone 2', kind: 'habit', core: true, addedAt: '2026-09-14' },
+    { name: 'Steps', kind: 'habit', core: true, addedAt: '2026-09-14' }
+  ]);
+  const log = { [C.logKey(items[0].id, '2026-09-16')]: { done: true, completedAt: at('2026-09-16', 7, 0) } };
+  const r = C.buildReport(items, log, '2026-09-16', {});
+  assert.strictEqual(r.stats.gate, 'broken');
+  assert.strictEqual(C.reportSummary(r).completion, 50);
+});
+
+test('a day with nothing scheduled reports 100 rather than dividing by zero', () => {
+  const items = C.normalizeItems([
+    { name: 'Leg day', kind: 'exercise', freq: 'weekly', days: [0], addedAt: '2026-09-14' }
+  ]);
+  const r = C.buildReport(items, {}, '2026-09-16', {});   // a Wednesday
+  assert.strictEqual(r.stats.scheduled, 0);
+  const s = C.reportSummary(r);
+  assert.strictEqual(s.completion, 100);
+  assert.strictEqual(s.onTime, 100);
+});
+
+test('a report round trips through the payload codec', () => {
+  const items = C.normalizeItems([{ name: 'Zone 2', kind: 'habit', core: true, addedAt: '2026-09-14' }]);
+  const log = { [C.logKey(items[0].id, '2026-09-16')]: { done: true, completedAt: at('2026-09-16', 7, 0) } };
+  const r = C.buildReport(items, log, '2026-09-16', { name: 'Vince', gratitude: 'Coffee' });
+  const out = C.decodePayload(C.encodePayload('report', r));
+  assert.strictEqual(out.ok, true);
+  assert.strictEqual(out.kind, 'report');
+  assert.strictEqual(out.data.gratitude, 'Coffee');
+  assert.strictEqual(out.data.stats.done, 1);
+});
+
+test('a code is pulled out of a pasted text message', () => {
+  const code = C.encodePayload('report', { date: '2026-09-20', stats: { done: 4 } });
+  const sms = 'Vince - 2026-09-20\n4/6 done, 0 day streak\nGrateful for: sleep\n\n' + code;
+  assert.strictEqual(C.extractCode(sms), code);
+  assert.strictEqual(C.decodePayload(C.extractCode(sms)).ok, true);
+  // A bare code passes through untouched, and prose with no code is returned as-is.
+  assert.strictEqual(C.extractCode(code), code);
+  assert.strictEqual(C.extractCode('  hello  '), 'hello');
+});

@@ -200,6 +200,7 @@ nav button.active { color: var(--accent); }
 <body>
 
 <div id="root"></div>
+<div id="sheet"></div>
 <div id="toast" class="toast"></div>
 
 <script src="lz-string.min.js"></script>
@@ -213,7 +214,7 @@ nav button.active { color: var(--accent); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.3.0';
+var BUILT_AGAINST = '2.4.0';
 var KEY = 'bm2.client';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -547,6 +548,73 @@ function checkMilestones() {
   });
 }
 
+/* ── send my day ───────────────────────────────────────────────────────── */
+
+function openSendDay() {
+  var today = BeastCore.todayLocal();
+  var d = BeastCore.dayResult(state.items, state.log, today);
+  var prev = (state.sentDays || {})[today];
+  showSheet(
+    '<h2 style="font-size:20px;margin-bottom:4px">Send Chris your day</h2>' +
+    '<p class="imeta">' + d.completed + ' done, ' + dayPct(today) + '% of what was due.' +
+      (prev ? ' Already sent once today; this replaces it.' : '') + '</p>' +
+    '<div class="field" style="margin-top:14px"><label>One thing you are grateful for today</label>' +
+      '<input id="gratitude" value="' + attr((state.gratitude || {})[today] || '') +
+      '" placeholder="Keep it short"></div>' +
+    '<button class="btn" onclick="sendDay()">Make the report</button>' +
+    '<button class="btn" style="background:var(--surface2)" onclick="closeSheet()">Not yet</button>'
+  );
+}
+
+function sendDay() {
+  var today = BeastCore.todayLocal();
+  var g = (document.getElementById('gratitude') || {}).value || '';
+  state.gratitude = state.gratitude || {};
+  state.gratitude[today] = g.trim();
+
+  var p = progress();
+  var report = BeastCore.buildReport(state.items, state.log, today, {
+    name: state.profile.name, gratitude: g,
+    points: p.points, streak: p.streak, rank: p.level.rank
+  });
+  var code = BeastCore.encodePayload('report', report);
+  var msg = (state.profile.name || 'Me') + ' - ' + today + '\n' +
+    report.stats.done + '/' + report.stats.scheduled + ' done, ' +
+    p.streak + ' day streak' + (g.trim() ? '\nGrateful for: ' + g.trim() : '') + '\n\n' + code;
+
+  state.sentDays = state.sentDays || {};
+  state.sentDays[today] = new Date().toISOString();
+  save();
+
+  showSheet(
+    '<h2 style="font-size:20px;margin-bottom:4px">Ready to send</h2>' +
+    '<p class="imeta">Tap one of these and it goes to Chris.</p>' +
+    '<button class="btn" onclick="location.href=' +
+      jsq('sms:?&body=' + encodeURIComponent(msg)) + '">Text it</button>' +
+    '<button class="btn" style="background:var(--surface2)" onclick="shareDay(' + jsq(msg) + ')">Share</button>' +
+    '<button class="btn" style="background:var(--surface2)" onclick="copyDay(' + jsq(code) + ')">Copy the code</button>' +
+    '<button class="btn" style="background:var(--surface2)" onclick="closeSheet()">Done</button>'
+  );
+}
+
+function shareDay(msg) {
+  if (navigator.share) navigator.share({ text: msg }).catch(function () {});
+  else copyDay(msg);
+}
+
+function copyDay(t) {
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () { toast('Copied'); });
+  else toast('Could not copy');
+}
+
+function showSheet(html) {
+  document.getElementById('sheet').innerHTML = '<div class="modal"><div>' + html + '</div></div>';
+}
+function closeSheet() {
+  document.getElementById('sheet').innerHTML = '';
+  render();
+}
+
 /* ── install ───────────────────────────────────────────────────────────── */
 
 var deferredPrompt = null;
@@ -702,7 +770,14 @@ function todayTab() {
       '</div>';
   }
 
-  return html + itemList(today);
+  html += itemList(today);
+
+  // The send button sits under the list: the day is reviewed before it is sent.
+  var sentAt = (state.sentDays || {})[today];
+  html += '<button class="btn" style="margin-top:6px' +
+    (sentAt ? ';background:var(--surface2)' : '') + '" onclick="openSendDay()">' +
+    (sentAt ? 'Sent today. Send again?' : 'Send Chris my day') + '</button>';
+  return html;
 }
 
 function dayPct(date) {
