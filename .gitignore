@@ -4,6 +4,8 @@
 # Project notes for Claude (loaded at session start)
 CLAUDE.md
 ENHANCEMENTS.md
+HABIT-REWORK-SPEC.md
+BROFESSOR-APP-SPEC.md
 .claude/
 
 # Local validator + skill (developer-only)

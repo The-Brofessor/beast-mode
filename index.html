@@ -1113,6 +1113,34 @@
       align-items: flex-start;
     }
   }
+
+  /* ── Habits & Tasks ── */
+  .habit-area-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: .7rem; font-weight: 600; background: var(--surface2); color: var(--text2);
+  }
+  .habit-due-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: .7rem; font-weight: 600; background: #f59e0b22; color: #f59e0b;
+  }
+  .habit-goal-chip {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: .7rem; font-weight: 600; background: #8b5cf622; color: #a78bfa;
+  }
+  .habit-chip-ontime { color: var(--green, #22c55e); font-size: .72rem; font-weight: 600; }
+  .habit-chip-late { color: #f59e0b; font-size: .72rem; font-weight: 600; }
+  .habit-freq-hint { font-size: .75rem; color: var(--text2); margin-top: 4px; }
+
+  /* ── Goal agreement overlay ── */
+  .goal-agree-list { margin: 14px 0; }
+  .goal-agree-term {
+    font-size: .72rem; color: var(--text2); text-transform: uppercase;
+    letter-spacing: .5px; margin: 12px 0 6px;
+  }
+  .goal-agree-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px;
+    background: var(--surface2); border-radius: 8px; margin-bottom: 6px; font-size: .9rem;
+  }
 </style>
 </head>
 <body>
@@ -1154,6 +1182,7 @@
     <button class="tab active" data-tab="dashboard">Dashboard</button>
     <button class="tab" data-tab="daily">Daily Tracker</button>
     <button class="tab" data-tab="weekly">Weekly Tracker</button>
+    <button class="tab" data-tab="habits">Habits &amp; Tasks</button>
     <button class="tab" data-tab="motivation">Motivation</button>
     <button class="tab" data-tab="supplements">Supplements</button>
     <button class="tab" data-tab="profile">Profile &amp; Settings</button>
@@ -1177,6 +1206,7 @@
         <div class="score-best" id="score-best"></div>
       </div>
     </div>
+    <div id="dashboard-goals"></div>
     <div class="stats-row" id="stats-row"></div>
     <h2 style="margin-bottom:16px;">Weekly Completion</h2>
     <div id="dashboard-progress"></div>
@@ -1209,6 +1239,22 @@
       <button class="btn btn-primary" onclick="openAddCategoryModal()">+ Add Category</button>
     </div>
     <div class="category-grid" id="category-grid"></div>
+  </div>
+
+  <!-- ═══════ HABITS & TASKS ═══════ -->
+  <div class="tab-content" id="tab-habits">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h2>Habits &amp; Tasks</h2>
+      </div>
+      <div class="week-nav">
+        <button class="btn btn-secondary btn-small" onclick="prevHabitWeek()">&#9664; Prev</button>
+        <h3 id="habit-week-label" style="min-width:120px;text-align:center;font-size:.95rem;"></h3>
+        <button class="btn btn-secondary btn-small" onclick="nextHabitWeek()">Next &#9654;</button>
+      </div>
+    </div>
+    <div id="habit-summary-container"></div>
+    <div id="habits-tracker-body"></div>
   </div>
 
   <!-- ═══════ MOTIVATION ═══════ -->
@@ -1442,6 +1488,20 @@
   </div>
 </div>
 
+<!-- Goal Agreement Modal — shown when a new setup with goals arrives from the trainer -->
+<div class="modal-overlay" id="modal-goal-agreement">
+  <div class="modal">
+    <h3 style="margin-bottom:4px;">🎯 Your Goals</h3>
+    <p style="font-size:.88rem;color:var(--text2);margin-bottom:8px;" id="goal-agree-intro">Your trainer set these goals with you. Everything on your daily list exists to move you toward them.</p>
+    <div class="goal-agree-list" id="goal-agree-list"></div>
+    <p style="font-size:.82rem;color:var(--text2);margin-bottom:14px;">Agreeing starts your program clock — day one is today.</p>
+    <div class="modal-actions" style="flex-direction:column;gap:8px;">
+      <button class="btn btn-primary" style="width:100%;font-size:1rem;padding:12px;" onclick="agreeToGoals()">💪 I agree — let's go!</button>
+      <button class="btn btn-secondary" style="width:100%;" onclick="closeModal('modal-goal-agreement')">Remind me later</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script>
 // ═══════════════════════════════════════════
@@ -1532,7 +1592,7 @@ function loadState() {
     const raw = localStorage.getItem('beastMode');
     if (raw) return JSON.parse(raw);
   } catch(e) {}
-  return { categories: defaultCategories(), log: {}, videos: defaultVideos(), currentWeek: 0, profile: {}, supplements: [], supplementLog: {} };
+  return { categories: defaultCategories(), log: {}, videos: defaultVideos(), currentWeek: 0, profile: {}, supplements: [], supplementLog: {}, habits: [], habitLog: {} };
 }
 
 function migrateState(state) {
@@ -1573,6 +1633,11 @@ function migrateState(state) {
   if (!state.supplements) state.supplements = [];
   if (!state.supplementLog) state.supplementLog = {};
   state.supplements = normalizeSupplements(state.supplements);
+  // Ensure habits array and habitLog exist; upgrade legacy goal shapes
+  if (!state.habits) state.habits = [];
+  if (!state.habitLog) state.habitLog = {};
+  state.habits = normalizeHabits(state.habits);
+  if (state.profile) state.profile.goals = normalizeGoals(state.profile.goals);
   return state;
 }
 
@@ -1586,6 +1651,8 @@ if (!state.videos) { state.videos = defaultVideos(); }
 if (!state.profile) { state.profile = { name: '', height: '', weight: '', sport: '', birthday: '', why: '', avatar: AVATARS[0], startDate: todayLocal(), currentWeight: '', goals: [], theme: 'default' }; }
 if (!state.supplements) { state.supplements = []; }
 if (!state.supplementLog) { state.supplementLog = {}; }
+if (!state.habits) { state.habits = []; }
+if (!state.habitLog) { state.habitLog = {}; }
 saveState();
 
 function defaultVideos() {
@@ -1919,6 +1986,77 @@ function normalizeSupplements(supplements) {
 }
 
 // ═══════════════════════════════════════════
+// GOALS & HABITS NORMALIZATION
+// ═══════════════════════════════════════════
+// Goals arrive from the trainer as { id, text, term: 'short'|'long' }.
+// The client adds a `completed` flag. Legacy shapes (plain strings, or
+// { text, completed } without id/term) are upgraded in place.
+function normalizeGoals(goals) {
+  if (!Array.isArray(goals)) return [];
+  return goals
+    .map((g, i) => {
+      if (typeof g === 'string') {
+        const text = g.trim();
+        return text ? { id: 'goal-legacy-' + i, text: text, term: 'short', completed: false } : null;
+      }
+      if (!g || typeof g !== 'object') return null;
+      const text = (g.text || '').trim();
+      if (!text) return null;
+      return { id: g.id || 'goal-legacy-' + i, text: text, term: g.term === 'long' ? 'long' : 'short', completed: !!g.completed };
+    })
+    .filter(Boolean);
+}
+
+const HABIT_FREQS = {
+  'daily': 'Daily',
+  'weekly': 'Weekly',
+  'monthly': 'Monthly'
+};
+
+// Habit/task objects from the trainer: { id, name, area, freq: 'daily'|'weekly'|'monthly',
+// days: [0-6] (weekly only; empty = any day), dueBy: 'HH:MM' or '', goalId, notes, trainerAssigned }
+function normalizeHabits(habits) {
+  if (!Array.isArray(habits)) return [];
+  return habits
+    .map((h, i) => {
+      if (!h || typeof h !== 'object') return null;
+      const name = (h.name || '').trim();
+      if (!name) return null;
+      return {
+        id: h.id || 'habit-legacy-' + i,
+        name: name,
+        area: h.area || '',
+        freq: HABIT_FREQS[h.freq] ? h.freq : 'daily',
+        days: Array.isArray(h.days) ? h.days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6) : [],
+        dueBy: h.dueBy || '',
+        goalId: h.goalId || '',
+        notes: h.notes || '',
+        trainerAssigned: h.trainerAssigned !== false
+      };
+    })
+    .filter(Boolean);
+}
+
+// 'HH:MM' (24h) → '7:30 AM' for display
+function formatDueBy(hhmm) {
+  if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return h12 + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+}
+
+// Was this habit checked off before its due-by time (on the day it was checked)?
+// Returns true / false, or null when there's no due-by or no timestamp to judge.
+function habitOnTime(habit, completedAt) {
+  if (!habit.dueBy || !completedAt) return null;
+  const d = new Date(completedAt);
+  if (isNaN(d)) return null;
+  const [h, m] = habit.dueBy.split(':').map(Number);
+  return (d.getHours() * 60 + d.getMinutes()) <= (h * 60 + m);
+}
+
+// ═══════════════════════════════════════════
 // TARGET DISPLAY HELPER
 // ═══════════════════════════════════════════
 function formatTargetDisplay(metric, target) {
@@ -2037,6 +2175,7 @@ function selectMobileDay(dayIdx) {
   selectedTrackerDay = dayIdx;
   renderTracker();
   renderSupplements();
+  renderHabits();
 }
 
 // Format an ISO timestamp as a short local time, e.g. "7:42 AM". Returns '' if
@@ -3400,14 +3539,334 @@ function renderSupplements() {
 }
 
 // ═══════════════════════════════════════════
+// HABITS & TASKS
+// ═══════════════════════════════════════════
+// Small HTML escaper for trainer-provided text in the new habit/goal UI
+function escText(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function findGoal(goalId) {
+  if (!goalId) return null;
+  return (state.profile?.goals || []).find(g => g.id === goalId) || null;
+}
+
+// Which days a habit is scheduled on. Returns an array of day indices,
+// or null for "any day" (weekly with no days picked, and monthly).
+function habitScheduledDays(habit) {
+  if (habit.freq === 'daily') return [0,1,2,3,4,5,6];
+  if (habit.freq === 'weekly') return (habit.days && habit.days.length) ? habit.days : null;
+  return null; // monthly
+}
+
+function toggleHabitDay(habitId, week, day) {
+  const logKey = `habit|${habitId}|w${week}d${day}`;
+  if (!state.habitLog[logKey]) {
+    state.habitLog[logKey] = { done: false };
+  }
+  state.habitLog[logKey].done = !state.habitLog[logKey].done;
+  // Stamp the completion time; clear it when unchecked.
+  if (state.habitLog[logKey].done) {
+    state.habitLog[logKey].completedAt = new Date().toISOString();
+  } else {
+    delete state.habitLog[logKey].completedAt;
+  }
+  saveState();
+  renderHabits();
+  if (document.getElementById('tab-dashboard').classList.contains('active')) {
+    renderDashboard();
+  }
+}
+
+function prevHabitWeek() {
+  if (state.currentWeek > 0) {
+    state.currentWeek--;
+    saveState();
+    renderHabits();
+  }
+}
+
+function nextHabitWeek() {
+  if (state.currentWeek < 3) {
+    state.currentWeek++;
+    saveState();
+    renderHabits();
+  }
+}
+
+// Weekly completion for daily/weekly habits. Monthly habits are reported
+// separately (done if checked on any day of any week this program cycle).
+function calcHabitCompletion(week) {
+  let scheduled = 0, done = 0, monthlyTotal = 0, monthlyDone = 0;
+  state.habits.forEach(habit => {
+    if (habit.freq === 'monthly') {
+      monthlyTotal++;
+      let hit = false;
+      for (let w = 0; w < 4 && !hit; w++) {
+        for (let d = 0; d < 7 && !hit; d++) {
+          if (state.habitLog[`habit|${habit.id}|w${w}d${d}`]?.done) hit = true;
+        }
+      }
+      if (hit) monthlyDone++;
+      return;
+    }
+    const days = habitScheduledDays(habit);
+    if (days === null) {
+      // weekly, any day: one completion expected this week
+      scheduled++;
+      for (let d = 0; d < 7; d++) {
+        if (state.habitLog[`habit|${habit.id}|w${week}d${d}`]?.done) { done++; break; }
+      }
+    } else {
+      days.forEach(d => {
+        scheduled++;
+        if (state.habitLog[`habit|${habit.id}|w${week}d${d}`]?.done) done++;
+      });
+    }
+  });
+  return {
+    pct: scheduled > 0 ? Math.round(done / scheduled * 100) : 0,
+    scheduled: scheduled,
+    done: done,
+    monthlyTotal: monthlyTotal,
+    monthlyDone: monthlyDone
+  };
+}
+
+function renderHabitSummary(week) {
+  const container = document.getElementById('habit-summary-container');
+  if (!container) return;
+  const stats = calcHabitCompletion(week);
+  const monthlyHtml = stats.monthlyTotal > 0
+    ? `<div class="supp-summary-stat"><div class="value">${stats.monthlyDone}/${stats.monthlyTotal}</div><div class="label">Monthly Tasks</div></div>`
+    : '';
+  container.innerHTML = `
+    <div class="supp-summary">
+      <h3>Habit &amp; Task Tracking</h3>
+      <div class="supp-summary-stat">
+        <div class="value">${stats.pct}%</div>
+        <div class="label">Week Complete</div>
+      </div>
+      ${monthlyHtml}
+    </div>
+  `;
+}
+
+function habitMetaHtml(habit) {
+  const goal = findGoal(habit.goalId);
+  return '<div class="bm-supp-meta">' +
+    (habit.area ? '<span class="habit-area-badge">' + escText(habit.area) + '</span>' : '') +
+    (habit.dueBy ? '<span class="habit-due-badge">⏰ by ' + formatDueBy(habit.dueBy) + '</span>' : '') +
+    (goal ? '<span class="habit-goal-chip">🎯 ' + escText(goal.text) + '</span>' : '') +
+    '</div>';
+}
+
+function habitFreqHint(habit) {
+  if (habit.freq === 'weekly') {
+    const days = habitScheduledDays(habit);
+    return '<div class="habit-freq-hint">' +
+      (days ? 'Scheduled: ' + days.map(i => DAYS[i]).join(' ') : 'Once a week — check it off on the day you do it') +
+      '</div>';
+  }
+  if (habit.freq === 'monthly') {
+    return '<div class="habit-freq-hint">Once a month — check it off on the day you do it</div>';
+  }
+  return '';
+}
+
+// Timestamp + on-time/late chip for a completed check
+function habitStampHtml(habit, logEntry, compact) {
+  if (!logEntry?.done || !logEntry.completedAt) return '';
+  const cls = compact ? 'bm-timestamp-sm' : 'bm-timestamp';
+  const onTime = habitOnTime(habit, logEntry.completedAt);
+  const chip = onTime === null ? '' :
+    (onTime ? ' <span class="habit-chip-ontime">on time</span>' : ' <span class="habit-chip-late">late</span>');
+  return '<span class="' + cls + '">' + (compact ? '' : '✓ ') + formatTime(logEntry.completedAt) + '</span>' + chip;
+}
+
+function renderMobileHabits(week, dayIdx) {
+  if (!state.habits || state.habits.length === 0) return '';
+
+  const dates = getWeekDates(week);
+  const pickerHtml = '<div class="bm-day-picker">' +
+    DAYS.map((d, idx) => {
+      const isActive = idx === dayIdx;
+      return '<button type="button" class="bm-day-pill ' + (isActive ? 'active' : '') + '"' +
+        ' onclick="selectMobileDay(' + idx + ')">' +
+        '<span class="bm-day-num">' + dates[idx].getDate() + '</span>' + d +
+        '</button>';
+    }).join('') +
+    '</div>';
+
+  const sel = dates[dayIdx];
+  const monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const isToday = _isLocalToday(sel);
+  const headerHtml = '<div class="bm-day-header">' +
+    '<span>' + DAYS[dayIdx] + ', ' + monthsShort[sel.getMonth()] + ' ' + sel.getDate() + '</span>' +
+    (isToday ? '<span class="bm-today-badge">Today</span>' : '') +
+    '</div>';
+
+  const cardsHtml = state.habits.map(habit => {
+    const days = habitScheduledDays(habit);
+    const anyDay = days === null;
+    const isScheduledToday = anyDay || days.includes(dayIdx);
+    const offBadge = !isScheduledToday ? '<span class="supp-off-badge">Not scheduled today</span>' : '';
+    const logKey = 'habit|' + habit.id + '|w' + week + 'd' + dayIdx;
+    const logEntry = state.habitLog[logKey];
+    const isChecked = (logEntry && logEntry.done) || false;
+    const notesHtml = habit.notes ? '<div class="bm-exercise-notes">' + escText(habit.notes) + '</div>' : '';
+    const inputId = 'habit-done-' + habit.id + '-d' + dayIdx;
+    const cardClass = 'bm-exercise-card' + (isScheduledToday ? '' : ' bm-supp-card-off');
+
+    return '<div class="' + cardClass + '">' +
+      '<div class="bm-exercise-name">' + escText(habit.name) + '</div>' +
+      habitMetaHtml(habit) +
+      (offBadge ? '<div class="bm-supp-meta">' + offBadge + '</div>' : '') +
+      habitFreqHint(habit) +
+      notesHtml +
+      '<div class="bm-supp-take">' +
+        '<input type="checkbox" id="' + inputId + '" ' + (isChecked ? 'checked' : '') +
+        ' onchange="toggleHabitDay(\'' + habit.id + '\', ' + week + ', ' + dayIdx + ')">' +
+        '<label for="' + inputId + '">Done</label>' +
+        habitStampHtml(habit, logEntry, false) +
+      '</div>' +
+      '</div>';
+  }).join('');
+
+  return pickerHtml + headerHtml + cardsHtml;
+}
+
+function renderHabits() {
+  if (!document.getElementById('tab-habits')) return;
+
+  const week = state.currentWeek;
+  const weekDates = getWeekDates(week);
+  const weekStartDate = weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const weekEndDate = weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const label = document.getElementById('habit-week-label');
+  if (label) label.textContent = `${weekStartDate} - ${weekEndDate}`;
+
+  const body = document.getElementById('habits-tracker-body');
+  if (!body) return;
+
+  if (!state.habits || state.habits.length === 0) {
+    document.getElementById('habit-summary-container').innerHTML = '';
+    body.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px;"><p>No habits or tasks yet — your trainer will send them with your plan.</p></div>';
+    return;
+  }
+
+  renderHabitSummary(week);
+
+  const habitCards = state.habits.map(habit => {
+    const days = habitScheduledDays(habit);
+    const anyDay = days === null;
+
+    const checksHtml = DAYS.map((day, idx) => {
+      const logKey = `habit|${habit.id}|w${week}d${idx}`;
+      const logEntry = state.habitLog[logKey];
+      const isChecked = logEntry?.done || false;
+      const isScheduled = anyDay || days.includes(idx);
+      const tsHtml = habitStampHtml(habit, logEntry, true);
+      return `
+        <div class="supp-check${isScheduled ? '' : ' supp-check-off'}">
+          <label>${day}</label>
+          <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleHabitDay('${habit.id}', ${week}, ${idx})">
+          ${tsHtml}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="supp-card">
+        <div class="supp-header">
+          <div>
+            <h4>${escText(habit.name)}</h4>
+            ${habitMetaHtml(habit)}
+          </div>
+          <span class="supp-timing-badge">${HABIT_FREQS[habit.freq] || 'Daily'}</span>
+        </div>
+        ${habitFreqHint(habit)}
+        ${habit.notes ? `<div class="supp-notes">${escText(habit.notes)}</div>` : ''}
+        <div class="supp-checklist">
+          ${checksHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const mobileHtml = renderMobileHabits(week, selectedTrackerDay);
+
+  body.innerHTML = '<div class="tracker-desktop-view">' + habitCards + '</div>' +
+                   '<div class="tracker-mobile-view">' + mobileHtml + '</div>';
+}
+
+// ═══════════════════════════════════════════
+// GOALS (dashboard card + agreement)
+// ═══════════════════════════════════════════
+function renderGoalsCard() {
+  const container = document.getElementById('dashboard-goals');
+  if (!container) return;
+  const goals = state.profile?.goals || [];
+  if (goals.length === 0) { container.innerHTML = ''; return; }
+
+  const renderRows = (list) => list.map(g =>
+    `<div style="font-size:.88rem;margin-bottom:5px;${g.completed ? 'color:var(--green,#22c55e);' : ''}">${g.completed ? '✅' : '⬜'} ${escText(g.text)}</div>`
+  ).join('');
+  const shortGoals = goals.filter(g => g.term !== 'long');
+  const longGoals = goals.filter(g => g.term === 'long');
+
+  container.innerHTML = `
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="margin-bottom:10px;">🎯 Your Goals</h3>
+      ${shortGoals.length ? `<div style="font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Short-term (next 4 weeks)</div>${renderRows(shortGoals)}` : ''}
+      ${longGoals.length ? `<div style="font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:${shortGoals.length ? '10px' : '0'} 0 5px;">Long-term (6-12 months)</div>${renderRows(longGoals)}` : ''}
+      ${!state.goalsAgreedAt ? `<button class="btn btn-primary btn-small" style="margin-top:8px;" onclick="showGoalAgreementModal()">Review &amp; agree to your goals</button>` : ''}
+    </div>
+  `;
+}
+
+function showGoalAgreementModal() {
+  const goals = state.profile?.goals || [];
+  if (goals.length === 0) return;
+  const renderItems = (list) => list.map(g => `<div class="goal-agree-item"><span>🎯</span><span>${escText(g.text)}</span></div>`).join('');
+  const shortGoals = goals.filter(g => g.term !== 'long');
+  const longGoals = goals.filter(g => g.term === 'long');
+  document.getElementById('goal-agree-list').innerHTML =
+    (shortGoals.length ? `<div class="goal-agree-term">Short-term — next 4 weeks</div>${renderItems(shortGoals)}` : '') +
+    (longGoals.length ? `<div class="goal-agree-term">Long-term — 6-12 months</div>${renderItems(longGoals)}` : '');
+  document.getElementById('modal-goal-agreement').classList.add('open');
+}
+
+function agreeToGoals() {
+  // Agreement is the moment the program officially starts — day one is today.
+  state.goalsAgreedAt = new Date().toISOString();
+  state.profile.startDate = todayLocal();
+  state.currentWeek = 0;
+  saveState();
+  closeModal('modal-goal-agreement');
+  renderAll();
+
+  const banner = document.createElement('div');
+  banner.className = 'milestone-banner';
+  banner.innerHTML = `💪 Locked in! Day one starts now${state.profile?.name ? ', ' + escText(state.profile.name) : ''}.`;
+  banner.style.cursor = 'pointer';
+  banner.onclick = () => banner.remove();
+  document.querySelector('.container').prepend(banner);
+  setTimeout(() => banner.remove(), 8000);
+}
+
+// ═══════════════════════════════════════════
 // RENDER ALL
 // ═══════════════════════════════════════════
 function renderAll() {
   renderDashboard();
+  renderGoalsCard();
   renderTracker();
   renderCategories();
   renderMotivation();
   renderSupplements();
+  renderHabits();
   renderProfileTab();
 }
 
@@ -3604,10 +4063,12 @@ function checkHashForImport() {
       const catCount = data.categories ? data.categories.length : 0;
       const exCount = data.categories ? data.categories.reduce((sum, c) => sum + (c.exercises ? c.exercises.length : 0), 0) : 0;
       const suppCount = data.supplements ? data.supplements.length : 0;
+      const habitCount = data.habits ? data.habits.length : 0;
 
       const msg = `Welcome to Beast Mode, ${name}!\n\nYour trainer has set up your profile` +
         (catCount > 0 ? ` with ${catCount} workout categories and ${exCount} exercises` : '') +
-        (suppCount > 0 ? ` and ${suppCount} supplements` : '') +
+        (suppCount > 0 ? `, ${suppCount} supplements` : '') +
+        (habitCount > 0 ? `, ${habitCount} habits/tasks` : '') +
         `.\n\nLoad this into your app?`;
       if (!confirm(msg)) return false;
 
@@ -3622,7 +4083,7 @@ function checkHashForImport() {
         avatar: p.avatar || AVATARS[0],
         startDate: p.startDate || todayLocal(),
         currentWeight: p.currentWeight || p.weight || '',
-        goals: (p.goals || []).map(g => typeof g === 'string' ? { text: g, completed: false } : g),
+        goals: normalizeGoals(p.goals),
         theme: p.theme || state.profile?.theme || 'default'
       };
 
@@ -3632,19 +4093,30 @@ function checkHashForImport() {
       if (data.supplements) {
         state.supplements = normalizeSupplements(data.supplements);
       }
+      if (data.habits) {
+        state.habits = normalizeHabits(data.habits);
+        state.habitLog = {};
+      }
+      // Fresh setup — goals haven't been agreed to yet
+      state.goalsAgreedAt = null;
 
       saveState();
       document.getElementById('setup-overlay').classList.remove('open');
       renderAll();
       applyTheme(state.profile.theme || 'default');
 
-      const banner = document.createElement('div');
-      banner.className = 'milestone-banner';
-      banner.innerHTML = `🎉 Welcome, ${name}! Your trainer set everything up for you.`;
-      banner.style.cursor = 'pointer';
-      banner.onclick = () => banner.remove();
-      document.querySelector('.container').prepend(banner);
-      setTimeout(() => banner.remove(), 10000);
+      if ((state.profile.goals || []).length > 0) {
+        // Goal agreement starts the program clock (agreeToGoals sets startDate)
+        showGoalAgreementModal();
+      } else {
+        const banner = document.createElement('div');
+        banner.className = 'milestone-banner';
+        banner.innerHTML = `🎉 Welcome, ${name}! Your trainer set everything up for you.`;
+        banner.style.cursor = 'pointer';
+        banner.onclick = () => banner.remove();
+        document.querySelector('.container').prepend(banner);
+        setTimeout(() => banner.remove(), 10000);
+      }
       return true;
     } catch(e) {
       alert('There was a problem loading your setup. Ask your trainer to resend.');
@@ -3656,7 +4128,7 @@ function checkHashForImport() {
     try {
       const parsed = decoded.data;
 
-      let catCount = 0, exCount = 0, suppCount = 0;
+      let catCount = 0, exCount = 0, suppCount = 0, habitCount = 0;
       if (Array.isArray(parsed)) {
         catCount = parsed.length;
         exCount = parsed.reduce((s, c) => s + (c.exercises ? c.exercises.length : 0), 0);
@@ -3664,11 +4136,13 @@ function checkHashForImport() {
         catCount = parsed.categories.length;
         exCount = parsed.categories.reduce((s, c) => s + (c.exercises ? c.exercises.length : 0), 0);
         suppCount = parsed.supplements ? parsed.supplements.length : 0;
+        habitCount = parsed.habits ? parsed.habits.length : 0;
       }
 
       const msg = `Your trainer sent an updated plan!\n\n` +
         (catCount > 0 ? `${catCount} categories, ${exCount} exercises` : 'No exercises') +
         (suppCount > 0 ? `, ${suppCount} supplements` : '') +
+        (habitCount > 0 ? `, ${habitCount} habits/tasks` : '') +
         `\n\nImport this? (Your logged progress stays.)`;
       if (!confirm(msg)) return false;
 
@@ -3679,10 +4153,16 @@ function checkHashForImport() {
         if (parsed.supplements) {
           state.supplements = normalizeSupplements(parsed.supplements);
         }
+        if (parsed.habits) {
+          // Habit log entries key off habit ids, so checked-off history for
+          // habits that survive the update is preserved automatically.
+          state.habits = normalizeHabits(parsed.habits);
+        }
       }
 
       // Merge profile data if included — fills in missing fields without overwriting
       mergeProfileFromUpdate(parsed.profile);
+      state.profile.goals = normalizeGoals(state.profile.goals);
 
       // Reset start date and week for the new program
       if (parsed.startDate) {

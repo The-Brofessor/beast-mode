@@ -879,9 +879,15 @@
           <label>Avatar</label>
           <div style="display:flex;gap:6px;flex-wrap:wrap;" id="ac-avatar-picker"></div>
         </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Goals (one per line)</label>
-          <textarea id="ac-goals" placeholder="e.g., Increase vertical jump&#10;Run a 6-minute mile&#10;Build core strength" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;"></textarea>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:0;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Short-term goals — next 4 weeks (one per line)</label>
+            <textarea id="ac-goals-short" placeholder="e.g., Walk every morning&#10;Read 3 books" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Long-term goals — 6-12 months (one per line)</label>
+            <textarea id="ac-goals-long" placeholder="e.g., Lose 30 lbs&#10;Make the varsity team" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;"></textarea>
+          </div>
         </div>
       </div>
     </details>
@@ -931,6 +937,16 @@
         </div>
         <div id="ac-supplement-builder" class="supplement-builder"></div>
         <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addSupplementToAcBuilder()">+ Add Supplement</button>
+      </div>
+    </details>
+
+    <!-- Habits & tasks (collapsed by default) -->
+    <details style="background:var(--bg);border-radius:8px;margin-bottom:14px;border:1px solid var(--border);">
+      <summary style="cursor:pointer;padding:14px 16px;font-size:.95rem;color:var(--orange);user-select:none;">Habits &amp; tasks (optional)</summary>
+      <div style="padding:0 16px 16px;">
+        <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px;">Everyday tasks beyond workouts — laundry, reading, wake-up time, etc. Daily habits count toward the client's streak. Tip: enter goals above first, then link tasks to them here.</p>
+        <div id="ac-habit-builder" class="supplement-builder"></div>
+        <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addHabitToAcBuilder()">+ Add Habit / Task</button>
       </div>
     </details>
 
@@ -1021,6 +1037,14 @@
       </div>
       <div id="plan-supplement-builder" class="supplement-builder"></div>
       <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addSupplementToPlanBuilder()">+ Add Supplement</button>
+    </div>
+
+    <div style="background:var(--bg);border-radius:8px;padding:16px;margin-bottom:16px;border:1px solid var(--border);">
+      <h4 style="font-size:.95rem;margin-bottom:6px;color:var(--orange);">Habits &amp; Tasks</h4>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px;">Everyday tasks beyond workouts — laundry, reading, wake-up time, etc. Daily habits count toward the client's streak. Set a "due by" time to reward finishing on time, and link a task to a goal so the client sees <em>why</em> it's on their list.</p>
+      <datalist id="habit-area-list"></datalist>
+      <div id="plan-habit-builder" class="supplement-builder"></div>
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addHabitToPlanBuilder()">+ Add Habit / Task</button>
     </div>
 
     <div class="tracker-preview" id="plan-tracker-preview">
@@ -1150,6 +1174,67 @@ const SUPPLEMENT_TIMINGS = {
   'as-needed': 'As Needed',
   'custom': 'Custom...'
 };
+
+const HABIT_FREQS = {
+  'daily': 'Daily',
+  'weekly': 'Weekly',
+  'monthly': 'Monthly'
+};
+
+const HABIT_AREAS = ['Fitness', 'Nutrition', 'Home', 'Mind', 'School / Work', 'Sleep', 'Other'];
+
+// Goals are structured objects: { id, text, term: 'short'|'long' }.
+// Legacy clients stored plain strings — normalize keeps ids stable so habit
+// goal-links survive re-normalization (index-based legacy ids).
+function normalizeGoals(goals) {
+  if (!Array.isArray(goals)) return [];
+  return goals
+    .map((g, i) => {
+      if (typeof g === 'string') {
+        const text = g.trim();
+        return text ? { id: 'goal-legacy-' + i, text: text, term: 'short' } : null;
+      }
+      if (!g || typeof g !== 'object') return null;
+      const text = (g.text || '').trim();
+      if (!text) return null;
+      return { id: g.id || 'goal-legacy-' + i, text: text, term: g.term === 'long' ? 'long' : 'short' };
+    })
+    .filter(Boolean);
+}
+
+// Habit/task objects: { id, name, area, freq: 'daily'|'weekly'|'monthly',
+// days: [0-6] (weekly only; empty = any day), dueBy: 'HH:MM' or '',
+// goalId: link to a goal, notes, trainerAssigned }
+function normalizeHabits(habits) {
+  if (!Array.isArray(habits)) return [];
+  return habits
+    .map((h, i) => {
+      if (!h || typeof h !== 'object') return null;
+      const name = (h.name || '').trim();
+      if (!name) return null;
+      return {
+        id: h.id || 'habit-legacy-' + i,
+        name: name,
+        area: h.area || '',
+        freq: HABIT_FREQS[h.freq] ? h.freq : 'daily',
+        days: Array.isArray(h.days) ? h.days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6) : [],
+        dueBy: h.dueBy || '',
+        goalId: h.goalId || '',
+        notes: h.notes || '',
+        trainerAssigned: h.trainerAssigned !== false
+      };
+    })
+    .filter(Boolean);
+}
+
+// 'HH:MM' (24h) → '7:30 AM' for display
+function formatDueBy(hhmm) {
+  if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return h12 + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+}
 
 const SUPPLEMENT_STACKS = {
   'basic-health': {
@@ -1287,7 +1372,16 @@ function saveCustomExercise(category, exercise) {
 function loadClients() {
   try {
     const raw = localStorage.getItem('beastModeTrainer');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const loaded = JSON.parse(raw);
+      // Migrate legacy shapes: string goals → structured, ensure habits array
+      Object.values(loaded).forEach(c => {
+        if (!c) return;
+        if (c.profile) c.profile.goals = normalizeGoals(c.profile.goals);
+        c.habits = normalizeHabits(c.habits);
+      });
+      return loaded;
+    }
   } catch(e) {}
   return {};
 }
@@ -1333,6 +1427,8 @@ let librarySelectedExercise = null;
 let librarySelectedExercises = [];
 let acSupplements = [];
 let planBuilderSupplements = [];
+let acHabits = [];
+let planBuilderHabits = [];
 let currentShareUrl = '';
 let currentShareClientName = '';
 
@@ -1978,7 +2074,8 @@ function openAddClientModal() {
   document.getElementById('ac-weight').value = '';
   document.getElementById('ac-birthday').value = '';
   document.getElementById('ac-why').value = '';
-  document.getElementById('ac-goals').value = '';
+  document.getElementById('ac-goals-short').value = '';
+  document.getElementById('ac-goals-long').value = '';
 
   renderAvatarPicker();
   updateAcPlanSource();
@@ -1989,6 +2086,9 @@ function openAddClientModal() {
 
   acSupplements = [];
   renderSupplementBuilder('ac-supplement-builder', acSupplements);
+
+  acHabits = [];
+  renderHabitBuilder('ac-habit-builder', acHabits);
 
   populateTemplateSelect('ac-selected-template');
   populateAcClientSelect();
@@ -2046,6 +2146,10 @@ function loadClientIntoAc() {
   // Copy supplements
   acSupplements = JSON.parse(JSON.stringify(source.supplements || []));
   renderSupplementBuilder('ac-supplement-builder', acSupplements);
+  // Copy habits — fresh ids, unlink goals (they belong to the source client)
+  acHabits = JSON.parse(JSON.stringify(source.habits || []));
+  acHabits.forEach(h => { h.id = newHabitId(); h.goalId = ''; });
+  renderHabitBuilder('ac-habit-builder', acHabits);
 }
 
 function loadTemplateIntoAc() {
@@ -2070,7 +2174,7 @@ function buildClientPackageFromForm() {
     weight: Number(document.getElementById('ac-weight').value) || 0,
     birthday: document.getElementById('ac-birthday').value,
     why: document.getElementById('ac-why').value,
-    goals: document.getElementById('ac-goals').value.split('\n').map(g => g.trim()).filter(Boolean),
+    goals: getAcGoals(),
     startingWeight: Number(document.getElementById('ac-weight').value) || 0,
     currentWeight: Number(document.getElementById('ac-weight').value) || 0
   };
@@ -2078,6 +2182,7 @@ function buildClientPackageFromForm() {
   flushPendingExercises('ac-exercise-builder');
   syncBuilderFromUI('ac-exercise-builder');
   syncSupplementsFromUI('ac-supplement-builder');
+  syncHabitsFromUI('ac-habit-builder');
 
   return {
     name: name,
@@ -2085,6 +2190,7 @@ function buildClientPackageFromForm() {
       profile: profile,
       categories: acPlanCategories,
       supplements: acSupplements.filter(s => s.name.trim()),
+      habits: acHabits.filter(h => h.name.trim()),
       log: {},
       currentWeek: 0,
       ts: new Date().toISOString(),
@@ -2166,7 +2272,7 @@ function openPlanBuilderModal(clientName) {
     // actions (Add Category, Add Exercise, Remove, Duplicate, Reorder, day-pill
     // toggle, etc.) — those re-render the builder and don't fire input/change.
     const _planObserver = new MutationObserver(() => schedulePlanBuilderAutosave());
-    ['plan-daily-builder', 'plan-weekly-builder', 'plan-supplement-builder'].forEach(id => {
+    ['plan-daily-builder', 'plan-weekly-builder', 'plan-supplement-builder', 'plan-habit-builder'].forEach(id => {
       const el = document.getElementById(id);
       if (el) _planObserver.observe(el, { childList: true, subtree: true });
     });
@@ -2183,6 +2289,9 @@ function openPlanBuilderModal(clientName) {
 
   planBuilderSupplements = JSON.parse(JSON.stringify(clients[clientName]?.supplements || []));
   renderSupplementBuilder('plan-supplement-builder', planBuilderSupplements);
+
+  planBuilderHabits = JSON.parse(JSON.stringify(clients[clientName]?.habits || []));
+  renderHabitBuilder('plan-habit-builder', planBuilderHabits);
 
   populateTemplateSelect('selected-template');
   populateCloneClientSelect();
@@ -2213,6 +2322,10 @@ function loadClientPlanToClone() {
   // Copy supplements
   planBuilderSupplements = JSON.parse(JSON.stringify(sourceClient.supplements || []));
   renderSupplementBuilder('plan-supplement-builder', planBuilderSupplements);
+  // Copy habits — fresh ids so the clone's habit log doesn't collide with the source client's
+  planBuilderHabits = JSON.parse(JSON.stringify(sourceClient.habits || []));
+  planBuilderHabits.forEach(h => { h.id = newHabitId(); h.goalId = ''; });
+  renderHabitBuilder('plan-habit-builder', planBuilderHabits);
 }
 
 function updatePlanSource() {
@@ -2236,8 +2349,10 @@ function savePlan(andClose) {
   if (!currentPlanClientName || !clients[currentPlanClientName]) return;
   const merged = mergePlanCategories();
   syncSupplementsFromUI('plan-supplement-builder');
+  syncHabitsFromUI('plan-habit-builder');
   clients[currentPlanClientName].categories = merged;
   clients[currentPlanClientName].supplements = planBuilderSupplements.filter(s => s.name.trim());
+  clients[currentPlanClientName].habits = planBuilderHabits.filter(h => h.name.trim());
   clients[currentPlanClientName].ts = new Date().toISOString();
   saveClients();
   renderAll();
@@ -2259,9 +2374,11 @@ function savePlan(andClose) {
 function generatePlanCode() {
   const merged = mergePlanCategories();
   syncSupplementsFromUI('plan-supplement-builder');
-  // Save both categories and supplements back to client data before generating code
+  syncHabitsFromUI('plan-habit-builder');
+  // Save categories, supplements, and habits back to client data before generating code
   clients[currentPlanClientName].categories = merged;
   clients[currentPlanClientName].supplements = planBuilderSupplements.filter(s => s.name.trim());
+  clients[currentPlanClientName].habits = planBuilderHabits.filter(h => h.name.trim());
   clients[currentPlanClientName].ts = new Date().toISOString();
   saveClients();
   renderAll();
@@ -2303,8 +2420,10 @@ function schedulePlanBuilderAutosave() {
       });
       const merged = [...planDailyCategories, ...planWeeklyCategories];
       syncSupplementsFromUI('plan-supplement-builder');
+      syncHabitsFromUI('plan-habit-builder');
       clients[currentPlanClientName].categories = merged;
       clients[currentPlanClientName].supplements = planBuilderSupplements.filter(s => s.name.trim());
+      clients[currentPlanClientName].habits = planBuilderHabits.filter(h => h.name.trim());
       clients[currentPlanClientName].ts = new Date().toISOString();
       saveClients();
       showAutosaveToast();
@@ -2349,6 +2468,7 @@ function generateClientCode(clientName, type) {
       profile: profile,
       categories: data.categories || [],
       supplements: data.supplements || [],
+      habits: data.habits || [],
       log: {},
       currentWeek: 0,
       goalsDone: Array((profile.goals || []).length).fill(false)
@@ -2365,6 +2485,7 @@ function generateClientCode(clientName, type) {
     const plan = {
       categories: data.categories || [],
       supplements: data.supplements || [],
+      habits: data.habits || [],
       startDate: todayLocal(),
       profile: profile  // Include profile so client doesn't lose it if localStorage is cleared
     };
@@ -2383,10 +2504,14 @@ function showShareModal(code, clientName, type) {
   const catCount = data && data.categories ? data.categories.length : 0;
   const exCount = data && data.categories ? data.categories.reduce((s, c) => s + (c.exercises ? c.exercises.length : 0), 0) : 0;
   const suppCount = data && data.supplements ? data.supplements.filter(s => s.name.trim()).length : 0;
+  const habitCount = data && data.habits ? data.habits.filter(h => h.name.trim()).length : 0;
 
   let descContent = `<div><strong>${catCount} categories</strong>, <strong>${exCount} exercises</strong>`;
   if (suppCount > 0) {
     descContent += `, <strong>${suppCount} supplements</strong>`;
+  }
+  if (habitCount > 0) {
+    descContent += `, <strong>${habitCount} habits/tasks</strong>`;
   }
   descContent += `</div>`;
 
@@ -2396,7 +2521,13 @@ function showShareModal(code, clientName, type) {
   // Build the shareable URL with the code in the hash
   // LZString compressToEncodedURIComponent output is already URL-safe (A-Z, a-z, 0-9, +, -, $)
   // so we avoid double-encoding compressed codes — keeps URLs short enough for QR codes
-  const baseUrl = 'https://the-brofessor.github.io/beast-mode/index.html';
+  // Share links point at the deployed client app — except during local testing,
+  // where they stay on localhost so the full trainer→client loop can be tested
+  // before anything is pushed live.
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const baseUrl = isLocal
+    ? location.origin + '/index.html'
+    : 'https://the-brofessor.github.io/beast-mode/index.html';
   const isCompressed = code.startsWith('BMNEWZ:') || code.startsWith('BMPLANZ:');
   const shareUrl = baseUrl + '#import=' + (isCompressed ? code.replace(':', '%3A') : encodeURIComponent(code));
   currentShareUrl = shareUrl;
@@ -3122,13 +3253,19 @@ function showSummaryDetail(name) {
     </div>`;
   }
 
-  if (profile.goals && profile.goals.length > 0) {
+  const summaryGoals = normalizeGoals(profile.goals);
+  if (summaryGoals.length > 0) {
+    const renderGoalRows = (goals) => goals.map(g => {
+      const i = summaryGoals.indexOf(g);
+      const done = data.goalsDone?.[i];
+      return `<div style="font-size:.85rem;margin-bottom:4px;${done ? 'color:var(--green);' : ''}">${done ? '✅' : '⬜'} ${escapeHtml(g.text)}</div>`;
+    }).join('');
+    const shortGoals = summaryGoals.filter(g => g.term !== 'long');
+    const longGoals = summaryGoals.filter(g => g.term === 'long');
     html += `<div style="background:var(--surface2);border-radius:var(--radius);padding:16px;margin-bottom:16px;">
       <h3 style="font-size:.9rem;margin-bottom:8px;">Goals</h3>
-      ${profile.goals.map((g, i) => {
-        const done = data.goalsDone?.[i];
-        return `<div style="font-size:.85rem;margin-bottom:4px;${done ? 'color:var(--green);' : ''}">${done ? '✅' : '⬜'} ${g}</div>`;
-      }).join('')}
+      ${shortGoals.length ? `<div style="font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Short-term (next 4 weeks)</div>${renderGoalRows(shortGoals)}` : ''}
+      ${longGoals.length ? `<div style="font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:${shortGoals.length ? '10px' : '0'} 0 4px;">Long-term (6-12 months)</div>${renderGoalRows(longGoals)}` : ''}
     </div>`;
   }
 
@@ -3189,6 +3326,31 @@ function showSummaryDetail(name) {
           ${supp.timing ? `<div style="font-size:.8rem;color:var(--text2);">Timing: ${supp.timing === 'custom' ? escapeHtml(supp.customTiming || 'Custom') : (SUPPLEMENT_TIMINGS[supp.timing] || supp.timing)}</div>` : ''}
           <div style="font-size:.8rem;color:var(--accent);">Schedule: ${schedule}</div>
           ${supp.notes ? `<div style="font-size:.8rem;color:var(--text2);font-style:italic;margin-top:4px;">${escapeHtml(supp.notes)}</div>` : ''}
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (data.habits && data.habits.length > 0) {
+    const goalById = {};
+    normalizeGoals(profile.goals).forEach(g => { goalById[g.id] = g.text; });
+    html += '<h3 style="margin-bottom:10px;margin-top:20px;">Habits &amp; Tasks</h3>';
+    html += '<div style="background:var(--surface2);border-radius:var(--radius);padding:16px;">';
+    data.habits.forEach(habit => {
+      let schedule = HABIT_FREQS[habit.freq] || 'Daily';
+      if (habit.freq === 'weekly') {
+        schedule = (habit.days && habit.days.length) ? habit.days.map(i => DAYS[i]).join(' ') : 'Once a week, any day';
+      } else if (habit.freq === 'monthly') {
+        schedule = 'Once a month';
+      }
+      const linkedGoal = habit.goalId && goalById[habit.goalId] ? goalById[habit.goalId] : '';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;margin-bottom:8px;background:var(--bg);border-radius:6px;">
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:.9rem;">${escapeHtml(habit.name)}${habit.area ? ` <span style="font-size:.72rem;color:var(--text2);font-weight:400;">· ${escapeHtml(habit.area)}</span>` : ''}</div>
+          <div style="font-size:.8rem;color:var(--accent);">Schedule: ${schedule}${habit.dueBy ? ` · ⏰ by ${formatDueBy(habit.dueBy)}` : ''}</div>
+          ${linkedGoal ? `<div style="font-size:.8rem;color:var(--orange);">🎯 ${escapeHtml(linkedGoal)}</div>` : ''}
+          ${habit.notes ? `<div style="font-size:.8rem;color:var(--text2);font-style:italic;margin-top:4px;">${escapeHtml(habit.notes)}</div>` : ''}
         </div>
       </div>`;
     });
@@ -3313,7 +3475,9 @@ function showProfileDetail(name) {
     return `<button type="button" class="btn profile-avatar-btn" data-avatar="${escHTMLAttr(av)}" style="padding:8px 12px;font-size:1.2rem;border:2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};background:transparent;border-radius:8px;cursor:pointer;" onclick="selectProfileAvatar(this, '${name.replace(/'/g, "\'")}', '${escHTMLAttr(av)}')">${av}</button>`;
   }).join('');
 
-  const goalsText = (profile.goals || []).join('\n');
+  const profileGoals = normalizeGoals(profile.goals);
+  const goalsShortText = profileGoals.filter(g => g.term !== 'long').map(g => g.text).join('\n');
+  const goalsLongText = profileGoals.filter(g => g.term === 'long').map(g => g.text).join('\n');
 
   const html = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
@@ -3354,9 +3518,15 @@ function showProfileDetail(name) {
         <label>Avatar</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;" id="profile-avatar-picker">${avatarPickerHtml}</div>
       </div>
-      <div class="form-group" style="margin-bottom:0;">
-        <label>Goals (one per line)</label>
-        <textarea id="profile-goals" placeholder="e.g., Increase vertical jump&#10;Run a 6-minute mile" style="width:100%;height:90px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;">${escHTMLAttr(goalsText)}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:0;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Short-term goals — next 4 weeks (one per line)</label>
+          <textarea id="profile-goals-short" placeholder="e.g., Walk every morning&#10;Read 3 books" style="width:100%;height:90px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;">${escHTMLAttr(goalsShortText)}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Long-term goals — 6-12 months (one per line)</label>
+          <textarea id="profile-goals-long" placeholder="e.g., Lose 30 lbs&#10;Make the varsity team" style="width:100%;height:90px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:.85rem;resize:vertical;">${escHTMLAttr(goalsLongText)}</textarea>
+        </div>
       </div>
     </div>
   `;
@@ -3364,7 +3534,7 @@ function showProfileDetail(name) {
   document.getElementById('detail-body').innerHTML = html;
 
   // Hook autosave on each editable field
-  ['profile-sport', 'profile-height', 'profile-weight', 'profile-birthday', 'profile-why', 'profile-goals'].forEach(id => {
+  ['profile-sport', 'profile-height', 'profile-weight', 'profile-birthday', 'profile-why', 'profile-goals-short', 'profile-goals-long'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       const fire = () => scheduleProfileAutosave(name);
@@ -3400,23 +3570,29 @@ function scheduleProfileAutosave(name) {
       const weight = document.getElementById('profile-weight');
       const birthday = document.getElementById('profile-birthday');
       const why = document.getElementById('profile-why');
-      const goals = document.getElementById('profile-goals');
+      const goalsShort = document.getElementById('profile-goals-short');
+      const goalsLong = document.getElementById('profile-goals-long');
       if (sport) data.profile.sport = sport.value;
       if (height) data.profile.height = height.value;
       if (weight) data.profile.weight = Number(weight.value) || 0;
       if (birthday) data.profile.birthday = birthday.value;
       if (why) data.profile.why = why.value;
-      if (goals) {
-        const lines = goals.value.split('\n').map(g => g.trim()).filter(Boolean);
-        const prevLen = (data.profile.goals || []).length;
-        data.profile.goals = lines;
-        // Keep goalsDone aligned with goals length
-        if (!Array.isArray(data.goalsDone)) data.goalsDone = [];
-        if (lines.length > prevLen) {
-          data.goalsDone = data.goalsDone.concat(Array(lines.length - prevLen).fill(false));
-        } else if (lines.length < prevLen) {
-          data.goalsDone = data.goalsDone.slice(0, lines.length);
-        }
+      if (goalsShort || goalsLong) {
+        // Rebuild structured goals from the two textareas. Ids and done-state
+        // are preserved by matching text against the previous goal list, so
+        // habit goal-links and completion survive wording-neutral edits.
+        const oldGoals = normalizeGoals(data.profile.goals);
+        const oldByText = {};
+        oldGoals.forEach((g, i) => { oldByText[g.text] = { id: g.id, done: !!(data.goalsDone || [])[i] }; });
+        const buildFrom = (el, term) => !el ? [] :
+          el.value.split('\n').map(t => t.trim()).filter(Boolean).map(text => ({
+            id: oldByText[text] ? oldByText[text].id : 'goal-' + Math.random().toString(36).substr(2, 9),
+            text: text,
+            term: term
+          }));
+        const newGoals = [...buildFrom(goalsShort, 'short'), ...buildFrom(goalsLong, 'long')];
+        data.profile.goals = newGoals;
+        data.goalsDone = newGoals.map(g => oldByText[g.text] ? oldByText[g.text].done : false);
       }
       data.ts = new Date().toISOString();
       saveClients();
@@ -3701,8 +3877,206 @@ function populateStackSelects() {
   });
 }
 
+// ═══════════════════════════════════════════
+// HABITS & TASKS BUILDER (non-workout tasks: laundry, reading, etc.)
+// Mirrors the supplement builder pattern. Habit ids are preserved across
+// re-renders (data-habit-id) because the client's habit log and goal links
+// key off them — regenerating ids would orphan client progress.
+// ═══════════════════════════════════════════
+
+function newHabitId() {
+  return 'habit-' + Math.random().toString(36).substr(2, 9);
+}
+
+// Goals available for linking a habit, per builder container.
+// Plan builder → the saved client's goals. Add Client modal → goals
+// currently typed in the two textareas (deterministic ids so the ids
+// match what buildClientPackageFromForm produces on save).
+function getBuilderGoalOptions(containerId) {
+  if (containerId === 'plan-habit-builder') {
+    return normalizeGoals(clients[currentPlanClientName]?.profile?.goals);
+  }
+  if (containerId === 'ac-habit-builder') {
+    return getAcGoals();
+  }
+  return [];
+}
+
+// Parse the Add Client modal's goal textareas into structured goals with
+// deterministic ids ('goal-s0', 'goal-l1', ...) so habit goal-links created
+// in the modal still resolve after the client is saved.
+function getAcGoals() {
+  const shortEl = document.getElementById('ac-goals-short');
+  const longEl = document.getElementById('ac-goals-long');
+  const goals = [];
+  if (shortEl) {
+    shortEl.value.split('\n').map(g => g.trim()).filter(Boolean).forEach((text, i) => {
+      goals.push({ id: 'goal-s' + i, text: text, term: 'short' });
+    });
+  }
+  if (longEl) {
+    longEl.value.split('\n').map(g => g.trim()).filter(Boolean).forEach((text, i) => {
+      goals.push({ id: 'goal-l' + i, text: text, term: 'long' });
+    });
+  }
+  return goals;
+}
+
+function renderHabitBuilder(containerId, habits) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (habits.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text2);font-size:.85rem;">No habits or tasks yet. Add anything from "Do laundry" to "Read 20 minutes."</div>';
+    return;
+  }
+  const goalOptions = getBuilderGoalOptions(containerId);
+  container.innerHTML = habits.map((habit, idx) => {
+    const freqOptionsHtml = Object.entries(HABIT_FREQS).map(([k, v]) =>
+      `<option value="${k}" ${k === habit.freq ? 'selected' : ''}>${v}</option>`).join('');
+    const goalSelectHtml = `
+      <select class="habit-goal-select" data-field="goalId" title="Link this task to one of the client's goals">
+        <option value="">🎯 No linked goal</option>
+        ${goalOptions.map(g => `<option value="${escHTMLAttr(g.id)}" ${g.id === habit.goalId ? 'selected' : ''}>🎯 ${escapeHtml(g.text)}${g.term === 'long' ? ' (long-term)' : ''}</option>`).join('')}
+      </select>`;
+    const habitDays = Array.isArray(habit.days) ? habit.days : [];
+    const daysCheckboxesHtml = DAYS_SHORT.map((d, di) =>
+      `<label><input type="checkbox" class="habit-day-cb" data-day="${di}" ${habitDays.includes(di) ? 'checked' : ''}>${d}</label>`
+    ).join('');
+    const daysRowHtml = habit.freq === 'weekly'
+      ? `<div class="supp-days-row"><span style="margin-right:4px;">Days:</span>${daysCheckboxesHtml}<span style="font-size:.72rem;color:var(--text2);margin-left:6px;">(none checked = any day, once a week)</span></div>`
+      : '';
+    return `
+    <div class="supplement-row" data-habit-idx="${idx}" data-habit-id="${escHTMLAttr(habit.id)}">
+      <input type="text" class="habit-name-input" value="${escHTMLAttr(habit.name)}" placeholder="Task name (e.g., Read 20 minutes)" data-field="name">
+      <input type="text" class="habit-area-input" list="habit-area-list" value="${escHTMLAttr(habit.area || '')}" placeholder="Life area (e.g., Home)" data-field="area" style="max-width:150px;">
+      <select class="habit-freq-select" data-field="freq" onchange="onHabitFreqChange('${containerId}')">
+        ${freqOptionsHtml}
+      </select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--text2);white-space:nowrap;">⏰ Due by
+        <input type="time" class="habit-dueby-input" value="${escHTMLAttr(habit.dueBy || '')}" data-field="dueBy" title="Optional: the time of day this should be done by. Finishing on time earns bonus points." style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:.82rem;">
+      </label>
+      ${goalSelectHtml}
+      <div class="exercise-row-actions">
+        <button type="button" class="btn btn-secondary" onclick="duplicateHabit('${containerId}', ${idx})" title="Duplicate">⧉</button>
+        ${habits.length > 1 ? `<button type="button" class="btn btn-secondary" onclick="moveHabitUp('${containerId}', ${idx})" title="Move Up">▲</button>` : ''}
+        ${habits.length > 1 ? `<button type="button" class="btn btn-secondary" onclick="moveHabitDown('${containerId}', ${idx})" title="Move Down">▼</button>` : ''}
+        <button type="button" class="remove-exercise-btn" onclick="removeHabitFromBuilder('${containerId}', ${idx})">✕</button>
+      </div>
+      <input type="text" class="habit-notes-input" value="${escHTMLAttr(habit.notes || '')}" placeholder="Notes for client (optional)" data-field="notes">
+      ${daysRowHtml}
+    </div>
+  `}).join('');
+}
+
+function getHabitsFromBuilder(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return [];
+  const rows = container.querySelectorAll('.supplement-row[data-habit-id]');
+  const habits = [];
+  rows.forEach(row => {
+    const freq = row.querySelector('.habit-freq-select').value;
+    const dayCbs = row.querySelectorAll('.habit-day-cb');
+    const days = freq === 'weekly'
+      ? [...dayCbs].filter(cb => cb.checked).map(cb => parseInt(cb.dataset.day, 10))
+      : [];
+    habits.push({
+      id: row.dataset.habitId || newHabitId(),
+      name: row.querySelector('.habit-name-input').value.trim(),
+      area: row.querySelector('.habit-area-input').value.trim(),
+      freq: HABIT_FREQS[freq] ? freq : 'daily',
+      days: days,
+      dueBy: row.querySelector('.habit-dueby-input').value || '',
+      goalId: row.querySelector('.habit-goal-select').value || '',
+      notes: row.querySelector('.habit-notes-input').value.trim(),
+      trainerAssigned: true
+    });
+  });
+  return habits;
+}
+
+function syncHabitsFromUI(containerId) {
+  if (containerId === 'ac-habit-builder') {
+    acHabits = getHabitsFromBuilder(containerId);
+  } else if (containerId === 'plan-habit-builder') {
+    planBuilderHabits = getHabitsFromBuilder(containerId);
+  }
+}
+
+function getHabitArray(containerId) {
+  if (containerId === 'ac-habit-builder') return acHabits;
+  if (containerId === 'plan-habit-builder') return planBuilderHabits;
+  return [];
+}
+
+function setHabitArray(containerId, arr) {
+  if (containerId === 'ac-habit-builder') acHabits = arr;
+  else if (containerId === 'plan-habit-builder') planBuilderHabits = arr;
+}
+
+function addHabitToAcBuilder() {
+  syncHabitsFromUI('ac-habit-builder');
+  acHabits.push({ id: newHabitId(), name: '', area: '', freq: 'daily', days: [], dueBy: '', goalId: '', notes: '', trainerAssigned: true });
+  renderHabitBuilder('ac-habit-builder', acHabits);
+}
+
+function addHabitToPlanBuilder() {
+  syncHabitsFromUI('plan-habit-builder');
+  planBuilderHabits.push({ id: newHabitId(), name: '', area: '', freq: 'daily', days: [], dueBy: '', goalId: '', notes: '', trainerAssigned: true });
+  renderHabitBuilder('plan-habit-builder', planBuilderHabits);
+}
+
+function removeHabitFromBuilder(containerId, idx) {
+  syncHabitsFromUI(containerId);
+  const arr = getHabitArray(containerId);
+  arr.splice(idx, 1);
+  setHabitArray(containerId, arr);
+  renderHabitBuilder(containerId, arr);
+}
+
+function moveHabitUp(containerId, idx) {
+  if (idx === 0) return;
+  syncHabitsFromUI(containerId);
+  const arr = getHabitArray(containerId);
+  [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+  setHabitArray(containerId, arr);
+  renderHabitBuilder(containerId, arr);
+}
+
+function moveHabitDown(containerId, idx) {
+  syncHabitsFromUI(containerId);
+  const arr = getHabitArray(containerId);
+  if (idx >= arr.length - 1) return;
+  [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+  setHabitArray(containerId, arr);
+  renderHabitBuilder(containerId, arr);
+}
+
+function duplicateHabit(containerId, idx) {
+  syncHabitsFromUI(containerId);
+  const arr = getHabitArray(containerId);
+  if (!arr[idx]) return;
+  const dup = JSON.parse(JSON.stringify(arr[idx]));
+  dup.id = newHabitId();
+  arr.splice(idx + 1, 0, dup);
+  setHabitArray(containerId, arr);
+  renderHabitBuilder(containerId, arr);
+}
+
+function onHabitFreqChange(containerId) {
+  // Re-render so the weekly day-picker row shows/hides with the freq choice
+  syncHabitsFromUI(containerId);
+  renderHabitBuilder(containerId, getHabitArray(containerId));
+}
+
+function populateHabitAreaList() {
+  const dl = document.getElementById('habit-area-list');
+  if (!dl) return;
+  dl.innerHTML = HABIT_AREAS.map(a => `<option value="${a}"></option>`).join('');
+}
+
 loadCustomExercises();
 populateStackSelects();
+populateHabitAreaList();
 renderAll();
 </script>
 </body>
