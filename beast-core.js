@@ -19,7 +19,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.4.0';
+  var VERSION = '2.5.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -27,7 +27,10 @@ var BeastCore = (function () {
 
   // ── Vocabulary ────────────────────────────────────────────────────────────
 
-  var KINDS = ['exercise', 'supplement', 'habit'];
+  // 'ancillary' is appended rather than inserted: the wire format encodes kind
+  // as an index into this list, so reordering it would silently rewrite every
+  // item in a payload.
+  var KINDS = ['exercise', 'supplement', 'habit', 'ancillary'];
   var FREQS = ['daily', 'weekly', 'flexible', 'monthly'];
 
   // These names are the ones brofessor-methods.md already tells the coach to
@@ -217,6 +220,35 @@ var BeastCore = (function () {
   function escHTMLAttr(s) { return escapeHtml(s); }
   function escText(s) { return String(s == null ? '' : s).replace(/[<>]/g, ''); }
 
+  // The editable detail fields per kind, so the trainer builds its form from
+  // here rather than branching on a kind name. Exercise is absent on purpose:
+  // its metric drives a cascade into targetFields(), which has its own shape.
+  var DETAIL_FIELDS = {
+    exercise: [],
+    supplement: [
+      { key: 'dosage', label: 'Dosage', type: 'text' },
+      { key: 'timing', label: 'Timing', type: 'select', options: TIMINGS }
+    ],
+    ancillary: [
+      { key: 'dose', label: 'Dose', type: 'text', hint: '7.5mg' },
+      { key: 'prescriber', label: 'Prescriber', type: 'text' },
+      { key: 'followUp', label: 'Next follow-up', type: 'text', hint: 'YYYY-MM-DD' }
+    ],
+    habit: []
+  };
+
+  function detailFields(kind) { return DETAIL_FIELDS[kind] || []; }
+  function usesMetric(kind) { return kind === KINDS[0]; }   // exercise
+
+  // What an item shows under its name, by kind. Keeps every app out of the
+  // business of knowing which detail fields a kind carries.
+  function detailLine(it) {
+    var d = it.detail || {};
+    if (usesMetric(it.kind)) return formatTarget(d);
+    var first = detailFields(it.kind)[0];
+    return (first && d[first.key]) ? String(d[first.key]) : '';
+  }
+
   // ── Ids ───────────────────────────────────────────────────────────────────
   // '|' is the log key separator, so it can never appear in an id.
 
@@ -252,10 +284,15 @@ var BeastCore = (function () {
   // because a training day flattens into six or more separate taps and the last
   // accessory would break a streak. Supplements do not, because a missed
   // multivitamin is not a missed day.
+  // An ancillary defaults non-core on purpose. Its timing belongs to the
+  // prescriber, clients shift an injection day by a day fairly often, and a
+  // streak broken by that would punish something the plan does not control.
+  // Chris can set it core per client.
   var DEFAULT_CORE_BY_KIND = {
     exercise: false,
     supplement: false,
-    habit: true
+    habit: true,
+    ancillary: false
   };
 
   function normalizeItem(raw, opts) {
@@ -291,6 +328,15 @@ var BeastCore = (function () {
       detail = {
         dosage: detail.dosage == null ? '' : String(detail.dosage),
         timing: TIMINGS.indexOf(detail.timing) !== -1 ? detail.timing : 'morning'
+      };
+    } else if (kind === 'ancillary') {
+      // Prescribed: GLP-1s, TRT, thyroid, blood pressure. The item's own freq,
+      // days and dueBy hold when it is taken, so detail holds only the clinical
+      // facts. Dose belongs to the prescriber and is recorded, never set here.
+      detail = {
+        dose: detail.dose == null ? '' : String(detail.dose),
+        prescriber: detail.prescriber == null ? '' : String(detail.prescriber),
+        followUp: detail.followUp == null ? '' : String(detail.followUp)
       };
     } else {
       detail = {};
@@ -906,6 +952,9 @@ var BeastCore = (function () {
       if (it.kind === 'supplement' && d.timing !== undefined && TIMINGS.indexOf(d.timing) === -1) {
         errors.push(who + ': timing "' + d.timing + '" is not one of ' + TIMINGS.join(', ') + '.');
       }
+      if (it.kind === 'ancillary' && d.followUp && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.followUp))) {
+        errors.push(who + ': followUp "' + d.followUp + '" is not a YYYY-MM-DD date.');
+      }
     });
 
     if (errors.length) return { ok: false, errors: errors, items: [], goals: [] };
@@ -963,6 +1012,7 @@ var BeastCore = (function () {
     VERSION: VERSION,
     PAYLOAD_VERSION: PAYLOAD_VERSION,
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
+    detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,
     POINTS: POINTS, LEVELS: LEVELS, PREFIXES: PREFIXES,

@@ -615,3 +615,43 @@ test('a code is pulled out of a pasted text message', () => {
   assert.strictEqual(C.extractCode(code), code);
   assert.strictEqual(C.extractCode('  hello  '), 'hello');
 });
+
+// ── ancillaries ────────────────────────────────────────────────────────────
+
+test('ancillary is a kind with its own detail and is non-core by default', () => {
+  const a = C.normalizeItem({ name: 'Zepbound', kind: 'ancillary', freq: 'weekly', days: [1],
+    detail: { dose: '7.5mg', prescriber: 'Dr Reyes', followUp: '2026-11-02', junk: 'x' } });
+  assert.strictEqual(a.kind, 'ancillary');
+  assert.strictEqual(a.core, false);
+  assert.deepStrictEqual(a.detail, { dose: '7.5mg', prescriber: 'Dr Reyes', followUp: '2026-11-02' });
+  assert.strictEqual(C.detailLine(a), '7.5mg');
+});
+
+test('appending ancillary did not shift the other kinds on the wire', () => {
+  // The wire format stores kind as an index, so the first three must not move.
+  assert.strictEqual(C.KINDS.indexOf('exercise'), 0);
+  assert.strictEqual(C.KINDS.indexOf('supplement'), 1);
+  assert.strictEqual(C.KINDS.indexOf('habit'), 2);
+  assert.strictEqual(C.KINDS.indexOf('ancillary'), 3);
+});
+
+test('an ancillary round trips through the wire format', () => {
+  const items = C.normalizeItems([{ name: 'TRT', kind: 'ancillary', freq: 'weekly', days: [4],
+    detail: { dose: '100mg', prescriber: 'Dr Reyes', followUp: '2026-12-01' }, addedAt: '2026-09-14' }]);
+  const out = C.decodePayload(C.encodePayload('plan', { items }));
+  assert.deepStrictEqual(out.data.items, items);
+});
+
+test('a draft with a malformed ancillary follow-up is rejected by name', () => {
+  const r = C.validateDraft({ items: [
+    { name: 'Zepbound', kind: 'ancillary', detail: { dose: '7.5mg', followUp: 'next month' } }
+  ] });
+  assert.strictEqual(r.ok, false);
+  assert.match(r.errors[0], /"Zepbound": followUp "next month"/);
+});
+
+test('detailLine covers every kind', () => {
+  C.KINDS.forEach(k => {
+    assert.strictEqual(typeof C.detailLine(C.normalizeItem({ name: 'x', kind: k })), 'string');
+  });
+});

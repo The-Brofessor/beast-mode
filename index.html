@@ -214,7 +214,7 @@ nav button.active { color: var(--accent); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.4.0';
+var BUILT_AGAINST = '2.5.0';
 var KEY = 'bm2.client';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -811,12 +811,12 @@ function itemCard(it, date) {
   var done = !!(e && e.done);
   var onTime = done && BeastCore.isOnTime(it, e, date);
   var target = BeastCore.formatTarget(it.detail);
-  var fields = it.kind === 'exercise' ? BeastCore.targetFields(it.detail.metric) : [];
+  var fields = BeastCore.usesMetric(it.kind) ? BeastCore.targetFields(it.detail.metric) : [];
 
   var meta = [esc(it.kind)];
   if (it.dueBy) meta.push('by ' + esc(BeastCore.formatDueBy(it.dueBy)));
-  if (it.detail.dosage) meta.push(esc(it.detail.dosage));
-  if (target) meta.push(esc(target));
+  var line = BeastCore.detailLine(it);
+  if (line) meta.push(esc(line));
 
   var tags = (it.core ? '<span class="tag core">core</span>' : '') +
     (done ? (onTime ? '<span class="tag ontime">on time</span>' : '<span class="tag late">late</span>') : '');

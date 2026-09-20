@@ -135,7 +135,7 @@ header h1 span { color: var(--accent); }
    All contract logic lives in BeastCore. Metric names, timings, frequencies,
    log keys and payload prefixes are never written inline here. See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.4.0';
+var BUILT_AGAINST = '2.5.0';
 var KEY = 'bm2.trainer';
 var AVATARS = ['\u{1F4AA}', '\u{1F525}', '\u{1F98D}', '\u{1F3CB}', '\u{1F3AF}', '⚡', '\u{1F43A}', '\u{1F680}'];
 
@@ -792,8 +792,9 @@ function itemRow(c, it) {
   var up = "updateItem('" + attr(c.id) + "','" + attr(it.id) + "',";
   var f = function (field) { return up + "'" + field + "',this.value)"; };
 
+  // Kind-specific fields come from the core, so a new kind needs no edit here.
   var kindFields = '';
-  if (it.kind === 'exercise') {
+  if (BeastCore.usesMetric(it.kind)) {
     kindFields =
       '<label>Metric<select onchange="' + f('detail.metric') + '">' +
         BeastCore.METRICS.map(function (m) {
@@ -805,14 +806,20 @@ function itemRow(c, it) {
         return '<label>' + esc(t.label) + '<input type="number" value="' + attr(v) +
           '" onchange="' + up + "'detail.target." + t.key + "',this.value)" + '"></label>';
       }).join('');
-  } else if (it.kind === 'supplement') {
-    kindFields =
-      '<label>Dosage<input value="' + attr(it.detail.dosage || '') + '" onchange="' + f('detail.dosage') + '"></label>' +
-      '<label>Timing<select onchange="' + f('detail.timing') + '">' +
-        BeastCore.TIMINGS.map(function (t) {
-          return '<option value="' + t + '"' + (it.detail.timing === t ? ' selected' : '') + '>' +
-            esc(t.replace(/_/g, ' ')) + '</option>';
-        }).join('') + '</select></label>';
+  } else {
+    kindFields = BeastCore.detailFields(it.kind).map(function (d) {
+      var v = it.detail[d.key] == null ? '' : it.detail[d.key];
+      if (d.type === 'select') {
+        return '<label>' + esc(d.label) + '<select onchange="' + f('detail.' + d.key) + '">' +
+          d.options.map(function (o) {
+            return '<option value="' + attr(o) + '"' + (v === o ? ' selected' : '') + '>' +
+              esc(String(o).replace(/-/g, ' ')) + '</option>';
+          }).join('') + '</select></label>';
+      }
+      return '<label>' + esc(d.label) + '<input value="' + attr(v) + '"' +
+        (d.hint ? ' placeholder="' + attr(d.hint) + '"' : '') +
+        ' onchange="' + f('detail.' + d.key) + '"></label>';
+    }).join('');
   }
 
   var dayPills = it.freq === 'weekly'
@@ -940,9 +947,8 @@ function previewTab(c) {
       }
       var meta = [esc(it.kind)];
       if (it.dueBy) meta.push('by ' + esc(BeastCore.formatDueBy(it.dueBy)));
-      if (it.detail.dosage) meta.push(esc(it.detail.dosage));
-      var t = BeastCore.formatTarget(it.detail);
-      if (t) meta.push(esc(t));
+      var line = BeastCore.detailLine(it);
+      if (line) meta.push(esc(line));
       return head + '<div class="pitem' + (it.core ? ' core' : '') + '"><div class="pbox"></div><div>' +
         '<div style="font-weight:600">' + esc(it.name) +
           (it.core ? '<span class="tag core">core</span>' : '') + '</div>' +
