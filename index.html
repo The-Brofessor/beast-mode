@@ -1099,6 +1099,7 @@ function applyCoachStatus(data) {
   if (data.open === true && data.consent) {
     state.coachOpen = true;
     state.coachConsent = data.consent;
+    if ('boss' in data) state.coachBoss = data.boss || null;
     return true;
   }
   return false;
@@ -1165,7 +1166,7 @@ async function askCoach(preset) {
     conversationId: state.coachConversation, messageId: messageId, replyId: replyId,
     previousConversationId: state.coachPrevConversation || undefined,
     localDate: BeastCore.todayLocal(),
-    messages: state.coachLog.slice(-20),
+    messages: state.coachLog.filter(function (m) { return !m.notice; }).slice(-20),
     state: coachState()
   });
   if (data.pilot) {
@@ -1173,15 +1174,24 @@ async function askCoach(preset) {
     // answered, so it does not stay in the chat.
     state.coachLog.pop();
     applyCoachStatus({ open: false, message: data.reply });
-  } else if (data.reply) {
-    state.coachLog.push({ role: 'assistant', content: data.reply, id: replyId });
-    state.coachPrevConversation = null;
-    state.coachUsage = data.usage || null;
   } else if (data.consent === false) {
     state.coachLog.pop();
     state.coachConsent = { 1: null, 2: null };
   } else {
-    coachError = coachFailure(data);
+    if (data.reply) {
+      state.coachLog.push({ role: 'assistant', content: data.reply, id: replyId });
+      state.coachPrevConversation = null;
+    }
+    if (data.usage) state.coachUsage = data.usage;
+    // Something was flagged for a human (plan 5.5). The server sends the
+    // approved wording; the app adds the button that texts Chris.
+    if (data.notice) {
+      if ('boss' in data) state.coachBoss = data.boss || null;
+      state.coachLog.push({ role: 'assistant', content: data.notice, id: replyId + '-n',
+                            notice: true, flag: data.flag || '' });
+    }
+    if (data.error) coachError = data.error;
+    else if (!data.reply && !data.notice) coachError = coachFailure(data);
   }
 
   coachBusy = false;
@@ -1257,6 +1267,15 @@ var COACH_STARTERS = [
   'My legs are sore. Should I still train today?'
 ];
 
+// Approved wording, learning plan section 4. Opens a text to Chris's real
+// number, which the coach worker serves; it is never in this public repo.
+// Without it, the text opens with no recipient and the client picks Chris.
+function bossButton() {
+  var to = /^\+?[0-9]{7,15}$/.test(state.coachBoss || '') ? state.coachBoss : '';
+  return '<button class="btn" style="max-width:86%;align-self:flex-start;margin-top:0" onclick="location.href=' +
+    attr(jsq('sms:' + to)) + '">Text The Brofessor’s Boss</button>';
+}
+
 // A message from The Brofessor that is not part of the chat: the consents and
 // the pilot holding line. Paragraphs are separated by a blank line, which the
 // bubble's pre-wrap shows as a gap.
@@ -1324,8 +1343,9 @@ function coachTab() {
 
   var body = state.coachLog.length
     ? state.coachLog.map(function (m) {
-        return '<div class="bubble ' + (m.role === 'user' ? 'me' : 'coach') + '">' +
+        var bubble = '<div class="bubble ' + (m.role === 'user' ? 'me' : 'coach') + '">' +
           esc(m.content) + '</div>';
+        return m.notice ? bubble + bossButton() : bubble;
       }).join('')
     : '<div class="starters">' + COACH_STARTERS.map(function (q) {
         return '<button onclick="askCoach(' + attr(jsq(q)) + ')">' + esc(q) + '</button>';
