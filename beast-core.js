@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.7.0';
+  var VERSION = '2.8.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1189,6 +1189,49 @@ var BeastCore = (function () {
     return { items: items, added: added, removed: removed, changed: changed, kept: kept };
   }
 
+  // ── Coach consents ────────────────────────────────────────────────────────
+
+  // The two consents the coach asks for (learning plan D9, approved wording in
+  // section 4). The server stores the version a client agreed to; the
+  // dashboard will show the wording for that version. Any change to the
+  // wording needs Chris's approval and a new version, which every client sees
+  // and taps again.
+  var CONSENTS = {
+    1: {
+      version: 'c1-2026-09-21',
+      paragraphs: [
+        'Welcome to your new home. I’m The Brofessor, your AI coach and guide to GAINZ. ' +
+          'We’re going to get along great (if you listen to everything I say LOL!!).',
+        'Before we begin your journey to a new you, the fine print: I’m AI, not a person. ' +
+          'Our chats are saved, and a human coach can read them. Anything I flag gets reviewed ' +
+          'by a real person. Want your chats deleted? Tap Delete my chats in Profile any time. ' +
+          'In a crisis, call or text 988.'
+      ],
+      yes: 'I’m in',
+      // Shown in place of the text box until the button is tapped.
+      locked: 'Tap “I’m in” above to start chatting. Your checklist works either way.'
+    },
+    2: {
+      version: 'c2-2026-09-21',
+      paragraphs: [
+        'One more before we go to Shredzville. Can I use our chats to get better at coaching? ' +
+          'Anything I learn from gets your name and personal details stripped out first. ' +
+          'Saying no changes nothing about how I coach you. You can change your mind any time ' +
+          'and opt out in your profile settings.'
+      ],
+      yes: 'OK Brofessor. LET’S GOOOO!!!',
+      no: 'No thanks'
+    }
+  };
+
+  // The newest answer on file counts only if it was given to today's wording.
+  // `given` is the server's record: { version, answer, at } or null.
+  function consentStands(kind, given) {
+    var c = CONSENTS[kind];
+    return !!(c && given && given.version === c.version &&
+      (given.answer === 'yes' || (kind === 2 && given.answer === 'no')));
+  }
+
   // ── Public surface ────────────────────────────────────────────────────────
 
   return {
@@ -1236,7 +1279,8 @@ var BeastCore = (function () {
     buildReport: buildReport, reportSummary: reportSummary,
     INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
     formatIntakeForCoach: formatIntakeForCoach,
-    goalsFromIntake: goalsFromIntake, profileFromIntake: profileFromIntake
+    goalsFromIntake: goalsFromIntake, profileFromIntake: profileFromIntake,
+    CONSENTS: CONSENTS, consentStands: consentStands
   };
 })();
 

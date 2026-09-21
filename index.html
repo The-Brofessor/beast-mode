@@ -398,7 +398,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.7.0';
+var BUILT_AGAINST = '2.8.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -872,7 +872,13 @@ function resetAll() {
   render();
 }
 
-function go(t) { tab = t; window.scrollTo(0, 0); render(); }
+function go(t) {
+  tab = t;
+  window.scrollTo(0, 0);
+  render();
+  // Consents live on the server; check them whenever they are about to show.
+  if (t === 'coach' || t === 'profile') refreshCoachStatus();
+}
 function pickDay(d) { pickedDay = d; render(); }
 
 /* ── feedback ──────────────────────────────────────────────────────────── */
@@ -1037,36 +1043,123 @@ function coachState() {
   };
 }
 
+var COACH_OFFLINE = 'Could not reach me. Check your signal and try again.';
+var COACH_NO_ANSWER = 'No answer came back. Try again.';
+
+// Every call to the coach worker. Resolves to the reply's body with its HTTP
+// `status` added, or { status: 0 } when the phone could not reach it at all.
+async function coachPost(path, body) {
+  try {
+    var res = await fetch(COACH_URL + path, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.assign({ token: state.coachToken }, body))
+    });
+    var data = await res.json().catch(function () { return {}; });
+    data.status = res.status;
+    return data;
+  } catch (e) {
+    return { status: 0 };
+  }
+}
+
+function coachFailure(data) { return data.status ? (data.error || COACH_NO_ANSWER) : COACH_OFFLINE; }
+
+/* Consents (learning plan D9). The server's record is the one that counts:
+   the app keeps a copy so the tab draws offline, and refreshes it each time
+   the Coach or Profile tab opens. The locked text box is a convenience; the
+   server refuses to answer without consent 1 either way. */
+
+function consentGiven(kind) {
+  return BeastCore.consentStands(kind, state.coachConsent && state.coachConsent[kind]);
+}
+
+// What the status and consent routes send back, applied in one place.
+function applyCoachStatus(data) {
+  if (data.open === false) {
+    state.coachOpen = false;
+    state.coachHold = data.message || '';
+    return true;
+  }
+  if (data.open === true && data.consent) {
+    state.coachOpen = true;
+    state.coachConsent = data.consent;
+    return true;
+  }
+  return false;
+}
+
+// Redraws without losing whatever the client was halfway through typing.
+function renderKeepingDraft() {
+  var box = document.getElementById('coach-input');
+  var draft = box ? box.value : '';
+  render();
+  var fresh = document.getElementById('coach-input');
+  if (fresh && draft) fresh.value = draft;
+}
+
+var coachChecking = false;
+
+async function refreshCoachStatus() {
+  if (!coachAvailable() || coachChecking) return;
+  coachChecking = true;
+  var data = await coachPost('/coach/status', {});
+  coachChecking = false;
+  if (applyCoachStatus(data)) coachError = '';
+  else if (data.status || !state.coachConsent) coachError = coachFailure(data);
+  // Offline with a copy on the phone: draw from the copy, say nothing.
+  save();
+  if (tab === 'coach' || tab === 'profile') renderKeepingDraft();
+}
+
+async function giveConsent(kind, answer) {
+  if (coachBusy || !coachAvailable()) return;
+  coachBusy = true;
+  coachError = '';
+  render();
+  var data = await coachPost('/consent', {
+    kind: kind, answer: answer, version: BeastCore.CONSENTS[kind].version
+  });
+  coachBusy = false;
+  if (!applyCoachStatus(data)) {
+    // The server has no consent 1 on file after all: ask again.
+    if (data.consent === false) state.coachConsent = { 1: null, 2: null };
+    else coachError = coachFailure(data);
+  }
+  // From the Profile switch, a failure shows there, not on the Coach tab.
+  if (coachError && tab !== 'coach') { toast(coachError); coachError = ''; }
+  save();
+  render();
+}
+
 async function askCoach(preset) {
   var box = document.getElementById('coach-input');
-  var text = (preset || box.value || '').trim();
-  if (!text || coachBusy) return;
+  var text = (preset || (box && box.value) || '').trim();
+  if (!text || coachBusy || !coachAvailable() || !consentGiven(1)) return;
 
   state.coachLog.push({ role: 'user', content: text });
-  box.value = '';
+  if (box) box.value = '';
   coachBusy = true;
   coachError = '';
   save();
   render();
 
-  try {
-    var res = await fetch(COACH_URL + '/coach', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        token: state.coachToken,
-        messages: state.coachLog.slice(-20),
-        state: coachState()
-      })
-    });
-    var data = await res.json();
-    if (data.reply) {
-      state.coachLog.push({ role: 'assistant', content: data.reply });
-      state.coachUsage = data.usage || null;
-    } else {
-      coachError = data.error || 'No answer came back. Try again.';
-    }
-  } catch (e) {
-    coachError = 'Could not reach me. Check your signal and try again.';
+  var data = await coachPost('/coach', {
+    messages: state.coachLog.slice(-20),
+    state: coachState()
+  });
+  if (data.pilot) {
+    // The coach closed since the tab last checked. The question was never
+    // answered, so it does not stay in the chat.
+    state.coachLog.pop();
+    applyCoachStatus({ open: false, message: data.reply });
+  } else if (data.reply) {
+    state.coachLog.push({ role: 'assistant', content: data.reply });
+    state.coachUsage = data.usage || null;
+  } else if (data.consent === false) {
+    state.coachLog.pop();
+    state.coachConsent = { 1: null, 2: null };
+  } else {
+    coachError = coachFailure(data);
   }
 
   coachBusy = false;
@@ -1076,11 +1169,52 @@ async function askCoach(preset) {
   setTimeout(function () { window.scrollTo(0, document.body.scrollHeight); }, 30);
 }
 
-function clearCoachLog() {
-  if (!confirm('Clear this chat from your phone?')) return;
+// Approved wording, learning plan section 4. "Clear" read as "delete", and
+// nothing is deleted: the old chat stays saved on the server.
+function openNewChat() {
+  showSheet(
+    '<h2 style="font-size:20px;margin-bottom:4px">Start a new chat?</h2>' +
+    '<p class="imeta">This clears your screen. Your past chats stay saved.</p>' +
+    '<button class="btn" onclick="startNewChat()">Start a new chat</button>' +
+    '<button class="btn sec" onclick="closeSheet()">Cancel</button>'
+  );
+}
+
+function startNewChat() {
   state.coachLog = [];
+  coachError = '';
   save();
-  render();
+  closeSheet();
+}
+
+function openDeleteChats() {
+  showSheet(
+    '<h2 style="font-size:20px;margin-bottom:4px">Delete all your chats?</h2>' +
+    '<p class="imeta">This can’t be undone. Your plan and checklist stay.</p>' +
+    '<p id="del-err" class="imeta" style="color:var(--bad)"></p>' +
+    '<button id="del-go" class="btn danger" onclick="deleteMyChats()">Delete</button>' +
+    '<button class="btn sec" onclick="closeSheet()">Cancel</button>'
+  );
+}
+
+// The server copy goes first. If that fails the phone keeps its copy too, so
+// the client is never told their chats are gone when they are not.
+async function deleteMyChats() {
+  var btn = document.getElementById('del-go');
+  if (!btn || btn.disabled || !coachAvailable()) return;
+  btn.disabled = true;
+  var data = await coachPost('/chats/delete', {});
+  if (data.ok) {
+    state.coachLog = [];
+    coachError = '';
+    save();
+    closeSheet();
+    toast('Your chats are deleted');
+    return;
+  }
+  btn.disabled = false;
+  var err = document.getElementById('del-err');
+  if (err) err.textContent = coachFailure(data);
 }
 
 // A blank chat leaves people unsure what they are allowed to ask.
@@ -1090,14 +1224,70 @@ var COACH_STARTERS = [
   'My legs are sore. Should I still train today?'
 ];
 
+// A message from The Brofessor that is not part of the chat: the consents and
+// the pilot holding line. Paragraphs are separated by a blank line, which the
+// bubble's pre-wrap shows as a gap.
+function coachNotice(paragraphs) {
+  return '<div class="bubble coach">' + paragraphs.map(esc).join('\n\n') + '</div>';
+}
+
+// The bar where the text box goes, holding a line of text instead.
+function coachBarNote(text) {
+  return '<div class="coachbar"><div class="in"><p class="imeta" style="flex:1;text-align:center;margin:0;padding:8px 0">' +
+    esc(text) + '</p></div></div>';
+}
+
 function coachTab() {
+  // Every client sees the tab. Without coaching it is the pitch (Chris,
+  // 2026-09-21). YES!! opens a text with the ask filled in; from B6 it goes
+  // straight to Chris's number, which the coach worker serves.
   if (!coachAvailable()) {
     return '<div class="empty" style="padding-top:60px"><div class="big">' + icon('coach') + '</div>' +
-      '<h2>Not switched on</h2><p>Text me if you want this.</p></div>';
+      '<p>The Brofessor isn’t home right now. Do you want to turn on coaching and unleash the Beast?</p>' +
+      '<button class="btn" style="max-width:320px;margin:18px auto 0" onclick="location.href=' +
+        attr(jsq('sms:?&body=' + encodeURIComponent('I want coaching!'))) + '">YES!!</button></div>';
   }
 
+  // Approved wording, learning plan section 4: the permanent line.
   var head = '<div class="coachhead"><div class="mark">B</div><div><b>The Brofessor</b>' +
-    '<span>Training, food, supplements, or whatever is bugging you.</span></div></div>';
+    '<span>I’m The Brofessor, your AI coach and guide to GAINZ. A human coach can read these chats ' +
+    'and will review anything I flag.</span></div></div>';
+
+  var thinking = coachBusy || coachChecking ? '<div class="bubble coach thinking">Thinking</div>' : '';
+  var error = coachError ? '<div class="bubble err">' + esc(coachError) + '</div>' : '';
+  var log = function (inner, after) {
+    return '<div id="coach-log" class="coachlog">' + inner + thinking + error + (after || '') + '</div>';
+  };
+  var c1 = BeastCore.CONSENTS[1], c2 = BeastCore.CONSENTS[2];
+
+  // Pilot mode: only the holding line. Nothing can be sent.
+  if (state.coachOpen === false) {
+    return head + log(state.coachHold ? coachNotice([state.coachHold]) : '');
+  }
+
+  // Never heard from the server on this phone: wait for it, or offer a retry.
+  if (!state.coachConsent) {
+    return head + log('', coachError && !coachChecking
+      ? '<div style="text-align:center"><button class="linkbtn" onclick="refreshCoachStatus()">Try again</button></div>'
+      : '');
+  }
+
+  // Consent 1, required. The text box stays locked until it is given.
+  if (!consentGiven(1)) {
+    return head + log(coachNotice(c1.paragraphs) +
+        '<button class="btn" onclick="giveConsent(1,\'yes\')"' + (coachBusy ? ' disabled' : '') + '>' +
+          esc(c1.yes) + '</button>') +
+      coachBarNote(c1.locked);
+  }
+
+  // Consent 2, optional, asked right after. Two buttons of the same size and
+  // style, so neither answer is the easy one.
+  if (!consentGiven(2)) {
+    var dis = coachBusy ? ' disabled' : '';
+    return head + log(coachNotice(c2.paragraphs) +
+      '<button class="btn sec"' + dis + ' onclick="giveConsent(2,\'yes\')">' + esc(c2.yes) + '</button>' +
+      '<button class="btn sec"' + dis + ' onclick="giveConsent(2,\'no\')">' + esc(c2.no) + '</button>');
+  }
 
   var body = state.coachLog.length
     ? state.coachLog.map(function (m) {
@@ -1108,13 +1298,9 @@ function coachTab() {
         return '<button onclick="askCoach(' + attr(jsq(q)) + ')">' + esc(q) + '</button>';
       }).join('') + '</div>';
 
-  return head + '<div id="coach-log" class="coachlog">' + body +
-      (coachBusy ? '<div class="bubble coach thinking">Thinking</div>' : '') +
-      (coachError ? '<div class="bubble err">' + esc(coachError) + '</div>' : '') +
-      (state.coachLog.length
-        ? '<div style="text-align:center;margin-top:6px"><button class="linkbtn" onclick="clearCoachLog()">Clear this chat</button></div>'
-        : '') +
-    '</div>' +
+  return head + log(body, state.coachLog.length
+      ? '<div style="text-align:center;margin-top:6px"><button class="linkbtn" onclick="openNewChat()">Start a new chat</button></div>'
+      : '') +
     '<div class="coachbar"><div class="in">' +
       '<textarea id="coach-input" rows="1" placeholder="Ask The Brofessor" ' +
         'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();askCoach();}"></textarea>' +
@@ -1417,9 +1603,9 @@ function header() {
 }
 
 function navBar() {
-  // The coach tab exists only for a client Chris has switched it on for.
+  // Every client gets the Coach tab. Without coaching it offers it.
   var tabs = [['today', 'Today'], ['week', 'Week']];
-  if (coachAvailable()) tabs.push(['coach', 'Coach']);
+  if (COACH_URL) tabs.push(['coach', 'Coach']);
   tabs.push(['profile', 'Profile']);
   return '<nav><div class="in">' + tabs.map(function (t) {
     return '<button class="' + (tab === t[0] ? 'active' : '') + '" onclick="go(\'' + t[0] + '\')">' +
@@ -1611,6 +1797,29 @@ function weekTab() {
   return picker + grid + itemList(sel);
 }
 
+// Consent 2 can be changed here any time (its wording promises so), and
+// Delete my chats is here for anyone with the coach, open or not. The switch
+// shows only once consent 2 has been answered on the Coach tab, so nobody
+// agrees here to wording they were never shown.
+function coachCard() {
+  if (!coachAvailable()) return '';
+  var html = '<div class="card"><h3>Coach</h3>';
+  if (state.coachOpen !== false && consentGiven(1) && consentGiven(2)) {
+    var answered = state.coachConsent[2].answer;
+    html += '<div class="field"><label>Help The Brofessor get better</label><div class="seg">' +
+        '<button class="' + (answered === 'yes' ? 'on' : '') + '" onclick="setConsent2(\'yes\')">Yes</button>' +
+        '<button class="' + (answered === 'no' ? 'on' : '') + '" onclick="setConsent2(\'no\')">No</button>' +
+      '</div><div class="imeta" style="margin-top:6px">Lets The Brofessor learn from your chats, with your ' +
+      'name and personal details stripped out first. Saying no changes nothing about your coaching.</div></div>';
+  }
+  return html + '<button class="btn danger" style="margin-top:4px" onclick="openDeleteChats()">Delete my chats</button></div>';
+}
+
+function setConsent2(answer) {
+  if (consentGiven(2) && state.coachConsent[2].answer === answer) return;
+  giveConsent(2, answer);
+}
+
 function profileTab() {
   var p = state.profile;
   var pr = progress();
@@ -1649,6 +1858,7 @@ function profileTab() {
   }
 
   html += remindersCard();
+  html += coachCard();
 
   html += '<div class="card"><h3>Appearance</h3>' +
     '<div class="field"><label>Theme</label><div class="seg">' + THEMES.map(function (t) {

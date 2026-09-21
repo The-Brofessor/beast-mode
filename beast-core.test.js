@@ -849,3 +849,44 @@ test('daysSince measures staleness in local days', () => {
   assert.strictEqual(C.daysSince('2026-09-14T09:00:00Z', '2026-09-20'), 6);
   assert.strictEqual(C.daysSince(null), null);
 });
+
+// ── coach consents (learning plan D9, section 4) ───────────────────────────
+
+test('the consent wording is exactly what Chris approved', () => {
+  // Any change here needs Chris's approval AND a new version string, so every
+  // client sees the new wording and taps again.
+  const c1 = C.CONSENTS[1], c2 = C.CONSENTS[2];
+  assert.strictEqual(c1.version, 'c1-2026-09-21');
+  assert.deepStrictEqual(c1.paragraphs, [
+    'Welcome to your new home. I’m The Brofessor, your AI coach and guide to GAINZ. We’re going to get along great (if you listen to everything I say LOL!!).',
+    'Before we begin your journey to a new you, the fine print: I’m AI, not a person. Our chats are saved, and a human coach can read them. Anything I flag gets reviewed by a real person. Want your chats deleted? Tap Delete my chats in Profile any time. In a crisis, call or text 988.'
+  ]);
+  assert.strictEqual(c1.yes, 'I’m in');
+  assert.strictEqual(c1.locked, 'Tap “I’m in” above to start chatting. Your checklist works either way.');
+  assert.strictEqual(c2.version, 'c2-2026-09-21');
+  assert.deepStrictEqual(c2.paragraphs, [
+    'One more before we go to Shredzville. Can I use our chats to get better at coaching? Anything I learn from gets your name and personal details stripped out first. Saying no changes nothing about how I coach you. You can change your mind any time and opt out in your profile settings.'
+  ]);
+  assert.strictEqual(c2.yes, 'OK Brofessor. LET’S GOOOO!!!');
+  assert.strictEqual(c2.no, 'No thanks');
+});
+
+test('consent versions fit what the coach server will store', () => {
+  // brofessor-coach/src/index.js, CONSENT_VERSION.
+  [1, 2].forEach(k => assert.match(C.CONSENTS[k].version, /^[A-Za-z0-9._-]{1,40}$/));
+  assert.notStrictEqual(C.CONSENTS[1].version, C.CONSENTS[2].version);
+});
+
+test('a consent stands only for the current wording', () => {
+  const v1 = C.CONSENTS[1].version, v2 = C.CONSENTS[2].version;
+  assert.strictEqual(C.consentStands(1, { version: v1, answer: 'yes' }), true);
+  assert.strictEqual(C.consentStands(1, null), false);
+  assert.strictEqual(C.consentStands(1, undefined), false);
+  assert.strictEqual(C.consentStands(1, { version: 'c1-old', answer: 'yes' }), false, 'new wording means asking again');
+  assert.strictEqual(C.consentStands(1, { version: v1, answer: 'no' }), false, 'consent 1 has no "no"');
+  // Consent 2 is answered either way; "no" is an answer, not a gap.
+  assert.strictEqual(C.consentStands(2, { version: v2, answer: 'no' }), true);
+  assert.strictEqual(C.consentStands(2, { version: v2, answer: 'yes' }), true);
+  assert.strictEqual(C.consentStands(2, { version: v2, answer: 'maybe' }), false);
+  assert.strictEqual(C.consentStands(3, { version: v2, answer: 'yes' }), false);
+});
