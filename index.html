@@ -546,7 +546,15 @@ function startIntake(data) {
 
 function setAnswer(key, value) { intake.answers[key] = value; saveIntake(); }
 
+// Adults only (learning plan D8). Checked on every Next and on Send, so an
+// under-18 answer stops the form before anything leaves the phone. Guarded
+// for a phone briefly paired with a cached older core.
+function underAge() {
+  return !!(BeastCore.isUnderAge && BeastCore.isUnderAge(intake.answers));
+}
+
 function intakeStep(delta) {
+  if (delta > 0 && underAge()) { intake.blocked = true; saveIntake(); render(); return; }
   var total = BeastCore.INTAKE_SECTIONS.length;
   intake.step = Math.max(0, Math.min(total - 1, intake.step + delta));
   saveIntake();
@@ -555,6 +563,7 @@ function intakeStep(delta) {
 }
 
 function submitIntake() {
+  if (underAge()) { intake.blocked = true; saveIntake(); render(); return; }
   intake.code = BeastCore.encodePayload('intake', {
     name: intake.clientName, answers: intake.answers
   });
@@ -584,7 +593,24 @@ function shareIntake() {
   else copyIntake();
 }
 
+function fixAge() {
+  intake.blocked = false;
+  intake.step = 0;
+  saveIntake();
+  window.scrollTo(0, 0);
+  render();
+}
+
 function intakeScreen() {
+  if (intake.blocked) {
+    return '<div class="wrap"><div class="empty" style="padding-top:80px">' +
+      '<div class="big">' + badge(1) + '</div>' +
+      '<h2>Beast Mode is for adults</h2>' +
+      '<p>You need to be ' + (BeastCore.MIN_AGE || 18) + ' or older to use Beast Mode, ' +
+        'so I can’t build you a plan yet. Nothing you entered has been sent.</p>' +
+      '<button class="btn sec" style="max-width:320px" onclick="fixAge()">I entered my age wrong</button>' +
+      '</div></div>';
+  }
   if (intake.code) {
     return '<div class="wrap"><div class="card" style="margin-top:30px">' +
       '<h2 style="font-size:20px;margin-bottom:8px">Done. Send it to me.</h2>' +

@@ -960,6 +960,31 @@ var BeastCore = (function () {
   // to ask for before writing a plan, so a finished intake pastes into the
   // Project with no gaps left for Chris to fill by hand.
 
+  // Beast Mode is for adults only (learning plan D8). The intake is the one
+  // way a new client arrives, so it is where an under-18 is turned away.
+  var MIN_AGE = 18;
+
+  // Whole years between a 'YYYY-MM-DD' birthday and today, or null when the
+  // birthday is missing or not a real date.
+  function ageOn(birthday, today) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(birthday || '').trim());
+    if (!m) return null;
+    var t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today || todayLocal());
+    var years = Number(t[1]) - Number(m[1]);
+    if (t[2] + t[3] < m[2] + m[3]) years--;   // birthday not reached yet this year
+    return years >= 0 ? years : null;
+  }
+
+  // True when either the stated age or the birthday says under MIN_AGE. A blank
+  // answer is not a block: Chris sees the intake before any plan is made.
+  function isUnderAge(answers, today) {
+    var a = answers || {};
+    var stated = (a.age === '' || a.age == null) ? null : Number(a.age);
+    if (stated !== null && !isNaN(stated) && stated < MIN_AGE) return true;
+    var fromBirthday = ageOn(a.birthday, today);
+    return fromBirthday !== null && fromBirthday < MIN_AGE;
+  }
+
   var INTAKE_SECTIONS = [
     { title: 'You', fields: [
       { key: 'age', label: 'Age', type: 'number' },
@@ -1172,6 +1197,7 @@ var BeastCore = (function () {
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
     TIMING_LABELS: TIMING_LABELS, timingLabel: timingLabel,
     WEIGHT_UNIT: WEIGHT_UNIT, itemSummary: itemSummary,
+    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge,
     detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,

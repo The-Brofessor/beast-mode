@@ -379,6 +379,28 @@ test('every inline script in index.html parses', () => {
   });
 });
 
+// ── adults only ────────────────────────────────────────────────────────────
+
+test('ageOn counts whole years and handles a birthday not yet reached', () => {
+  assert.strictEqual(C.ageOn('2008-09-21', '2026-09-21'), 18);   // 18 today
+  assert.strictEqual(C.ageOn('2008-09-22', '2026-09-21'), 17);   // 18 tomorrow
+  assert.strictEqual(C.ageOn('1976-10-05', '2026-09-21'), 49);
+  assert.strictEqual(C.ageOn('not a date', '2026-09-21'), null);
+  assert.strictEqual(C.ageOn('', '2026-09-21'), null);
+});
+
+test('isUnderAge turns away under-18s by stated age or birthday', () => {
+  const today = '2026-09-21';
+  assert.strictEqual(C.MIN_AGE, 18);
+  assert.strictEqual(C.isUnderAge({ age: 17 }, today), true);
+  assert.strictEqual(C.isUnderAge({ age: '17' }, today), true);
+  assert.strictEqual(C.isUnderAge({ age: 18 }, today), false);
+  assert.strictEqual(C.isUnderAge({ age: 30, birthday: '2010-01-01' }, today), true);   // birthday wins when younger
+  assert.strictEqual(C.isUnderAge({ birthday: '2008-09-21' }, today), false);
+  assert.strictEqual(C.isUnderAge({}, today), false);           // blank is not a block
+  assert.strictEqual(C.isUnderAge({ age: '' }, today), false);
+});
+
 // ── display labels ─────────────────────────────────────────────────────────
 
 test('every timing has a client-facing label', () => {
