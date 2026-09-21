@@ -1062,6 +1062,22 @@ async function coachPost(path, body) {
   }
 }
 
+/* Chat ids are made on the phone (plan 5.4), so a retry can never save a
+   message twice. They are unique across every client's chats, so they use
+   the phone's own random UUID where it has one. */
+function chatId() {
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return BeastCore.newId() + Math.random().toString(36).slice(2, 10);
+}
+
+// One conversation until the client starts a new chat or deletes their chats.
+// The first message of the new one names the chat it replaced, so the server
+// marks that one cleared (and only that one).
+function newConversation() {
+  state.coachPrevConversation = state.coachConversation || null;
+  state.coachConversation = chatId();
+}
+
 function coachFailure(data) { return data.status ? (data.error || COACH_NO_ANSWER) : COACH_OFFLINE; }
 
 /* Consents (learning plan D9). The server's record is the one that counts:
@@ -1136,7 +1152,9 @@ async function askCoach(preset) {
   var text = (preset || (box && box.value) || '').trim();
   if (!text || coachBusy || !coachAvailable() || !consentGiven(1)) return;
 
-  state.coachLog.push({ role: 'user', content: text });
+  if (!state.coachConversation) newConversation();
+  var messageId = chatId(), replyId = chatId();
+  state.coachLog.push({ role: 'user', content: text, id: messageId });
   if (box) box.value = '';
   coachBusy = true;
   coachError = '';
@@ -1144,6 +1162,9 @@ async function askCoach(preset) {
   render();
 
   var data = await coachPost('/coach', {
+    conversationId: state.coachConversation, messageId: messageId, replyId: replyId,
+    previousConversationId: state.coachPrevConversation || undefined,
+    localDate: BeastCore.todayLocal(),
     messages: state.coachLog.slice(-20),
     state: coachState()
   });
@@ -1153,7 +1174,8 @@ async function askCoach(preset) {
     state.coachLog.pop();
     applyCoachStatus({ open: false, message: data.reply });
   } else if (data.reply) {
-    state.coachLog.push({ role: 'assistant', content: data.reply });
+    state.coachLog.push({ role: 'assistant', content: data.reply, id: replyId });
+    state.coachPrevConversation = null;
     state.coachUsage = data.usage || null;
   } else if (data.consent === false) {
     state.coachLog.pop();
@@ -1182,6 +1204,7 @@ function openNewChat() {
 
 function startNewChat() {
   state.coachLog = [];
+  newConversation();
   coachError = '';
   save();
   closeSheet();
@@ -1203,9 +1226,19 @@ async function deleteMyChats() {
   var btn = document.getElementById('del-go');
   if (!btn || btn.disabled || !coachAvailable()) return;
   btn.disabled = true;
+  // A question still waiting for its answer: give it up to 15 seconds to land,
+  // so the delete takes it too. The server refuses to save a reply into a
+  // deleted chat either way; this only keeps the phone's copy in step.
+  for (var waited = 0; coachBusy && waited < 15000; waited += 200) {
+    await new Promise(function (r) { setTimeout(r, 200); });
+  }
+  // Cancelled while waiting: do nothing.
+  if (document.getElementById('del-go') !== btn) return;
   var data = await coachPost('/chats/delete', {});
   if (data.ok) {
     state.coachLog = [];
+    // A fresh thread: nothing more is ever saved into a deleted one.
+    newConversation();
     coachError = '';
     save();
     closeSheet();
