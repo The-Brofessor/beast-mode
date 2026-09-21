@@ -76,18 +76,25 @@ var BeastCore = (function () {
     return m + ':' + pad2(s);
   }
 
+  // Every weight in Beast Mode is in pounds.
+  var WEIGHT_UNIT = 'lb';
+
   // "3 x 12 @ 135" / "20 min" / "1.5 in 12:30" / "" when nothing is set.
-  function formatTarget(detail) {
+  // With `display`, the client-facing form: "3 × 12 at 135 lb". The plain form
+  // is what the dashboard and the coach already read, so it does not change.
+  function formatTarget(detail, display) {
     if (!detail || !detail.target) return '';
     var t = detail.target;
+    var x = display ? ' × ' : ' x ';
     switch (detail.metric) {
       case 'reps':             return t.reps ? t.reps + ' reps' : '';
-      case 'sets_reps':        return (t.sets && t.reps) ? t.sets + ' x ' + t.reps : '';
+      case 'sets_reps':        return (t.sets && t.reps) ? t.sets + x + t.reps : '';
       case 'sets_reps_weight':
         if (!t.sets || !t.reps) return '';
-        return t.sets + ' x ' + t.reps + (t.weight ? ' @ ' + t.weight : '');
+        if (!t.weight) return t.sets + x + t.reps;
+        return t.sets + x + t.reps + (display ? ' at ' + t.weight + ' ' + WEIGHT_UNIT : ' @ ' + t.weight);
       case 'duration':         return clock(t);
-      case 'sets_duration':    return (t.sets && clock(t)) ? t.sets + ' x ' + clock(t) : '';
+      case 'sets_duration':    return (t.sets && clock(t)) ? t.sets + x + clock(t) : '';
       case 'distance_time':
         if (!t.distance) return '';
         return clock(t) ? t.distance + ' in ' + clock(t) : String(t.distance);
@@ -269,6 +276,18 @@ var BeastCore = (function () {
     if (usesMetric(it.kind)) return formatTarget(d);
     var first = detailFields(it.kind)[0];
     return (first && d[first.key]) ? String(d[first.key]) : '';
+  }
+
+  // The line a client reads under an item: how much, then when. Never the
+  // item kind. "3 × 10 at 35 lb" / "5g, in the morning" / "Before bed".
+  function itemSummary(it) {
+    var d = (it && it.detail) || {};
+    var parts = [];
+    var amount = usesMetric(it.kind) ? formatTarget(d, true) : detailLine(it);
+    if (amount) parts.push(amount);
+    if (d.timing) parts.push(timingLabel(d.timing));
+    var s = parts.join(', ');
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   // ── Ids ───────────────────────────────────────────────────────────────────
@@ -1152,6 +1171,7 @@ var BeastCore = (function () {
     PAYLOAD_VERSION: PAYLOAD_VERSION,
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
     TIMING_LABELS: TIMING_LABELS, timingLabel: timingLabel,
+    WEIGHT_UNIT: WEIGHT_UNIT, itemSummary: itemSummary,
     detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,

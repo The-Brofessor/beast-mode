@@ -7,18 +7,32 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Beast Mode">
 <title>Beast Mode</title>
 <script>
 /* Theme and accent before first paint, so a light-mode phone never flashes
-   dark. Per phone, not per plan: bm2.prefs is never sent anywhere. */
+   dark. Per phone, not per plan: bm2.prefs is never sent anywhere.
+
+   "Auto" is resolved here into an explicit data-theme, so the stylesheet
+   defines the light theme exactly once. applyPrefs() repeats this when the
+   phone switches between light and dark while the app is open.
+
+   iOS reads the status-bar style once, when a home-screen app launches, so
+   it is set here, before that read: dark text on the light theme, light
+   text on the dark one. */
 (function () {
   var p = {};
   try { p = JSON.parse(localStorage.getItem("bm2.prefs") || "{}") || {}; } catch (e) {}
   var r = document.documentElement;
-  if (p.theme === "light" || p.theme === "dark") r.setAttribute("data-theme", p.theme);
+  var light = p.theme === "light" || (p.theme !== "dark" &&
+    !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches));
+  r.setAttribute("data-theme", light ? "light" : "dark");
   if (p.accent === "ember" || p.accent === "arctic") r.setAttribute("data-accent", p.accent);
+  var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (bar) bar.setAttribute("content", light ? "default" : "black");
+  var tc = document.querySelector('meta[name="theme-color"]');
+  if (tc) tc.setAttribute("content", light ? "#F4F5F7" : "#0B0D10");
 })();
 </script>
 <style>
@@ -36,25 +50,19 @@
    Every color is a token defined per theme. Nothing below names a hex value
    except the accents, so the light theme cannot drift from the dark one.
    Theme and accent are per phone, set in Profile, stored in bm2.prefs. */
+/* Every text color passes 4.5:1 (WCAG AA) on --bg, --surface and --surface2
+   in its theme. --text3 is the faintest and still clears it: check any
+   change against all three surfaces, not just one. */
 :root {
   --bg: #0B0D10; --surface: #15181D; --surface2: #1E2228; --line: #262B33;
-  --text: #F4F5F7; --text2: #A0A8B4; --text3: #6B7380;
+  --text: #F4F5F7; --text2: #A0A8B4; --text3: #838B97;
   --warn: #F5A524; --bad: #E5484D; --bad-soft: #E5484D26;
   --scrim: rgba(0,0,0,.6); --shadow: none;
   color-scheme: dark;
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #F4F5F7; --surface: #FFFFFF; --surface2: #EEF0F3; --line: #E2E5EA;
-    --text: #0E1116; --text2: #525B67; --text3: #8A93A0;
-    --warn: #B45309; --bad: #D93036; --bad-soft: #D930361A;
-    --scrim: rgba(14,17,22,.4); --shadow: 0 1px 2px rgba(14,17,22,.06), 0 1px 1px rgba(14,17,22,.04);
-    color-scheme: light;
-  }
-}
 :root[data-theme="light"] {
   --bg: #F4F5F7; --surface: #FFFFFF; --surface2: #EEF0F3; --line: #E2E5EA;
-  --text: #0E1116; --text2: #525B67; --text3: #8A93A0;
+  --text: #0E1116; --text2: #525B67; --text3: #646C79;
   --warn: #B45309; --bad: #D93036; --bad-soft: #D930361A;
   --scrim: rgba(14,17,22,.4); --shadow: 0 1px 2px rgba(14,17,22,.06), 0 1px 1px rgba(14,17,22,.04);
   color-scheme: light;
@@ -62,20 +70,16 @@
 
 /* Accent: --acc fills, --on-acc is text on a fill, --acc-ink is accent as text,
    --acc-line is accent as a thin graphic. Ink and line darken in light mode,
-   where the bright fills would all but vanish against white. */
+   where the bright fills would all but vanish against white. All three
+   accents take dark text: white on Ember is only 3.1:1. */
 :root, :root[data-accent="volt"] { --acc: #C8F03C; --on-acc: #0B0D10; --acc-ink: #C8F03C; --acc-soft: #C8F03C1F; }
-:root[data-accent="ember"]  { --acc: #FF5A1F; --on-acc: #FFFFFF; --acc-ink: #FF6A33; --acc-soft: #FF5A1F24; }
+:root[data-accent="ember"]  { --acc: #FF5A1F; --on-acc: #0B0D10; --acc-ink: #FF6A33; --acc-soft: #FF5A1F24; }
 :root[data-accent="arctic"] { --acc: #3DD6F5; --on-acc: #0B0D10; --acc-ink: #3DD6F5; --acc-soft: #3DD6F524; }
 :root { --acc-line: var(--acc); }
 :root[data-theme="light"] { --acc-line: var(--acc-ink); }
 :root[data-theme="light"], :root[data-theme="light"][data-accent="volt"] { --acc-ink: #4F6B00; }
 :root[data-theme="light"][data-accent="ember"]  { --acc-ink: #C2410C; }
 :root[data-theme="light"][data-accent="arctic"] { --acc-ink: #0E7490; }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) { --acc-line: var(--acc-ink); --acc-ink: #4F6B00; }
-  :root:not([data-theme="dark"])[data-accent="ember"]  { --acc-ink: #C2410C; }
-  :root:not([data-theme="dark"])[data-accent="arctic"] { --acc-ink: #0E7490; }
-}
 
 /* ── base ────────────────────────────────────────────────────────────────── */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -101,7 +105,8 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 /* ── shell ─────────────────────────────────────────────────────────────── */
 .wrap { max-width: 520px; margin: 0 auto; padding: 0 16px 104px; }
 header { background: var(--bg); }
-header .wrap { padding-top: 18px; padding-bottom: 14px; }
+/* The top inset keeps the header clear of the notch on a home-screen iPhone. */
+header .wrap { padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: 14px; }
 .hrow { display: flex; align-items: center; gap: 12px; }
 .badge { width: 44px; height: 44px; flex: 0 0 auto; display: block; }
 .hwho { flex: 1; min-width: 0; }
@@ -111,6 +116,7 @@ header .wrap { padding-top: 18px; padding-bottom: 14px; }
 /* ── tabs ──────────────────────────────────────────────────────────────── */
 nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+  background: var(--bg);   /* Safari before 16.2 has no color-mix */
   background: color-mix(in srgb, var(--bg) 90%, transparent);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
@@ -178,9 +184,8 @@ nav button.active svg { color: var(--acc-ink); }
 
 .seg { display: flex; background: var(--surface2); border-radius: 10px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; padding: 8px 6px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--text2); }
-.seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
-:root:not([data-theme="light"]) .seg button.on { background: var(--line); }
-@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .seg button.on { background: var(--surface); } }
+.seg button.on { background: var(--line); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+:root[data-theme="light"] .seg button.on { background: var(--surface); }
 .swatches { display: flex; gap: 12px; }
 .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); flex: 1; padding: 8px 0; border-radius: 12px; border: 2px solid transparent; }
 .swatch i { width: 30px; height: 30px; border-radius: 50%; display: block; }
@@ -211,7 +216,8 @@ nav button.active svg { color: var(--acc-ink); }
 .iright.soon { color: var(--warn); }
 .iright.stamp { font-size: 12px; color: var(--acc-ink); margin-top: 4px; }
 .iright.late { font-size: 12px; color: var(--warn); margin-top: 4px; }
-.logbtn { font-size: 13px; font-weight: 600; color: var(--acc-ink); margin: -4px 0 12px 54px; padding: 4px 0; display: inline-block; }
+/* Tap targets are at least 44px tall, the size a thumb can hit reliably. */
+.logbtn { font-size: 13px; font-weight: 600; color: var(--acc-ink); margin: -12px 0 2px 54px; min-height: 44px; padding: 0 12px 0 0; display: inline-flex; align-items: center; }
 .values { padding: 0 14px 16px 54px; }
 .values .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 8px; }
 .values label { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: .04em; text-transform: uppercase; }
@@ -251,14 +257,21 @@ nav button.active svg { color: var(--acc-ink); }
 .weekgrid th { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 10px 4px; font-weight: 600; }
 .weekgrid th.nm, .weekgrid td.nm { text-align: left; max-width: 240px; padding-left: 14px; }
 .weekgrid td { padding: 6px 4px; border-top: 1px solid var(--line); text-align: center; }
+/* A 44px hit area around a 30px circle: easy to tap, same look. */
 .weekgrid .cell {
-  width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); color: transparent;
+  width: 44px; height: 44px; position: relative; color: transparent;
   margin: 0 auto; display: grid; place-items: center; cursor: pointer;
 }
-.weekgrid .cell svg { width: 14px; height: 14px; stroke-width: 3.2; }
-.weekgrid .cell.done { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
-.weekgrid .cell.off { border: 0; cursor: default; }
-.weekgrid .cell.future { border-style: dashed; cursor: default; opacity: .5; }
+.weekgrid .cell::before {
+  content: ""; position: absolute; inset: 7px; border-radius: 50%; border: 2px solid var(--line);
+}
+.weekgrid .cell svg { width: 14px; height: 14px; stroke-width: 3.2; position: relative; }
+.weekgrid .cell.done { color: var(--on-acc); }
+.weekgrid .cell.done::before { background: var(--acc); border-color: var(--acc); }
+.weekgrid .cell.off { cursor: default; }
+.weekgrid .cell.off::before { border: 0; }
+.weekgrid .cell.future { cursor: default; opacity: .5; }
+.weekgrid .cell.future::before { border-style: dashed; }
 
 /* ── goals ─────────────────────────────────────────────────────────────── */
 .goal { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; cursor: pointer; width: 100%; text-align: left; }
@@ -340,7 +353,8 @@ nav button.active svg { color: var(--acc-ink); }
 }
 .coachbar {
   position: fixed; left: 0; right: 0; z-index: 25;
-  bottom: calc(58px + env(safe-area-inset-bottom));
+  bottom: var(--nav-h, 62px);   /* measured from the tab bar after each render */
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
 }
@@ -348,7 +362,7 @@ nav button.active svg { color: var(--acc-ink); }
 .coachbar textarea { flex: 1; resize: none; max-height: 120px; border-radius: 22px; padding: 11px 16px; border: 1px solid var(--line); background: var(--surface); }
 .coachbar .send { width: 44px; height: 44px; border-radius: 50%; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; flex: 0 0 auto; }
 .coachbar .send:disabled { opacity: .5; }
-.linkbtn { font-size: 13px; color: var(--text3); padding: 6px 10px; }
+.linkbtn { font-size: 13px; color: var(--text3); padding: 0 12px; min-height: 44px; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px);
@@ -449,15 +463,21 @@ function setPref(k, v) {
   applyPrefs();
   render();
 }
+// Mirrors the head script: "auto" becomes an explicit data-theme, so the
+// stylesheet only ever sees light or dark.
 function applyPrefs() {
   var p = readPrefs(), r = document.documentElement;
-  if (p.theme === 'light' || p.theme === 'dark') r.setAttribute('data-theme', p.theme);
-  else r.removeAttribute('data-theme');
+  var light = p.theme === 'light' || (p.theme !== 'dark' &&
+    !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches));
+  r.setAttribute('data-theme', light ? 'light' : 'dark');
   if (p.accent === 'ember' || p.accent === 'arctic') r.setAttribute('data-accent', p.accent);
   else r.removeAttribute('data-accent');
-  // The phone's status bar follows the page background.
+  // Browser chrome follows the page. The iOS status-bar style only takes
+  // effect at the next launch of a home-screen app, which is fine.
   var meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', getComputedStyle(r).getPropertyValue('--bg').trim() || '#0B0D10');
+  var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (bar) bar.setAttribute('content', light ? 'default' : 'black');
 }
 if (window.matchMedia) {
   var themeMq = window.matchMedia('(prefers-color-scheme: light)');
@@ -706,15 +726,6 @@ function toggleItem(id, date) {
   render();
 }
 
-function setValue(id, date, field, raw) {
-  var e = BeastCore.entryFor(state.log, id, date);
-  if (!e) return;
-  e.values = e.values || {};
-  if (raw === '') delete e.values[field];
-  else e.values[field] = isNaN(Number(raw)) ? raw : Number(raw);
-  save();
-}
-
 function toggleValues(id) { openValues[id] = !openValues[id]; render(); }
 
 function toggleGoal(id) {
@@ -736,17 +747,44 @@ function saveProfile() {
   render();
 }
 
-// Log fields open pre-filled with the target, so "did it as planned" is one
-// tap on Save. Nothing is written until Save; Cancel leaves the entry alone.
+// Nothing is written until the client chooses: "Did it as planned" records
+// the target and marks the entry, Save records what they typed, Cancel leaves
+// the entry alone. asPlanned sits beside values, not inside them, so nothing
+// that reads values mistakes it for a metric.
+function saveAsPlanned(id, date) {
+  var it = findItem(id), e = BeastCore.entryFor(state.log, id, date);
+  if (!it || !e) return;
+  var target = (it.detail && it.detail.target) || {};
+  e.values = {};
+  BeastCore.targetFields(it.detail.metric).forEach(function (f) {
+    if (target[f.key] != null) e.values[f.key] = target[f.key];
+  });
+  e.asPlanned = true;
+  openValues[id] = false;
+  save();
+  toast('Logged as planned');
+  render();
+}
+
 function saveValues(id, date) {
   var e = BeastCore.entryFor(state.log, id, date);
   if (!e) return;
-  e.values = e.values || {};
-  document.querySelectorAll('[data-val="' + id + '"]').forEach(function (inp) {
+  // Matched by dataset rather than a selector built from the id, so an id
+  // can never break the query.
+  var inputs = Array.prototype.filter.call(document.querySelectorAll('[data-val]'),
+    function (inp) { return inp.dataset.val === id; });
+  var typed = {};
+  inputs.forEach(function (inp) {
     var raw = inp.value.trim();
-    if (raw === '') delete e.values[inp.dataset.key];
-    else e.values[inp.dataset.key] = isNaN(Number(raw)) ? raw : Number(raw);
+    if (raw !== '') typed[inp.dataset.key] = isNaN(Number(raw)) ? raw : Number(raw);
   });
+  if (!Object.keys(typed).length) {
+    var err = document.getElementById('err-' + id);
+    if (err) err.textContent = 'Enter what you did, or tap Did it as planned.';
+    return;
+  }
+  e.values = typed;
+  delete e.asPlanned;
   openValues[id] = false;
   save();
   toast('Saved');
@@ -788,11 +826,14 @@ function openRanks() {
       rule('<span class="key"></span> Key items', 'Items with a dot are the ones I picked as most important. ' +
         'Tick off every key item on the day and it is a perfect day, worth ' + P.perfectDay +
         ' bonus points for each key item.') +
-      rule('Streak', 'Your streak is perfect days in a row. Miss a key item and it starts again at zero. ' +
-        'Ticking it off the next day still earns points, but it does not save the streak.') +
+      rule('Streak', 'Your streak is perfect days in a row. Today counts once it is over. ' +
+        'Miss a key item and it starts again at zero. Ticking it off the next day still earns points, ' +
+        'but it does not save the streak. A day with no key items keeps your streak where it is.') +
+      // Rank is ratcheted in BeastCore.levelFor; points are not (removing an
+      // item from the plan removes its points), so only the rank is promised.
       rule('Ranks', 'Your points add up to your rank. ' + tiers[1].rank + ' takes about ' + weeks[1] +
         ' perfect week, and ' + tiers[tiers.length - 1].rank + ' about ' + weeks[weeks.length - 1] +
-        '. Points never go down, and you never drop a rank.') +
+        '. Once you reach a rank, you keep it.') +
     '</div>' +
     '<button class="btn sec" onclick="closeSheet()">Close</button>');
 }
@@ -1218,7 +1259,7 @@ function reminderNudge() {
   var list = times.length > 1 ? times.slice(0, -1).join(', ') + ' and ' + times[times.length - 1] : times[0];
   var ios = isIOS() && !isStandalone();
   return '<div class="prompt">' + icon('bell') + '<div class="txt"><b>Want a nudge?</b>' +
-    'We’ll ping you at ' + esc(list) + ', only if something’s still open.' +
+    'I’ll ping you at ' + esc(list) + ', only if something’s still open.' +
     (ios ? ' On iPhone, add Beast Mode to your home screen first.' : '') +
     '<div class="acts">' + (ios ? '' : '<button class="pbtn" onclick="enableReminders()">Turn on</button>') +
     '<button class="gbtn" onclick="dismissNudge()">' + (ios ? 'Got it' : 'Not now') + '</button></div></div></div>';
@@ -1306,6 +1347,11 @@ function render() {
     (tab === 'today' ? todayTab() : tab === 'week' ? weekTab() :
      tab === 'coach' ? coachTab() : profileTab()) +
     '</div>' + navBar();
+
+  // The coach input sits on top of the tab bar, whose height depends on the
+  // font and the phone's bottom inset, so it is measured rather than assumed.
+  var nav = root.querySelector('nav');
+  if (nav) document.documentElement.style.setProperty('--nav-h', nav.offsetHeight + 'px');
 }
 
 function setupScreen() {
@@ -1432,21 +1478,10 @@ function itemList(date) {
     '<u>How scoring works</u></button>' : '');
 }
 
-// What a client reads under an item: how much and when, never the item kind.
-// "3 x 12 @ 30" from the core becomes "3 × 12 at 30 lb".
+// What a client reads under an item. The wording lives in BeastCore; the
+// fallback covers a phone briefly paired with a cached older core.
 function itemMeta(it) {
-  var parts = [];
-  var line = BeastCore.detailLine(it);
-  if (line) {
-    parts.push(BeastCore.usesMetric(it.kind)
-      ? line.replace(/ x /g, ' × ').replace(/ @ ([\d.]+)$/, ' at $1 lb')
-      : line);
-  }
-  var t = it.detail && it.detail.timing;
-  // Guarded: a phone can briefly pair this page with a cached older core.
-  if (t) parts.push(BeastCore.timingLabel ? BeastCore.timingLabel(t) : t);
-  var s = parts.join(', ');
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return BeastCore.itemSummary ? BeastCore.itemSummary(it) : BeastCore.detailLine(it);
 }
 
 function clockOf(iso) {
@@ -1477,19 +1512,34 @@ function itemCard(it, date) {
   var values = '';
   if (done && fields.length) {
     var logged = e.values && Object.keys(e.values).length;
+    var planLine = BeastCore.formatTarget(it.detail, true);
+    var args = '\'' + attr(it.id) + '\',\'' + attr(date) + '\'';
     if (!openValues[it.id]) {
       values = '<button class="logbtn" onclick="toggleValues(\'' + attr(it.id) + '\')">' +
-        (logged ? 'Edit what you did' : 'Log what you did') + '</button>';
+        (e.asPlanned ? 'Did it as planned. Change' : logged ? 'Edit what you did' : 'Log what you did') +
+        '</button>';
     } else {
-      var target = (it.detail && it.detail.target) || {};
-      values = '<div class="values"><div class="fields">' + fields.map(function (f) {
-        var v = (e.values && e.values[f.key] != null) ? e.values[f.key]
-              : (target[f.key] != null ? target[f.key] : '');
-        return '<label>' + esc(f.label) + '<input type="number" inputmode="decimal" value="' + attr(v) + '" ' +
-          'data-val="' + attr(it.id) + '" data-key="' + attr(f.key) + '"></label>';
-      }).join('') + '</div><div class="acts">' +
-        '<button class="pbtn" onclick="saveValues(\'' + attr(it.id) + '\',\'' + attr(date) + '\')">Save</button>' +
-        '<button class="gbtn" onclick="toggleValues(\'' + attr(it.id) + '\')">Cancel</button></div></div>';
+      // Fields start empty: a number in a box must be something the client
+      // did, never a guess. "Did it as planned" is the one-tap path and is
+      // recorded as such, so planned and edited stay distinguishable.
+      values = '<div class="values">' +
+        (planLine
+          ? '<div class="imeta" style="margin-bottom:10px">Plan: ' + esc(planLine) + '</div>' +
+            '<button class="pbtn" style="width:100%;min-height:44px;margin-bottom:14px" ' +
+              'onclick="saveAsPlanned(' + args + ')">Did it as planned</button>' +
+            '<div class="imeta" style="margin-bottom:8px">Or enter what you did</div>'
+          : '') +
+        '<div class="fields">' + fields.map(function (f) {
+          var v = (e.values && e.values[f.key] != null && !e.asPlanned) ? e.values[f.key] : '';
+          return '<label>' + esc(f.label) + '<input type="number" inputmode="decimal" value="' + attr(v) + '" ' +
+            'data-val="' + attr(it.id) + '" data-key="' + attr(f.key) + '"></label>';
+        }).join('') + '</div>' +
+        '<div class="field-err imeta" id="err-' + attr(it.id) + '" style="color:var(--bad);margin-top:6px"></div>' +
+        '<div class="acts">' +
+          '<button class="' + (planLine ? 'btn sec' : 'pbtn') + '" style="margin:0;flex:1;min-height:44px;padding:0 16px" ' +
+            'onclick="saveValues(' + args + ')">Save</button>' +
+          '<button class="gbtn" style="min-height:44px" onclick="toggleValues(\'' + attr(it.id) + '\')">Cancel</button>' +
+        '</div></div>';
     }
   }
 

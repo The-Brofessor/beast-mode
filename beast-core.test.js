@@ -389,6 +389,27 @@ test('every timing has a client-facing label', () => {
   });
 });
 
+test('itemSummary says how much and when, never the kind', () => {
+  const [bench, creatine, mag, plank, walk] = C.normalizeItems([
+    { name: 'Bench', kind: 'exercise', detail: { metric: 'sets_reps_weight', target: { sets: 3, reps: 12, weight: 135 } } },
+    { name: 'Creatine', kind: 'supplement', detail: { dosage: '5g', timing: 'morning' } },
+    { name: 'Magnesium', kind: 'supplement', detail: { timing: 'before-bed' } },
+    { name: 'Plank', kind: 'exercise', detail: { metric: 'sets_duration', target: { sets: 3, seconds: 30 } } },
+    { name: 'Walk', kind: 'habit' }
+  ]);
+  assert.strictEqual(C.itemSummary(bench), '3 × 12 at 135 lb');
+  assert.strictEqual(C.itemSummary(creatine), '5g, in the morning');
+  assert.strictEqual(C.itemSummary(mag), 'Before bed');
+  assert.strictEqual(C.itemSummary(plank), '3 × 30 sec');
+  assert.strictEqual(C.itemSummary(walk), '');
+});
+
+test('the plain target the dashboard reads is unchanged', () => {
+  const d = { metric: 'sets_reps_weight', target: { sets: 3, reps: 12, weight: 135 } };
+  assert.strictEqual(C.formatTarget(d), '3 x 12 @ 135');
+  assert.strictEqual(C.formatTarget({ metric: 'sets_reps_weight', target: { sets: 3, reps: 12 } }), '3 x 12');
+});
+
 test('an unknown timing still reads as words', () => {
   assert.strictEqual(C.timingLabel('post-run'), 'Post run');
   assert.strictEqual(C.timingLabel(''), '');
