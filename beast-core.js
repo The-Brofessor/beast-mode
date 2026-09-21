@@ -1,7 +1,9 @@
 /* ==========================================================================
    Beast Mode Core
    --------------------------------------------------------------------------
-   The shared data contract for trainer-dashboard.html and index.html.
+   The shared data contract for the client app (index.html, here) and the
+   trainer dashboard (served by the private brofessor-coach worker at
+   dash.thebrofessor.coach, which loads this same file from the app).
 
    Classic script, not an ES module: it publishes one global, window.BeastCore,
    so the 100+ inline onclick handlers in both apps keep resolving against
