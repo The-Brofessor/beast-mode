@@ -4,7 +4,7 @@
    revalidation, so without a new cache name an installed app can sit on old
    files well past a push. The deploy checklist in CLAUDE.md names this step. */
 
-var CACHE = 'beast-mode-v2.7.0-d2';
+var CACHE = 'beast-mode-v2.7.0-d3';
 
 // Everything the checklist needs to open with no signal.
 var SHELL = [
@@ -134,7 +134,12 @@ self.addEventListener('push', function (e) {
   e.waitUntil(readMirror().then(function (m) {
     var now = nowLocal();
     var title = 'Beast Mode';
-    var body = 'You have items due.';
+
+    // Every push must show a notification. Browsers treat a silent push as
+    // abuse: Safari can revoke the permission, Chrome shows its own generic
+    // notice. So when this phone's copy of today's list is out of date or has
+    // nothing for this slot, it still says something true and useful.
+    var body = 'Open Beast Mode to see what’s left today.';
 
     if (m && Array.isArray(m.due)) {
       // The page writes one row per slot for today. Pick the slot closest at
@@ -145,7 +150,6 @@ self.addEventListener('push', function (e) {
         if (row.slot <= now.hhmm && (!best || row.slot > best.slot)) best = row;
       });
       if (best && best.text) body = best.text;
-      else if (m.stale) return;   // the mirror predates today; say nothing
     }
 
     return self.registration.showNotification(title, {
