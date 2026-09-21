@@ -366,6 +366,34 @@ test('level ratchets so a plan change cannot demote a client', () => {
   assert.strictEqual(r.rank, 'Broton Beam');
 });
 
+// ── the app page ───────────────────────────────────────────────────────────
+
+test('every inline script in index.html parses', () => {
+  // One stray apostrophe in a single-quoted string stops the whole app from
+  // starting, and nothing else in this suite loads the page.
+  const html = require('fs').readFileSync(require('path').join(__dirname, 'index.html'), 'utf8');
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  assert.ok(scripts.length >= 2, 'expected the theme script and the app script');
+  scripts.forEach((code, i) => {
+    assert.doesNotThrow(() => new Function(code), 'inline script ' + i + ' does not parse');
+  });
+});
+
+// ── display labels ─────────────────────────────────────────────────────────
+
+test('every timing has a client-facing label', () => {
+  // A new timing added without a label would fall back to machine wording.
+  C.TIMINGS.forEach(t => {
+    assert.ok(C.TIMING_LABELS[t], 'no label for timing ' + t);
+    assert.strictEqual(C.timingLabel(t), C.TIMING_LABELS[t]);
+  });
+});
+
+test('an unknown timing still reads as words', () => {
+  assert.strictEqual(C.timingLabel('post-run'), 'Post run');
+  assert.strictEqual(C.timingLabel(''), '');
+});
+
 // ── codec ──────────────────────────────────────────────────────────────────
 
 test('payload round trips through the base64 fallback', () => {

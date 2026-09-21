@@ -4,7 +4,7 @@
    revalidation, so without a new cache name an installed app can sit on old
    files well past a push. The deploy checklist in CLAUDE.md names this step. */
 
-var CACHE = 'beast-mode-v2.7.0';
+var CACHE = 'beast-mode-v2.7.0-d1';
 
 // Everything the checklist needs to open with no signal.
 var SHELL = [
@@ -13,6 +13,9 @@ var SHELL = [
   './beast-core.js',
   './lz-string.min.js',
   './manifest.webmanifest',
+  './fonts/inter-latin.woff2',
+  './fonts/barlow-condensed-600.woff2',
+  './fonts/barlow-condensed-700.woff2',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'

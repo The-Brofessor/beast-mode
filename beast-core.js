@@ -104,6 +104,26 @@ var BeastCore = (function () {
     'evening', 'before-bed', 'with-meals', 'as-needed'
   ];
 
+  // What a client reads for each timing, after the amount: "5 g, <label>".
+  // Display only. The names above are the contract and never change here.
+  var TIMING_LABELS = {
+    'morning':       'in the morning',
+    'pre-workout':   'before your workout',
+    'intra-workout': 'during your workout',
+    'post-workout':  'after your workout',
+    'evening':       'in the evening',
+    'before-bed':    'before bed',
+    'with-meals':    'with a meal',
+    'as-needed':     'when you need it'
+  };
+
+  // A timing with no label still reads sensibly: 'pre-workout' -> 'Pre workout'.
+  function timingLabel(t) {
+    if (TIMING_LABELS[t]) return TIMING_LABELS[t];
+    var s = String(t || '').replace(/-/g, ' ');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
   // Monday-aligned. DAYS[0] is Monday so weekday maths matches getWeekDates().
   var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -721,13 +741,13 @@ var BeastCore = (function () {
           json = b64decode(raw);
         }
       } catch (e) {
-        return { ok: false, error: 'That link is damaged. Ask Chris to send a new one.' };
+        return { ok: false, error: 'That link is damaged. Ask for a new one.' };
       }
-      if (!json) return { ok: false, error: 'That link is damaged. Ask Chris to send a new one.' };
+      if (!json) return { ok: false, error: 'That link is damaged. Ask for a new one.' };
 
       var data;
       try { data = JSON.parse(json); }
-      catch (e) { return { ok: false, error: 'That link is damaged. Ask Chris to send a new one.' }; }
+      catch (e) { return { ok: false, error: 'That link is damaged. Ask for a new one.' }; }
 
       if (Number(data.v) > PAYLOAD_VERSION) {
         return { ok: false, error: 'That link needs a newer version of Beast Mode. Reload the app and try again.' };
@@ -952,7 +972,7 @@ var BeastCore = (function () {
       { key: 'foodsAvoided', label: 'Foods you will not eat', type: 'textarea' },
       { key: 'supplements', label: 'Supplements you take now', type: 'textarea', hint: 'Name and dose' },
       { key: 'ancillaries', label: 'Anything prescribed', type: 'textarea',
-        hint: 'GLP-1, TRT, thyroid, blood pressure. Dose and schedule. This stays between you and Chris.' }
+        hint: 'GLP-1, TRT, thyroid, blood pressure. Dose and schedule. This stays between you and me.' }
     ] },
     { title: 'Goals', fields: [
       { key: 'shortGoals', label: 'Next 4 weeks', type: 'textarea', hint: 'One per line, up to three' },
@@ -1131,6 +1151,7 @@ var BeastCore = (function () {
     VERSION: VERSION,
     PAYLOAD_VERSION: PAYLOAD_VERSION,
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
+    TIMING_LABELS: TIMING_LABELS, timingLabel: timingLabel,
     detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,

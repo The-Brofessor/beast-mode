@@ -1,7 +1,7 @@
 {
   "name": "Beast Mode",
   "short_name": "Beast Mode",
-  "description": "Your daily checklist from Chris.",
+  "description": "Your daily checklist from The Brofessor.",
   "id": "/beast-mode/",
   "start_url": "./index.html",
   "scope": "./",
