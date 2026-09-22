@@ -286,6 +286,28 @@ nav button.active svg { color: var(--acc-ink); }
 .stats-list b { display: block; font: 700 26px/1 "Barlow Condensed", Inter, sans-serif; font-variant-numeric: tabular-nums; }
 .stats-list span { font-size: 12px; color: var(--text2); }
 
+/* ── the welcome screen ────────────────────────────────────────────────── */
+.welcome { padding-top: calc(28px + env(safe-area-inset-top)); padding-bottom: 40px; }
+.wtitle { text-align: center; font: 700 34px/1.05 "Barlow Condensed", Inter, sans-serif; letter-spacing: -.01em; }
+.wtitle span { color: var(--acc-ink); }
+.wtag { text-align: center; font-weight: 600; margin: 4px 0 16px; }
+.wintro { color: var(--text2); font-size: 14px; margin: 0 0 8px; }
+.wfeat { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; }
+.wfeat + .wfeat { border-top: 1px solid var(--line); }
+.wfeat svg.i { color: var(--acc-ink); margin-top: 2px; }
+.wfeat b { display: block; font-size: 15px; }
+.wfeat span { font-size: 13px; color: var(--text2); }
+.wsub { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text3); margin: 22px 0 8px; }
+.wqs { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+.wq { padding: 13px 14px; }
+.wq + .wq { border-top: 1px solid var(--line); }
+.wq b { display: block; font-size: 14px; font-weight: 600; margin-bottom: 1px; }
+.wq p { margin: 0 0 10px; font-size: 13px; color: var(--text2); line-height: 1.4; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pair button { padding: 11px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); font-size: 14px; font-weight: 600; min-height: 44px; }
+.pair button.picked { background: var(--acc); color: var(--on-acc); border-color: var(--acc); }
+.btn.wait { opacity: .45; }
+
 /* ── sheets ────────────────────────────────────────────────────────────── */
 /* A sheet taller than the screen scrolls from its top; margin-top:auto keeps
    short sheets pinned to the bottom without cutting off tall ones. */
@@ -398,7 +420,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.9.0';
+var BUILT_AGAINST = '2.10.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -416,7 +438,9 @@ var ICONS = {
   send:    '<path d="M12 19V5M5 12l7-7 7 7"/>',
   moon:    '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
-  link:    '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>'
+  link:    '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  plan:    '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/>',
+  fire:    '<path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-9-1 2-2 3-3 3 0-3-1-5-3-7-1 4-4 6-4 13a7 7 0 0 0 7 7Z"/>'
 };
 function icon(name, extra) {
   return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"' + (extra || '') + '>' + ICONS[name] + '</svg>';
@@ -533,7 +557,8 @@ function statusBody(sharing) {
   return BeastCore.statusPayload(state, {
     tz: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || '',
     pushId: state.reminders && state.reminders.on ? state.reminders.id : null,
-    sharing: sharing !== false
+    sharing: sharing !== false,
+    nudges: state.nudges === true ? true : state.nudges === false ? false : null
   });
 }
 
@@ -544,28 +569,140 @@ async function sendStatus(finalOff) {
     await fetch(COACH_URL + '/status', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token: state.clientToken, status: statusBody(!finalOff),
-        sharingVersion: BeastCore.CONSENTS[1].version })
+        sharingVersion: BeastCore.WELCOME.version })
     });
   } catch (e) { /* offline: the next change or open sends the current numbers */ }
 }
 
 // The Profile switch. Off sends one final write saying so, then nothing.
 async function setSharing(on) {
-  if (!state.clientToken) return;
-  if (!on && state.sharing === true) { state.sharing = false; save(); await sendStatus(true); }
-  else if (on) { state.sharing = true; save(); await sendStatus(); }
+  if (!state.clientToken || state.sharing === on) return;
+  if (!on) { state.sharing = false; save(); await sendStatus(true); }
+  else { state.sharing = true; save(); await sendStatus(); }
   toast(on ? 'Sharing your progress' : 'Progress kept on this phone');
   render();
 }
 
-function sharingCard() {
-  if (!state.clientToken || state.sharing === undefined) return '';
-  return '<div class="card"><h3>Progress sharing</h3>' +
-    '<p class="imeta">' + (state.sharing
-      ? 'Your streak, points and rank go to your coach every day. Nothing else leaves your phone.'
-      : 'Your numbers stay on this phone. Your coach cannot see your streak, points or rank.') + '</p>' +
-    '<button class="btn ' + (state.sharing ? 'sec' : '') + '" onclick="setSharing(' + (state.sharing ? 'false' : 'true') + ')">' +
-      (state.sharing ? 'Stop sharing' : 'Share my progress') + '</button></div>';
+/* ── the welcome screen (loop brief 3c) ────────────────────────────────── */
+
+// Shown once per wording version, on the first open of a plan that carries a
+// token the consents can be recorded under. A client on an old link with no
+// token at all sees it once a new link arrives.
+function needsWelcome() {
+  return !!(state && (state.clientToken || state.coachToken) && state.welcomeVersion !== BeastCore.WELCOME.version);
+}
+
+var welcomeAnswers = { share: null, nudges: null, learn: null };
+var welcomeBusy = false, welcomeError = '';
+
+function pickWelcome(key, answer) { welcomeAnswers[key] = answer; render(); }
+
+function welcomeScreen() {
+  var w = BeastCore.WELCOME, c1 = BeastCore.CONSENTS[1], c2 = BeastCore.CONSENTS[2];
+  var q = function (key, title, text, yes, no) {
+    var a = welcomeAnswers[key];
+    return '<div class="wq"><b>' + esc(title) + '</b><p>' + esc(text) + '</p><div class="pair">' +
+      '<button class="' + (a === 'yes' ? 'picked' : '') + '" onclick="pickWelcome(\'' + key + '\',\'yes\')">' + esc(yes) + '</button>' +
+      '<button class="' + (a === 'no' ? 'picked' : '') + '" onclick="pickWelcome(\'' + key + '\',\'no\')">' + esc(no) + '</button>' +
+      '</div></div>';
+  };
+  var ready = welcomeAnswers.share && welcomeAnswers.nudges && welcomeAnswers.learn;
+  return '<div class="wrap welcome">' +
+    '<h1 class="wtitle">' + esc(w.title).replace('Beast Mode', '<span>Beast Mode</span>') + '</h1>' +
+    '<p class="wtag">' + esc(w.tagline) + '</p>' +
+    '<p class="wintro">' + esc(w.intro) + '</p>' +
+    w.features.map(function (f) {
+      return '<div class="wfeat">' + icon(f.icon) + '<div><b>' + esc(f.title) + '</b><span>' + esc(f.text) + '</span></div></div>';
+    }).join('') +
+    '<h3 class="wsub">' + esc(w.heading) + '</h3>' +
+    '<p class="wintro">' + c1.paragraphs.map(esc).join(' ') + '</p>' +
+    '<div class="wqs">' +
+      q('share', w.questions.share.title, w.questions.share.text, w.questions.share.yes, w.questions.share.no) +
+      q('nudges', w.questions.nudges.title, w.questions.nudges.text, w.questions.nudges.yes, w.questions.nudges.no) +
+      q('learn', c2.title, c2.paragraphs.join(' '), c2.yes, c2.no) +
+    '</div>' +
+    (welcomeError ? '<p class="imeta" style="color:var(--bad);margin-top:10px">' + esc(welcomeError) + '</p>' : '') +
+    '<button class="btn' + (ready && !welcomeBusy ? '' : ' wait') + '" ' + (ready && !welcomeBusy ? '' : 'disabled ') +
+      'onclick="finishWelcome()">' + (welcomeBusy ? 'One moment' : esc(c1.yes)) + '</button>' +
+    '<p class="imeta" style="text-align:center;margin-top:10px">' + esc(w.note) + '</p>' +
+    '</div>';
+}
+
+/* I'm in: consent 1 and 2 recorded on the server (under the client token,
+   or the coach token for an older link), then the sharing and nudge answers
+   sent with the first status. If the server cannot be reached, the screen
+   stays and says so: nothing is agreed silently. */
+async function finishWelcome() {
+  var a = welcomeAnswers;
+  if (!a.share || !a.nudges || !a.learn || welcomeBusy) return;
+  welcomeBusy = true; welcomeError = '';
+  render();
+  var token = state.clientToken || state.coachToken;
+  var post = function (kind, answer) {
+    return fetch(COACH_URL + '/consent', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: token, kind: kind, answer: answer, version: BeastCore.CONSENTS[kind].version })
+    }).then(function (r) { return r.json().then(function (d) { d.status = r.status; return d; }); }).catch(function () { return { status: 0 }; });
+  };
+  var r1 = await post(1, 'yes');
+  var r2 = r1.ok === true ? await post(2, a.learn) : r1;
+  welcomeBusy = false;
+  // Only a consent the server says it stored counts. A 200 with open:false
+  // is the pilot hold (an old link, coach token only, client not yet on the
+  // list): nothing was stored, so the screen stays and says so.
+  if (r2.ok !== true) {
+    welcomeError = r2.status === 0 ? 'No signal. Try again when you are back online.'
+      : r2.open === false ? (r2.message || 'Not open yet.') + ' Your coach will let you know when to come back.'
+      : (r2.error || 'Something went wrong. Try again.');
+    render();
+    return;
+  }
+  if (r2.consent) state.coachConsent = r2.consent;
+  // The coach's own status (open, boss number) is learned from the coach
+  // token later; a client token knows nothing about it.
+  if (token === state.coachToken && r2.open !== undefined) state.coachOpen = r2.open;
+  state.sharing = a.share === 'yes';
+  state.nudges = a.nudges === 'yes';
+  state.welcomeVersion = BeastCore.WELCOME.version;
+  save();
+  if (state.clientToken) await sendStatus(!state.sharing);
+  render();
+}
+
+// The Profile questions: the same three, the same two buttons, changed by
+// pressing one. Sharing and nudges go with the next status; learning is
+// consent 2, recorded at once.
+function choicesCard() {
+  if (!state.clientToken && !coachAvailable()) return '';
+  var w = BeastCore.WELCOME, c2 = BeastCore.CONSENTS[2];
+  var q = function (title, picked, onYes, onNo, yes, no, text) {
+    return '<div class="wq"><b>' + esc(title) + '</b>' + (text ? '<p>' + esc(text) + '</p>' : '') + '<div class="pair">' +
+      '<button class="' + (picked === 'yes' ? 'picked' : '') + '" onclick="' + onYes + '">' + esc(yes) + '</button>' +
+      '<button class="' + (picked === 'no' ? 'picked' : '') + '" onclick="' + onNo + '">' + esc(no) + '</button></div></div>';
+  };
+  var html = '<div class="card"><h3>The Brofessor</h3><div class="wqs">';
+  if (state.clientToken) {
+    html += q(w.questions.share.title, state.sharing === true ? 'yes' : state.sharing === false ? 'no' : null,
+      'setSharing(true)', 'setSharing(false)', w.questions.share.yes, w.questions.share.no, w.questions.share.text);
+    html += q(w.questions.nudges.title, state.nudges === true ? 'yes' : state.nudges === false ? 'no' : null,
+      'setNudges(true)', 'setNudges(false)', w.questions.nudges.yes, w.questions.nudges.no, w.questions.nudges.text);
+  }
+  if ((state.clientToken || coachAvailable()) && state.coachOpen !== false && consentGiven(1)) {
+    var learn = consentGiven(2) ? state.coachConsent[2].answer : null;
+    html += q(c2.title, learn, 'giveConsent(2,\'yes\')', 'giveConsent(2,\'no\')', c2.yes, c2.no, c2.paragraphs.join(' '));
+  }
+  html += '</div>';
+  if (coachAvailable()) html += '<button class="btn danger" style="margin-top:12px" onclick="openDeleteChats()">Delete my chats</button>';
+  return html + '</div>';
+}
+
+async function setNudges(on) {
+  if (state.nudges === on) return;
+  state.nudges = on;
+  save();
+  if (state.clientToken && sharingOn()) await sendStatus();
+  toast(on ? 'Nudges on' : 'Nudges off');
+  render();
 }
 
 /* ── import ────────────────────────────────────────────────────────────── */
@@ -1110,7 +1247,7 @@ async function coachPost(path, body) {
   try {
     var res = await fetch(COACH_URL + path, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(Object.assign({ token: state.coachToken }, body))
+      body: JSON.stringify(Object.assign({ token: state.coachToken }, body || {}))
     });
     var data = await res.json().catch(function () { return {}; });
     data.status = res.status;
@@ -1187,13 +1324,17 @@ async function refreshCoachStatus() {
 }
 
 async function giveConsent(kind, answer) {
-  if (coachBusy || !coachAvailable()) return;
+  var token = state.coachToken || state.clientToken;
+  if (coachBusy || !token) return;
   coachBusy = true;
   coachError = '';
   render();
   var data = await coachPost('/consent', {
-    kind: kind, answer: answer, version: BeastCore.CONSENTS[kind].version
+    token: token, kind: kind, answer: answer, version: BeastCore.CONSENTS[kind].version
   });
+  // A client token cannot know whether the coach is open; keep what we had.
+  if (token !== state.coachToken && data.open === true) delete data.open, delete data.boss;
+  if (token !== state.coachToken && data.consent) { state.coachConsent = data.consent; data = Object.assign({}, data, { open: state.coachOpen === false ? false : true }); }
   coachBusy = false;
   if (!applyCoachStatus(data)) {
     // The server has no consent 1 on file after all: ask again.
@@ -1337,6 +1478,16 @@ function bossButton() {
 // A message from The Brofessor that is not part of the chat: the consents and
 // the pilot holding line. Paragraphs are separated by a blank line, which the
 // bubble's pre-wrap shows as a gap.
+// The Brofessor's first message (BeastCore.COACH_OPENER), shown on the first
+// empty chat only and never sent to the model. Marked seen when drawn.
+function openerOnce() {
+  if (state.openerSeen === BeastCore.WELCOME.version) return '';
+  state.openerSeen = BeastCore.WELCOME.version;
+  save();
+  var learning = consentGiven(2) && state.coachConsent[2].answer === 'yes';
+  return coachNotice([learning ? BeastCore.COACH_OPENER.learning : BeastCore.COACH_OPENER.notLearning]);
+}
+
 function coachNotice(paragraphs) {
   return '<div class="bubble coach">' + paragraphs.map(esc).join('\n\n') + '</div>';
 }
@@ -1394,7 +1545,7 @@ function coachTab() {
   // style, so neither answer is the easy one.
   if (!consentGiven(2)) {
     var dis = coachBusy ? ' disabled' : '';
-    return head + log(coachNotice(c2.paragraphs) +
+    return head + log(coachNotice(c2.chat) +
       '<button class="btn sec"' + dis + ' onclick="giveConsent(2,\'yes\')">' + esc(c2.yes) + '</button>' +
       '<button class="btn sec"' + dis + ' onclick="giveConsent(2,\'no\')">' + esc(c2.no) + '</button>');
   }
@@ -1405,7 +1556,7 @@ function coachTab() {
           esc(m.content) + '</div>';
         return m.notice ? bubble + bossButton() : bubble;
       }).join('')
-    : '<div class="starters">' + COACH_STARTERS.map(function (q) {
+    : openerOnce() + '<div class="starters">' + COACH_STARTERS.map(function (q) {
         return '<button onclick="askCoach(' + attr(jsq(q)) + ')">' + esc(q) + '</button>';
       }).join('') + '</div>';
 
@@ -1664,6 +1815,7 @@ function render() {
   // sent a plan yet, so there is nothing else for them to look at.
   if (intake && !state) { root.innerHTML = intakeScreen(); return; }
   if (!state) { root.innerHTML = setupScreen(); return; }
+  if (needsWelcome()) { root.innerHTML = welcomeScreen(); return; }
   if (!state.goalsAgreedAt) { root.innerHTML = agreementScreen(); return; }
 
   root.innerHTML = header() + '<div class="wrap">' +
@@ -1912,45 +2064,6 @@ function weekTab() {
 // Delete my chats is here for anyone with the coach, open or not. The switch
 // shows only once consent 2 has been answered on the Coach tab, so nobody
 // agrees here to wording they were never shown.
-// A choice made on the switch, not saved yet. Consent is recorded only when
-// the client presses Save, so a stray tap changes nothing (Chris, 2026-09-21).
-var consent2Pending = null;
-
-function coachCard() {
-  if (!coachAvailable()) return '';
-  var html = '<div class="card"><h3>Coach</h3>';
-  if (state.coachOpen !== false && consentGiven(1) && consentGiven(2)) {
-    var answered = state.coachConsent[2].answer;
-    var shown = consent2Pending || answered;
-    var changed = consent2Pending && consent2Pending !== answered;
-    html += '<div class="field"><label>Help The Brofessor get better</label><div class="seg">' +
-        '<button class="' + (shown === 'yes' ? 'on' : '') + '" onclick="pickConsent2(\'yes\')">Yes</button>' +
-        '<button class="' + (shown === 'no' ? 'on' : '') + '" onclick="pickConsent2(\'no\')">No</button>' +
-      '</div><div class="imeta" style="margin-top:6px">Lets The Brofessor learn from your chats, with your ' +
-      'name and personal details stripped out first. Saying no changes nothing about your coaching.</div>' +
-      (changed
-        ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
-            '<button class="btn"' + (coachBusy ? ' disabled' : '') + ' onclick="saveConsent2()">Save</button>' +
-            '<button class="btn sec" onclick="pickConsent2(null)">Cancel</button></div>'
-        : '') +
-      '</div>';
-  }
-  return html + '<button class="btn danger" style="margin-top:4px" onclick="openDeleteChats()">Delete my chats</button></div>';
-}
-
-function pickConsent2(answer) {
-  consent2Pending = answer;
-  render();
-}
-
-async function saveConsent2() {
-  var answer = consent2Pending;
-  if (!answer || !consentGiven(2) || state.coachConsent[2].answer === answer) { consent2Pending = null; render(); return; }
-  await giveConsent(2, answer);
-  // giveConsent shows its own message on failure; on success the record matches.
-  if (consentGiven(2) && state.coachConsent[2].answer === answer) { consent2Pending = null; toast('Saved'); render(); }
-}
-
 function profileTab() {
   var p = state.profile;
   var pr = progress();
@@ -1988,8 +2101,7 @@ function profileTab() {
     html += '<div class="card"><h3>Goals</h3>' + byTerm('short', 'Next 4 weeks') + byTerm('long', '6 to 12 months') + '</div>';
   }
 
-  html += remindersCard() + sharingCard();
-  html += coachCard();
+  html += remindersCard() + choicesCard();
 
   html += '<div class="card"><h3>Appearance</h3>' +
     '<div class="field"><label>Theme</label><div class="seg">' + THEMES.map(function (t) {

@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.9.0';
+  var VERSION = '2.10.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -682,7 +682,8 @@ var BeastCore = (function () {
       startDate: start || null,
       day: start ? daysBetween(start, today) + 1 : null,
       pushId: opts.pushId || null,
-      sharing: opts.sharing !== false
+      sharing: opts.sharing !== false,
+      nudges: opts.nudges === true ? true : opts.nudges === false ? false : null
     };
   }
 
@@ -756,6 +757,7 @@ var BeastCore = (function () {
     } else out.yesterday = null;
     out.pushId = typeof raw.pushId === 'string' && isValidId(raw.pushId) && raw.pushId.length <= 64 ? raw.pushId : null;
     out.sharing = raw.sharing !== false;
+    out.nudges = raw.nudges === true ? true : raw.nudges === false ? false : null;
     return { ok: true, status: out };
   }
 
@@ -1322,30 +1324,80 @@ var BeastCore = (function () {
   // and taps again.
   var CONSENTS = {
     1: {
-      version: 'c1-2026-09-21',
+      version: 'c1-2026-09-22',
+      // The disclosure on the welcome screen. Tapping I'm in agrees to it.
       paragraphs: [
-        'Welcome to your new home. I’m The Brofessor, your AI coach and guide to GAINZ. ' +
-          'We’re going to get along great (if you listen to everything I say LOL!!).',
-        'Before we begin your journey to a new you, the fine print: I’m AI, not a person. ' +
-          'Our chats are saved, and a human coach can read them. Anything I flag gets reviewed ' +
-          'by a real person. Want your chats deleted? Tap Delete my chats in Profile any time. ' +
-          'In a crisis, call or text 988.'
+        'The Brofessor is AI, not a person. Chats with him are saved and a human coach can read them. ' +
+          'Anything he flags gets reviewed by a real person.'
       ],
       yes: 'I’m in',
-      // Shown in place of the text box until the button is tapped.
+      // Shown in place of the text box until I'm in is tapped (the same line
+      // the worker sends when it refuses a chat without consent 1).
       locked: 'Tap “I’m in” above to start chatting. Your checklist works either way.'
     },
     2: {
-      version: 'c2-2026-09-21',
+      version: 'c2-2026-09-22',
+      title: 'Help The Brofessor learn?',
       paragraphs: [
-        'One more before we go to Shredzville. Can I use our chats to get better at coaching? ' +
-          'Anything I learn from gets your name and personal details stripped out first. ' +
-          'Saying no changes nothing about how I coach you. You can change your mind any time ' +
-          'and opt out in your profile settings.'
+        'Your chats can be used to make him a better coach, with your name and details stripped out first.'
       ],
-      yes: 'OK Brofessor. LET’S GOOOO!!!',
+      // The same question asked in the chat, where The Brofessor is speaking:
+      // the wording Chris approved on 2026-09-21, first person.
+      chat: [
+        'Can I use our chats to get better at coaching? Anything I learn from gets your name and personal ' +
+          'details stripped out first. Saying no changes nothing about how I coach you. You can change your ' +
+          'mind any time in Profile.'
+      ],
+      yes: 'Yes, use my chats',
       no: 'No thanks'
     }
+  };
+
+  // The welcome screen (routine change loop brief, 3c): the first thing a
+  // client reads. What the app is for, then every consent as a question with
+  // two buttons, then one tap. Chris's wording, 2026-09-22. Any change is a
+  // new version, and every client sees the screen again.
+  var WELCOME = {
+    version: 'w1-2026-09-22',
+    title: 'Welcome to Beast Mode',
+    tagline: 'Unleash the Beast, one habit at a time',
+    intro: 'Beast Mode helps you build the habits and routines that carry your health and fitness goals. ' +
+      'You get the plan to get fit, and the support to stick with it.',
+    features: [
+      { icon: 'plan', title: 'Your plan, built for you',
+        text: 'Training, food, sleep, the habits in between. Written by a real coach who knows your goals and your day.' },
+      { icon: 'today', title: 'One checklist a day',
+        text: 'The plan broken into things you tick off. New habits become routine one day at a time.' },
+      { icon: 'fire', title: 'Streaks, points, ranks',
+        text: 'Follow your plan and earn points. Keep crushing and a streak grows. Can you earn the right to be the Chief Brologist?!' },
+      { icon: 'coach', title: 'Support to stick with it',
+        text: 'The Brofessor, an AI coach inside the app, knows your plan and your day. Your human coach sees your progress and steps in when it matters.' }
+    ],
+    heading: 'Before you start',
+    questions: {
+      share: { title: 'Share your progress with your coach?',
+        text: 'Your streak, points and rank go to your coach every day. Nothing else leaves your phone.',
+        yes: 'Yes, share it', no: 'Keep it on my phone' },
+      nudges: { title: 'Nudges from The Brofessor?',
+        text: 'A shout when you hit a milestone or a streak is on the line. Never late at night.',
+        yes: 'Yes, nudge me', no: 'No nudges' }
+      // The third question is CONSENTS[2].
+    },
+    button: 'I’m in',
+    note: 'Answer all three to continue. You can change any of them in Profile.'
+  };
+
+  // The Brofessor's first message in the chat, once the welcome is done.
+  // One clause differs by the answer to CONSENTS[2]. Chris's wording.
+  var COACH_OPENER = {
+    learning: 'Welcome to coaching. I’m The Brofessor, your guide to SHREDZVILLE. We are going to get along great ' +
+      '(if you listen to everything I say) LOL!!! Quick reminder before we go: our chats are saved and a human coach ' +
+      'reads them, and you’re letting me learn from them to coach better. You can change either in Profile, any time. ' +
+      'If you’re ever in a crisis, call or text 988. Now, what are we working on?',
+    notLearning: 'Welcome to coaching. I’m The Brofessor, your guide to SHREDZVILLE. We are going to get along great ' +
+      '(if you listen to everything I say) LOL!!! Quick reminder before we go: our chats are saved and a human coach ' +
+      'reads them, and you’ve kept them out of my training, which is fine by me. You can change that in Profile, any time. ' +
+      'If you’re ever in a crisis, call or text 988. Now, what are we working on?'
   };
 
   // The newest answer on file counts only if it was given to today's wording.
@@ -1405,7 +1457,7 @@ var BeastCore = (function () {
     INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
     formatIntakeForCoach: formatIntakeForCoach,
     goalsFromIntake: goalsFromIntake, profileFromIntake: profileFromIntake,
-    CONSENTS: CONSENTS, consentStands: consentStands
+    CONSENTS: CONSENTS, consentStands: consentStands, WELCOME: WELCOME, COACH_OPENER: COACH_OPENER
   };
 })();
 

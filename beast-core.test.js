@@ -853,22 +853,31 @@ test('daysSince measures staleness in local days', () => {
 // ── coach consents (learning plan D9, section 4) ───────────────────────────
 
 test('the consent wording is exactly what Chris approved', () => {
-  // Any change here needs Chris's approval AND a new version string, so every
-  // client sees the new wording and taps again.
-  const c1 = C.CONSENTS[1], c2 = C.CONSENTS[2];
-  assert.strictEqual(c1.version, 'c1-2026-09-21');
-  assert.deepStrictEqual(c1.paragraphs, [
-    'Welcome to your new home. I’m The Brofessor, your AI coach and guide to GAINZ. We’re going to get along great (if you listen to everything I say LOL!!).',
-    'Before we begin your journey to a new you, the fine print: I’m AI, not a person. Our chats are saved, and a human coach can read them. Anything I flag gets reviewed by a real person. Want your chats deleted? Tap Delete my chats in Profile any time. In a crisis, call or text 988.'
-  ]);
+  // Chris, 2026-09-22: the welcome screen carries the disclosure and every
+  // consent as a two-button question; the chat opens with a reminder.
+  const c1 = C.CONSENTS[1], c2 = C.CONSENTS[2], w = C.WELCOME;
+  assert.strictEqual(c1.version, 'c1-2026-09-22');
+  assert.strictEqual(c1.paragraphs.join(' '), 'The Brofessor is AI, not a person. Chats with him are saved and a human coach can read them. Anything he flags gets reviewed by a real person.');
   assert.strictEqual(c1.yes, 'I’m in');
-  assert.strictEqual(c1.locked, 'Tap “I’m in” above to start chatting. Your checklist works either way.');
-  assert.strictEqual(c2.version, 'c2-2026-09-21');
-  assert.deepStrictEqual(c2.paragraphs, [
-    'One more before we go to Shredzville. Can I use our chats to get better at coaching? Anything I learn from gets your name and personal details stripped out first. Saying no changes nothing about how I coach you. You can change your mind any time and opt out in your profile settings.'
-  ]);
-  assert.strictEqual(c2.yes, 'OK Brofessor. LET’S GOOOO!!!');
+  assert.strictEqual(c2.version, 'c2-2026-09-22');
+  assert.strictEqual(c2.title, 'Help The Brofessor learn?');
+  assert.strictEqual(c2.yes, 'Yes, use my chats');
   assert.strictEqual(c2.no, 'No thanks');
+  assert.strictEqual(w.version, 'w1-2026-09-22');
+  assert.strictEqual(w.title, 'Welcome to Beast Mode');
+  assert.strictEqual(w.tagline, 'Unleash the Beast, one habit at a time');
+  assert.strictEqual(w.features.length, 4);
+  assert.strictEqual(w.features[2].text, 'Follow your plan and earn points. Keep crushing and a streak grows. Can you earn the right to be the Chief Brologist?!');
+  assert.deepStrictEqual([w.questions.share.yes, w.questions.share.no], ['Yes, share it', 'Keep it on my phone']);
+  assert.deepStrictEqual([w.questions.nudges.yes, w.questions.nudges.no], ['Yes, nudge me', 'No nudges']);
+  assert.match(C.COACH_OPENER.learning, /^Welcome to coaching\. I’m The Brofessor, your guide to SHREDZVILLE\./);
+  assert.match(C.COACH_OPENER.learning, /you’re letting me learn from them to coach better/);
+  assert.match(C.COACH_OPENER.notLearning, /you’ve kept them out of my training, which is fine by me/);
+  for (const t of [C.COACH_OPENER.learning, C.COACH_OPENER.notLearning]) {
+    assert.match(t, /call or text 988/, 'the crisis line lives in the chat');
+    assert.match(t, /Now, what are we working on\?$/);
+  }
+  assert.ok(!/988/.test(JSON.stringify(w)), 'and not on the welcome screen');
 });
 
 test('consent versions fit what the coach server will store', () => {
@@ -925,6 +934,10 @@ test('statusPayload carries the numbers on the client screen and nothing else', 
   assert.strictEqual(p.day, 21);
   assert.strictEqual(p.pushId, 'rem1');
   assert.strictEqual(p.sharing, true);
+  assert.strictEqual(p.nudges, null, 'unanswered until the welcome screen');
+  assert.strictEqual(C.statusPayload(st, { today: '2026-09-21', nudges: false }).nudges, false);
+  assert.strictEqual(C.validateStatus({ ...p, nudges: true }).status.nudges, true);
+  assert.strictEqual(C.validateStatus({ ...p, nudges: 'yes' }).status.nudges, null, 'anything but a boolean is unanswered');
   assert.strictEqual(typeof p.rank, 'string');
   assert.ok(p.points > 0);
   for (const k of Object.keys(p)) assert.ok(!/items|log|notes|name|goals/.test(k), 'no ' + k);
