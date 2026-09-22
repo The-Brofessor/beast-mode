@@ -1854,23 +1854,43 @@ function weekTab() {
 // Delete my chats is here for anyone with the coach, open or not. The switch
 // shows only once consent 2 has been answered on the Coach tab, so nobody
 // agrees here to wording they were never shown.
+// A choice made on the switch, not saved yet. Consent is recorded only when
+// the client presses Save, so a stray tap changes nothing (Chris, 2026-09-21).
+var consent2Pending = null;
+
 function coachCard() {
   if (!coachAvailable()) return '';
   var html = '<div class="card"><h3>Coach</h3>';
   if (state.coachOpen !== false && consentGiven(1) && consentGiven(2)) {
     var answered = state.coachConsent[2].answer;
+    var shown = consent2Pending || answered;
+    var changed = consent2Pending && consent2Pending !== answered;
     html += '<div class="field"><label>Help The Brofessor get better</label><div class="seg">' +
-        '<button class="' + (answered === 'yes' ? 'on' : '') + '" onclick="setConsent2(\'yes\')">Yes</button>' +
-        '<button class="' + (answered === 'no' ? 'on' : '') + '" onclick="setConsent2(\'no\')">No</button>' +
+        '<button class="' + (shown === 'yes' ? 'on' : '') + '" onclick="pickConsent2(\'yes\')">Yes</button>' +
+        '<button class="' + (shown === 'no' ? 'on' : '') + '" onclick="pickConsent2(\'no\')">No</button>' +
       '</div><div class="imeta" style="margin-top:6px">Lets The Brofessor learn from your chats, with your ' +
-      'name and personal details stripped out first. Saying no changes nothing about your coaching.</div></div>';
+      'name and personal details stripped out first. Saying no changes nothing about your coaching.</div>' +
+      (changed
+        ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+            '<button class="btn"' + (coachBusy ? ' disabled' : '') + ' onclick="saveConsent2()">Save</button>' +
+            '<button class="btn sec" onclick="pickConsent2(null)">Cancel</button></div>'
+        : '') +
+      '</div>';
   }
   return html + '<button class="btn danger" style="margin-top:4px" onclick="openDeleteChats()">Delete my chats</button></div>';
 }
 
-function setConsent2(answer) {
-  if (consentGiven(2) && state.coachConsent[2].answer === answer) return;
-  giveConsent(2, answer);
+function pickConsent2(answer) {
+  consent2Pending = answer;
+  render();
+}
+
+async function saveConsent2() {
+  var answer = consent2Pending;
+  if (!answer || !consentGiven(2) || state.coachConsent[2].answer === answer) { consent2Pending = null; render(); return; }
+  await giveConsent(2, answer);
+  // giveConsent shows its own message on failure; on success the record matches.
+  if (consentGiven(2) && state.coachConsent[2].answer === answer) { consent2Pending = null; toast('Saved'); render(); }
 }
 
 function profileTab() {
