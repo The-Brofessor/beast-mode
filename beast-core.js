@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.8.0';
+  var VERSION = '2.9.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -501,13 +501,17 @@ var BeastCore = (function () {
   //   'closed'  every scheduled core item was completed on the day itself
   //   'broken'  at least one scheduled core item was missed
   //   'neutral' no core items were scheduled; holds a streak without extending
+  // The three ways a day can end. `neutral` is a day with no core item
+  // scheduled: it holds the streak without adding to it.
+  var GATES = { closed: 'closed', broken: 'broken', neutral: 'neutral' };
+
   function dayResult(items, log, ymd) {
     var core = scheduledCoreOn(items, ymd);
-    var gate = 'neutral';
+    var gate = GATES.neutral;
     if (core.length) {
       gate = core.every(function (it) {
         return isSameDay(entryFor(log, it.id, ymd), ymd);
-      }) ? 'closed' : 'broken';
+      }) ? GATES.closed : GATES.broken;
     }
 
     var points = 0;
@@ -633,6 +637,126 @@ var BeastCore = (function () {
       bestStreak: bestStreak(items, log, today),
       level: levelFor(pts, pw, opts.earnedLevel)
     };
+  }
+
+  // ── Daily status ──────────────────────────────────────────────────────────
+  // What the phone sends the server about the day (routine change loop brief,
+  // 3a): the numbers already on the client's screen, nothing else. Built here
+  // so the app and the worker share one vocabulary; checked here so the
+  // worker refuses anything that is not this shape.
+
+  var STATUS_VERSION = 1;
+  var STATUS_FIELDS = ['streak', 'bestStreak', 'points', 'dayPoints', 'level', 'scheduled', 'done', 'scheduledCore', 'doneCore', 'day'];
+
+  function statusPayload(state, opts) {
+    opts = opts || {};
+    var items = (state && state.items) || [];
+    var log = (state && state.log) || {};
+    var today = opts.today || todayLocal();
+    var p = progress(items, log, { today: today, perfectWeek: state && state.perfectWeek, earnedLevel: state && state.earnedLevel });
+    var due = scheduledOn(items, today);
+    var core = scheduledCoreOn(items, today);
+    var doneOf = function (list) { return list.filter(function (it) { return isDone(log, it.id, today); }).length; };
+    var y = addDays(today, -1);
+    var yr = dayResult(items, log, y);
+    var tr = dayResult(items, log, today);
+    var start = programStart(items);
+    return {
+      v: STATUS_VERSION,
+      date: today,
+      tz: opts.tz || '',
+      streak: p.streak,
+      bestStreak: p.bestStreak,
+      points: p.points,
+      dayPoints: tr.points,
+      rank: p.level.rank,
+      level: p.level.level,
+      scheduled: due.length,
+      done: doneOf(due),
+      scheduledCore: core.length,
+      doneCore: doneOf(core),
+      gate: tr.gate,
+      yesterday: start && y >= start
+        ? { date: y, gate: yr.gate, done: yr.completed, scheduled: yr.scheduled, points: yr.points }
+        : null,
+      startDate: start || null,
+      day: start ? daysBetween(start, today) + 1 : null,
+      pushId: opts.pushId || null,
+      sharing: opts.sharing !== false
+    };
+  }
+
+  // The local calendar date now in a zone, or null if the zone is unknown.
+  function todayIn(tz, now) {
+    try {
+      var parts = {};
+      new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+        .formatToParts(now || new Date()).forEach(function (p) { parts[p.type] = p.value; });
+      return parts.year + '-' + parts.month + '-' + parts.day;
+    } catch (e) { return null; }
+  }
+
+  // Shape, vocabulary and bounds. Returns { ok, status } or { error }. A
+  // plan link gets forwarded, so the token behind a status can leak: nothing
+  // here trusts the phone. With opts.now the date must be today or a day
+  // either side in the claimed zone, so a stray date cannot pin the roster.
+  var STATUS_MAX_COUNT = 1000;      // items in a day
+  var STATUS_MAX_POINTS = 10000000;
+  var STATUS_MAX_DAYS = 3660;       // ten years of streak or program
+
+  function validateStatus(raw, opts) {
+    opts = opts || {};
+    if (!raw || typeof raw !== 'object') return { error: 'The status is missing.' };
+    if (Number(raw.v) > STATUS_VERSION) return { error: 'That status needs a newer server.' };
+    var ymd = /^\d{4}-\d\d-\d\d$/;
+    var whole = function (v, max) { return typeof v === 'number' && isFinite(v) && v >= 0 && Math.floor(v) === v && v <= max; };
+    var out = {};
+    if (!ymd.test(String(raw.date || '')) || isNaN(localToDate(raw.date).getTime())) return { error: 'The status needs a date.' };
+    out.date = raw.date;
+    if (raw.tz !== undefined && raw.tz !== null && raw.tz !== '') {
+      if (typeof raw.tz !== 'string' || raw.tz.length > 64 || !/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/.test(raw.tz) || !todayIn(raw.tz, opts.now)) return { error: 'Bad time zone.' };
+      out.tz = raw.tz;
+    } else out.tz = '';
+    if (opts.now) {
+      var today = todayIn(out.tz || 'UTC', opts.now);
+      if (daysBetween(today, out.date) > 1 || daysBetween(out.date, today) > 1) return { error: 'That date is not today.' };
+    }
+    var limits = { streak: STATUS_MAX_DAYS, bestStreak: STATUS_MAX_DAYS, points: STATUS_MAX_POINTS, dayPoints: STATUS_MAX_POINTS,
+      level: LEVELS.length, scheduled: STATUS_MAX_COUNT, done: STATUS_MAX_COUNT, scheduledCore: STATUS_MAX_COUNT, doneCore: STATUS_MAX_COUNT, day: STATUS_MAX_DAYS };
+    for (var i = 0; i < STATUS_FIELDS.length; i++) {
+      var k = STATUS_FIELDS[i], v = raw[k];
+      if (v === null || v === undefined) { out[k] = null; continue; }
+      if (!whole(v, limits[k])) return { error: 'Bad ' + k + '.' };
+      out[k] = v;
+    }
+    if (out.done !== null && out.scheduled !== null && out.done > out.scheduled) return { error: 'Bad done.' };
+    if (out.doneCore !== null && out.scheduledCore !== null && out.doneCore > out.scheduledCore) return { error: 'Bad doneCore.' };
+    if (out.startDate = ymd.test(String(raw.startDate || '')) ? raw.startDate : null) {
+      // A streak cannot be longer than the program.
+      var span = daysBetween(out.startDate, out.date) + 1;
+      if (span < 1) return { error: 'Bad startDate.' };
+      if (out.streak !== null && out.streak > span) return { error: 'Bad streak.' };
+      if (out.bestStreak !== null && out.bestStreak > span) return { error: 'Bad bestStreak.' };
+    }
+    if (raw.rank !== undefined && raw.rank !== null) {
+      // The vocabulary is LEVELS; nothing else reaches the digest as a rank.
+      var known = LEVELS.some(function (l) { return l.rank === raw.rank; });
+      if (!known) return { error: 'Bad rank.' };
+      out.rank = raw.rank;
+    } else out.rank = null;
+    if (!GATES[raw.gate]) return { error: 'Bad gate.' };
+    out.gate = raw.gate;
+    if (raw.yesterday) {
+      var yv = raw.yesterday;
+      if (typeof yv !== 'object' || yv.date !== addDays(out.date, -1) || !GATES[yv.gate] ||
+          !whole(yv.done, STATUS_MAX_COUNT) || !whole(yv.scheduled, STATUS_MAX_COUNT) || !whole(yv.points, STATUS_MAX_POINTS) || yv.done > yv.scheduled) {
+        return { error: 'Bad yesterday.' };
+      }
+      out.yesterday = { date: yv.date, gate: yv.gate, done: yv.done, scheduled: yv.scheduled, points: yv.points };
+    } else out.yesterday = null;
+    out.pushId = typeof raw.pushId === 'string' && isValidId(raw.pushId) && raw.pushId.length <= 64 ? raw.pushId : null;
+    out.sharing = raw.sharing !== false;
+    return { ok: true, status: out };
   }
 
   // ── Payload codec ─────────────────────────────────────────────────────────
@@ -1264,7 +1388,8 @@ var BeastCore = (function () {
     entryFor: entryFor, isDone: isDone, isSameDay: isSameDay, isOnTime: isOnTime,
     markDone: markDone,
 
-    dayResult: dayResult, programStart: programStart,
+    GATES: GATES, dayResult: dayResult, programStart: programStart,
+    STATUS_VERSION: STATUS_VERSION, statusPayload: statusPayload, validateStatus: validateStatus, todayIn: todayIn,
     currentStreak: currentStreak, bestStreak: bestStreak,
     totalPoints: totalPoints, perfectWeek: perfectWeek,
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,

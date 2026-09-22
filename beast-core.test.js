@@ -890,3 +890,89 @@ test('a consent stands only for the current wording', () => {
   assert.strictEqual(C.consentStands(2, { version: v2, answer: 'maybe' }), false);
   assert.strictEqual(C.consentStands(3, { version: v2, answer: 'yes' }), false);
 });
+
+
+// ── the daily status (routine change loop brief, 3a) ──────────────────────
+
+function statusState(over) {
+  const items = [item({ id: 'c1', name: 'Zone 2', core: true }), item({ id: 'h1', name: 'Water', kind: 'habit', core: false })];
+  const log = {};
+  // Two closed days, then yesterday closed, today half done.
+  for (const d of ['2026-09-18', '2026-09-19', '2026-09-20']) {
+    log[C.logKey('c1', d)] = { done: true, completedAt: at(d, 8, 0) };
+    log[C.logKey('h1', d)] = { done: true, completedAt: at(d, 9, 0) };
+  }
+  log[C.logKey('h1', '2026-09-21')] = { done: true, completedAt: at('2026-09-21', 9, 0) };
+  return Object.assign({ items, log, perfectWeek: C.perfectWeek(items), earnedLevel: 1 }, over);
+}
+
+test('statusPayload carries the numbers on the client screen and nothing else', () => {
+  const st = statusState();
+  const p = C.statusPayload(st, { today: '2026-09-21', tz: 'America/Los_Angeles', pushId: 'rem1' });
+  assert.strictEqual(p.v, C.STATUS_VERSION);
+  assert.strictEqual(p.date, '2026-09-21');
+  assert.strictEqual(p.tz, 'America/Los_Angeles');
+  assert.strictEqual(p.streak, 3, 'closed days before today');
+  assert.strictEqual(p.bestStreak, 3);
+  assert.strictEqual(p.scheduled, 2);
+  assert.strictEqual(p.done, 1);
+  assert.strictEqual(p.scheduledCore, 1);
+  assert.strictEqual(p.doneCore, 0);
+  assert.strictEqual(p.gate, C.GATES.broken, 'today is provisional: core not yet done reads broken');
+  assert.strictEqual(p.dayPoints, C.dayResult(st.items, st.log, '2026-09-21').points, 'today\'s own points, beside the running total');
+  assert.deepStrictEqual(p.yesterday, { date: '2026-09-20', gate: 'closed', done: 2, scheduled: 2, points: C.dayResult(st.items, st.log, '2026-09-20').points });
+  assert.strictEqual(p.startDate, '2026-09-01');
+  assert.strictEqual(p.day, 21);
+  assert.strictEqual(p.pushId, 'rem1');
+  assert.strictEqual(p.sharing, true);
+  assert.strictEqual(typeof p.rank, 'string');
+  assert.ok(p.points > 0);
+  for (const k of Object.keys(p)) assert.ok(!/items|log|notes|name|goals/.test(k), 'no ' + k);
+  assert.strictEqual(C.statusPayload(st, { today: '2026-09-21', sharing: false }).sharing, false);
+});
+
+test('a status round-trips through validateStatus, and anything off-vocabulary is refused', () => {
+  const p = C.statusPayload(statusState(), { today: '2026-09-21', tz: 'Europe/London' });
+  const ok = C.validateStatus(JSON.parse(JSON.stringify(p)));
+  assert.strictEqual(ok.ok, true, ok.error);
+  assert.strictEqual(ok.status.gate, p.gate);
+  assert.strictEqual(ok.status.tz, 'Europe/London');
+  assert.deepStrictEqual(ok.status.yesterday, p.yesterday);
+  for (const [bad, why] of [
+    [{ ...p, gate: 'open' }, 'gate not in the vocabulary'],
+    [{ ...p, date: '9/21' }, 'bad date'],
+    [{ ...p, tz: 'not a zone!' }, 'bad zone'],
+    [{ ...p, streak: -1 }, 'negative'],
+    [{ ...p, streak: 2.5 }, 'fraction'],
+    [{ ...p, points: 'lots' }, 'text'],
+    [{ ...p, yesterday: { date: 'x', gate: 'closed' } }, 'bad yesterday'],
+    [{ ...p, v: C.STATUS_VERSION + 1 }, 'newer version'],
+    [null, 'nothing']
+  ]) assert.ok(C.validateStatus(bad).error, why);
+  assert.ok(C.validateStatus({ ...p, rank: 'Grand Poobah' }).error, 'a rank is one of the level names');
+  assert.ok(C.validateStatus({ ...p, level: 9 }).error, 'a level is one of the levels');
+  assert.ok(C.validateStatus({ ...p, streak: 3661 }).error, 'ten years is the ceiling');
+  assert.ok(C.validateStatus({ ...p, streak: 30 }).error, 'a streak cannot outrun the program');
+  assert.ok(C.validateStatus({ ...p, done: 3, scheduled: 2 }).error, 'done within scheduled');
+  assert.ok(C.validateStatus({ ...p, yesterday: { date: '2026-09-19', gate: 'closed', done: 1, scheduled: 1, points: 1 } }).error, 'yesterday is the day before');
+  assert.ok(C.validateStatus({ ...p, yesterday: { date: '2026-09-20', gate: 'closed', done: 1.5, scheduled: 1, points: 1 } }).error, 'yesterday counts are whole');
+  assert.ok(C.validateStatus({ ...p, yesterday: { date: '2026-09-20', gate: 'closed', done: 1, scheduled: 1, points: 1e300 } }).error, 'yesterday points bounded');
+  // With a clock, the date must be today or a day either side in the claimed zone.
+  const now = new Date('2026-09-22T02:00:00Z');   // 7 p.m. on the 21st in Los Angeles
+  assert.strictEqual(C.validateStatus(p, { now }).ok, true);
+  assert.strictEqual(C.validateStatus({ ...p, date: '2026-09-22', yesterday: null }, { now }).ok, true, 'a day ahead is fine (UTC phones)');
+  assert.ok(C.validateStatus({ ...p, date: '2026-09-19', yesterday: null }, { now }).error, 'two days back is not');
+  assert.ok(C.validateStatus({ ...p, date: '2099-12-31', yesterday: null }, { now }).error, 'the future is not');
+  assert.ok(C.validateStatus({ ...p, tz: 'Mars/Olympus' }).error, 'an unknown zone is refused');
+  assert.strictEqual(C.todayIn('America/Los_Angeles', now), '2026-09-21');
+  assert.strictEqual(C.todayIn('Asia/Tokyo', now), '2026-09-22');
+  assert.strictEqual(C.validateStatus({ ...p, pushId: 'a|b', extra: 'dropped' }).status.pushId, null, 'a bad push id is dropped, not fatal');
+  assert.strictEqual(C.validateStatus({ ...p, sharing: false }).status.sharing, false);
+});
+
+test('GATES is the vocabulary dayResult speaks', () => {
+  assert.deepStrictEqual(Object.keys(C.GATES).sort(), ['broken', 'closed', 'neutral']);
+  const st = statusState();
+  assert.strictEqual(C.dayResult(st.items, st.log, '2026-09-20').gate, C.GATES.closed);
+  assert.strictEqual(C.dayResult([item({ core: false })], {}, '2026-09-20').gate, C.GATES.neutral);
+});

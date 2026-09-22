@@ -398,7 +398,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.8.0';
+var BUILT_AGAINST = '2.9.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -510,6 +510,62 @@ function load() {
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
   catch (e) { /* private mode or full quota: the session keeps working in memory */ }
+  scheduleStatus();
+}
+
+/* ── the daily status (routine change loop brief, 3a) ──────────────────── */
+
+// The numbers on the screen, sent to the server a few seconds after any
+// change, under the client token, and only once the client has said yes on
+// the welcome screen (state.sharing is true). Nothing else leaves the phone.
+var STATUS_DEBOUNCE_MS = 3000;
+var statusTimer = null;
+
+function sharingOn() { return !!(state && state.clientToken && state.sharing === true); }
+
+function scheduleStatus() {
+  if (!sharingOn()) return;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(sendStatus, STATUS_DEBOUNCE_MS);
+}
+
+function statusBody(sharing) {
+  return BeastCore.statusPayload(state, {
+    tz: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || '',
+    pushId: state.reminders && state.reminders.on ? state.reminders.id : null,
+    sharing: sharing !== false
+  });
+}
+
+async function sendStatus(finalOff) {
+  if (!state || !state.clientToken) return;
+  if (!finalOff && !sharingOn()) return;
+  try {
+    await fetch(COACH_URL + '/status', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: state.clientToken, status: statusBody(!finalOff),
+        sharingVersion: BeastCore.CONSENTS[1].version })
+    });
+  } catch (e) { /* offline: the next change or open sends the current numbers */ }
+}
+
+// The Profile switch. Off sends one final write saying so, then nothing.
+async function setSharing(on) {
+  if (!state.clientToken) return;
+  if (!on && state.sharing === true) { state.sharing = false; save(); await sendStatus(true); }
+  else if (on) { state.sharing = true; save(); await sendStatus(); }
+  toast(on ? 'Sharing your progress' : 'Progress kept on this phone');
+  render();
+}
+
+function sharingCard() {
+  if (!state.clientToken || state.sharing === undefined) return '';
+  return '<div class="card"><h3>Progress sharing</h3>' +
+    '<p class="imeta">' + (state.sharing
+      ? 'Your streak, points and rank go to your coach every day. Nothing else leaves your phone.'
+      : 'Your numbers stay on this phone. Your coach cannot see your streak, points or rank.') + '</p>' +
+    '<button class="btn ' + (state.sharing ? 'sec' : '') + '" onclick="setSharing(' + (state.sharing ? 'false' : 'true') + ')">' +
+      (state.sharing ? 'Stop sharing' : 'Share my progress') + '</button></div>';
 }
 
 /* ── import ────────────────────────────────────────────────────────────── */
@@ -675,6 +731,7 @@ function applySetup(data) {
     weightLog: {},
     seen: [],
     coachToken: data.coachToken || null,
+    clientToken: data.clientToken || null,
     coachLog: []
   };
   save();
@@ -704,6 +761,7 @@ function applyPlanUpdate(data) {
 
   // A re-issued token replaces the old one; an absent one leaves it alone.
   if (data.coachToken) state.coachToken = data.coachToken;
+  if (data.clientToken) state.clientToken = data.clientToken;
 
   // Fill blanks without overwriting anything the client set themselves.
   var incomingProfile = data.profile || {};
@@ -1930,7 +1988,7 @@ function profileTab() {
     html += '<div class="card"><h3>Goals</h3>' + byTerm('short', 'Next 4 weeks') + byTerm('long', '6 to 12 months') + '</div>';
   }
 
-  html += remindersCard();
+  html += remindersCard() + sharingCard();
   html += coachCard();
 
   html += '<div class="card"><h3>Appearance</h3>' +
@@ -1987,6 +2045,7 @@ window.addEventListener('hashchange', function () {
   // has done its job.
   if (state && intake) clearIntakeSilently();
   if (!handleImport()) render();
+  if (sharingOn()) sendStatus();
 })();
 
 if ('serviceWorker' in navigator) {
