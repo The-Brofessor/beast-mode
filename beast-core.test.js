@@ -941,13 +941,20 @@ test('the consent wording is exactly what Chris approved', () => {
   assert.strictEqual(c2.title, 'Help The Brofessor learn?');
   assert.strictEqual(c2.yes, 'Yes, use my chats');
   assert.strictEqual(c2.no, 'No thanks');
-  assert.strictEqual(w.version, 'w1-2026-09-22');
+  assert.strictEqual(w.version, 'w2-2026-09-22');   // w2: the nudge question reworded, 2026-09-22
   assert.strictEqual(w.title, 'Welcome to Beast Mode');
   assert.strictEqual(w.tagline, 'Unleash the Beast, one habit at a time');
   assert.strictEqual(w.features.length, 4);
   assert.strictEqual(w.features[2].text, 'Follow your plan and earn points. Keep crushing and a streak grows. Can you earn the right to be the Chief Brologist?!');
   assert.deepStrictEqual([w.questions.share.yes, w.questions.share.no], ['Yes, share it', 'Keep it on my phone']);
-  assert.deepStrictEqual([w.questions.nudges.yes, w.questions.nudges.no], ['Yes, nudge me', 'No nudges']);
+  assert.strictEqual(w.questions.nudges.title, 'Do you want to hear from The Brofessor?');
+  assert.deepStrictEqual([w.questions.nudges.yes, w.questions.nudges.no], ['Yes, hit me up', 'No thanks']);
+  // The word "nudge" is a field name in the code and never on the screen.
+  const onScreen = [w.title, w.tagline, w.intro, w.heading, w.button, w.note]
+    .concat(w.features.map(f => f.title + ' ' + f.text))
+    .concat(Object.keys(w.questions).map(k => [w.questions[k].title, w.questions[k].text, w.questions[k].yes, w.questions[k].no].join(' ')))
+    .join(' ');
+  assert.ok(!/nudge/i.test(onScreen), 'the word nudge is not one a client reads');
   assert.match(C.COACH_OPENER.learning, /^Welcome to coaching\. I’m The Brofessor, your guide to SHREDZVILLE\./);
   assert.match(C.COACH_OPENER.learning, /you’re letting me learn from them to coach better/);
   assert.match(C.COACH_OPENER.notLearning, /you’ve kept them out of my training, which is fine by me/);

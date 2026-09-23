@@ -1420,7 +1420,7 @@ var BeastCore = (function () {
   // two buttons, then one tap. Chris's wording, 2026-09-22. Any change is a
   // new version, and every client sees the screen again.
   var WELCOME = {
-    version: 'w1-2026-09-22',
+    version: 'w2-2026-09-22',
     title: 'Welcome to Beast Mode',
     tagline: 'Unleash the Beast, one habit at a time',
     intro: 'Beast Mode helps you build the habits and routines that carry your health and fitness goals. ' +
@@ -1440,9 +1440,9 @@ var BeastCore = (function () {
       share: { title: 'Share your progress with your coach?',
         text: 'Your streak, points and rank go to your coach every day. Nothing else leaves your phone.',
         yes: 'Yes, share it', no: 'Keep it on my phone' },
-      nudges: { title: 'Nudges from The Brofessor?',
+      nudges: { title: 'Do you want to hear from The Brofessor?',
         text: 'A shout when you hit a milestone or a streak is on the line. Never late at night.',
-        yes: 'Yes, nudge me', no: 'No nudges' }
+        yes: 'Yes, hit me up', no: 'No thanks' }
       // The third question is CONSENTS[2].
     },
     button: 'I’m in',

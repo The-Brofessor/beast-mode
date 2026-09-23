@@ -729,7 +729,7 @@ async function setNudges(on) {
   state.nudges = on;
   save();
   if (state.clientToken && sharingOn()) await sendStatus();
-  toast(on ? 'Nudges on' : 'Nudges off');
+  toast(on ? 'The Brofessor will hit you up' : 'The Brofessor will stay quiet');
   render();
 }
 
