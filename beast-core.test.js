@@ -366,6 +366,84 @@ test('level ratchets so a plan change cannot demote a client', () => {
   assert.strictEqual(r.rank, 'Broton Beam');
 });
 
+test('linkFromText finds a long link, a short link, or a bare code in a pasted message', () => {
+  const code = C.encodePayload('setup', { items: [], goals: [], profile: { name: 'Vince' } });
+  const long = 'Here is your plan: https://app.thebrofessor.coach/#import=' + encodeURIComponent(code) + ' see you Monday';
+  assert.deepStrictEqual(C.linkFromText(long), { code });
+  assert.deepStrictEqual(C.linkFromText('Open this on your phone: https://thebrofessor.coach/p/BMVince On iPhone, add it first.'), { slug: 'bmvince' });
+  assert.deepStrictEqual(C.linkFromText('thebrofessor.coach/p/x7k2'), { slug: 'x7k2' });
+  assert.deepStrictEqual(C.linkFromText(code), { code });
+  assert.deepStrictEqual(C.linkFromText('  ' + code + '\n'), { code });
+  assert.strictEqual(C.linkFromText('yo whats up'), null);
+  assert.strictEqual(C.linkFromText(''), null);
+  assert.strictEqual(C.linkFromText(null), null);
+  // A long link beats a short one in the same message: no server call needed.
+  assert.deepStrictEqual(C.linkFromText('https://thebrofessor.coach/p/abc or https://app.thebrofessor.coach/#import=' + code), { code });
+});
+
+test('statusPayload says where the app is running, and validateStatus keeps it a yes, a no, or nothing', () => {
+  const items = [{ id: 'z2', name: 'Zone 2', kind: 'habit', freq: 'daily', core: true, addedAt: '2026-09-01' }];
+  const state = { items: C.normalizeItems(items), log: {}, perfectWeek: 7, earnedLevel: 1 };
+  assert.strictEqual(C.statusPayload(state, { today: '2026-09-21', standalone: true }).standalone, true);
+  assert.strictEqual(C.statusPayload(state, { today: '2026-09-21', standalone: false }).standalone, false);
+  assert.strictEqual(C.statusPayload(state, { today: '2026-09-21' }).standalone, null, 'an older phone says nothing');
+  const ok = raw => C.validateStatus(Object.assign(C.statusPayload(state, { today: '2026-09-21' }), raw));
+  assert.strictEqual(ok({ standalone: true }).status.standalone, true);
+  assert.strictEqual(ok({ standalone: false }).status.standalone, false);
+  assert.strictEqual(ok({ standalone: undefined }).status.standalone, null);
+  // Anything else is not a yes and not a no: it is nothing.
+  assert.strictEqual(ok({ standalone: 'yes' }).status.standalone, null);
+  assert.strictEqual(ok({ standalone: 1 }).status.standalone, null);
+});
+
+test('iosSafari is Safari on an iPhone, and nothing else that calls itself one', () => {
+  const SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
+  assert.strictEqual(C.iosSafari(SAFARI, true), true);
+  // Chrome, Firefox, Edge, Opera and Google's own app on iOS cannot install anything.
+  assert.strictEqual(C.iosSafari(SAFARI.replace('Safari/604.1', 'CriOS/140.0 Mobile/15E148 Safari/604.1'), true), false);
+  assert.strictEqual(C.iosSafari(SAFARI.replace('Safari/604.1', 'FxiOS/140.0 Mobile/15E148 Safari/604.1'), true), false);
+  assert.strictEqual(C.iosSafari(SAFARI.replace('Safari/604.1', 'EdgiOS/140.0 Mobile/15E148 Safari/604.1'), true), false);
+  assert.strictEqual(C.iosSafari(SAFARI + ' GSA/350.0', true), false);
+  // A link opened inside another app: no Add to Home Screen exists there.
+  assert.strictEqual(C.iosSafari(SAFARI + ' [FBAN/FBIOS;FBAV/500.0]', true), false);
+  assert.strictEqual(C.iosSafari(SAFARI + ' Instagram 350.0', true), false);
+  // A web view with no standalone flag at all is not Safari either.
+  assert.strictEqual(C.iosSafari(SAFARI, false), false);
+  // Everything that is not an iPhone.
+  assert.strictEqual(C.iosSafari('Mozilla/5.0 (Macintosh; Intel Mac OS X) Version/26.0 Safari/605.1.15', true), false);
+  assert.strictEqual(C.iosSafari('Mozilla/5.0 (Linux; Android 16) Chrome/140 Mobile Safari/537.36', true), false);
+  assert.strictEqual(C.iosSafari('', true), false);
+  assert.strictEqual(C.iosSafari(), false);
+});
+
+test('hasAppHistory counts anything a client has done in this browser', () => {
+  assert.strictEqual(C.hasAppHistory(null), false);
+  assert.strictEqual(C.hasAppHistory({}), false);
+  assert.strictEqual(C.hasAppHistory({ log: {}, weightLog: {}, coachLog: [], goalsAgreedAt: null }), false);
+  assert.strictEqual(C.hasAppHistory({ log: { 'z2|2026-09-21': true } }), true);
+  assert.strictEqual(C.hasAppHistory({ weightLog: { '2026-09-21': 212 } }), true);
+  assert.strictEqual(C.hasAppHistory({ goalsAgreedAt: '2026-09-21T15:00:00Z' }), true);
+  assert.strictEqual(C.hasAppHistory({ coachLog: [{ role: 'user', content: 'hi' }] }), true);
+});
+
+test('needsInstallFirst sends a fresh iPhone to the home screen before the welcome, and strands nobody', () => {
+  const base = { ios: true, standalone: false, hasPlan: true, welcomeDone: false, hasHistory: false };
+  assert.strictEqual(C.needsInstallFirst(base), true);
+  // Already in the home-screen app, or not an iPhone at all: nothing changes.
+  assert.strictEqual(C.needsInstallFirst({ ...base, standalone: true }), false);
+  assert.strictEqual(C.needsInstallFirst({ ...base, ios: false }), false);
+  // No plan yet: the paste box belongs there, not this screen.
+  assert.strictEqual(C.needsInstallFirst({ ...base, hasPlan: false }), false);
+  // The welcome is answered, or the client has ticked things in this browser:
+  // sending them away would cost them the history that lives here.
+  assert.strictEqual(C.needsInstallFirst({ ...base, welcomeDone: true }), false);
+  assert.strictEqual(C.needsInstallFirst({ ...base, hasHistory: true }), false);
+  // A client who chose to keep going in Safari is never asked again.
+  assert.strictEqual(C.needsInstallFirst({ ...base, skipped: true }), false);
+  assert.strictEqual(C.needsInstallFirst({}), false);
+  assert.strictEqual(C.needsInstallFirst(), false);
+});
+
 // ── the app page ───────────────────────────────────────────────────────────
 
 test('every inline script in index.html parses', () => {

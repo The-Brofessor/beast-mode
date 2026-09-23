@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.10.0';
+  var VERSION = '2.11.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -682,6 +682,10 @@ var BeastCore = (function () {
       startDate: start || null,
       day: start ? daysBetween(start, today) + 1 : null,
       pushId: opts.pushId || null,
+      // Where the app is running: the home screen, or a browser tab. On
+      // iPhone only the home-screen app keeps a plan and can be pushed to,
+      // so Chris needs to see who has finished installing (loop brief 3e).
+      standalone: opts.standalone === true ? true : opts.standalone === false ? false : null,
       sharing: opts.sharing !== false,
       nudges: opts.nudges === true ? true : opts.nudges === false ? false : null
     };
@@ -756,6 +760,7 @@ var BeastCore = (function () {
       out.yesterday = { date: yv.date, gate: yv.gate, done: yv.done, scheduled: yv.scheduled, points: yv.points };
     } else out.yesterday = null;
     out.pushId = typeof raw.pushId === 'string' && isValidId(raw.pushId) && raw.pushId.length <= 64 ? raw.pushId : null;
+    out.standalone = raw.standalone === true ? true : raw.standalone === false ? false : null;
     out.sharing = raw.sharing !== false;
     out.nudges = raw.nudges === true ? true : raw.nudges === false ? false : null;
     return { ok: true, status: out };
@@ -772,6 +777,63 @@ var BeastCore = (function () {
 
   function shareUrlLength(baseUrl, code) {
     return String(baseUrl).length + '#import='.length + String(code).length;
+  }
+
+  /* iPhone only: a plan opened from a tapped link lands in Safari, and the
+     home-screen app has its own storage, so the plan must be pasted there
+     once. Doing the welcome in Safari first would mean answering it twice
+     and recording two consents, so a fresh phone is sent to install before
+     the welcome starts. A client who has already answered the welcome, or
+     who has ticked anything, is left alone: stranding someone mid-program
+     would cost them their history, which lives in the browser they used. */
+  function needsInstallFirst(o) {
+    o = o || {};
+    return !!(o.ios && !o.standalone && o.hasPlan && !o.welcomeDone && !o.hasHistory && !o.skipped);
+  }
+
+  /* Only real Safari on an iPhone can add an app to the home screen, and only
+     Safari has the buttons the install screen draws. Chrome and Firefox on
+     iOS, and the browsers inside Instagram, Gmail and the rest, are iPhones
+     by user agent and cannot follow a word of it, so they are never sent
+     there. `standaloneFlag` is whether navigator.standalone exists at all,
+     which the in-app web views generally lack. */
+  function iosSafari(ua, standaloneFlag) {
+    var s = String(ua || '');
+    if (!/iPad|iPhone|iPod/.test(s)) return false;
+    if (/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|Line\/|Twitter|LinkedInApp/i.test(s)) return false;
+    return standaloneFlag !== false;
+  }
+
+  /* Anything a client has done in this browser: ticks, agreed goals, a weigh
+     in, a word with the coach. Any of it means their history lives here, so
+     they are never sent away from it (needsInstallFirst). Wider than the log
+     alone, because the welcome version moves and a client who has only
+     weighed in would otherwise be treated as brand new. */
+  function hasAppHistory(state) {
+    if (!state || typeof state !== 'object') return false;
+    var some = function (o) { return !!o && typeof o === 'object' && Object.keys(o).length > 0; };
+    return some(state.log) || some(state.weightLog) || !!state.goalsAgreedAt ||
+      (Array.isArray(state.coachLog) && state.coachLog.length > 0);
+  }
+
+  // What a pasted message holds: a long link's code, or a short link's slug.
+  // On iPhone the home-screen app cannot receive a tapped link (links open
+  // in Safari, whose storage it does not share), so the client pastes the
+  // text they were sent and the app takes it from there. Whole messages are
+  // fine; the longer match wins when both are present.
+  function linkFromText(text) {
+    var t = String(text || '');
+    var m = /[#&]import=([^\s&"'<>]+)/.exec(t);
+    if (m) {
+      var code = m[1];
+      try { code = decodeURIComponent(code); } catch (e) { /* as pasted */ }
+      return { code: code };
+    }
+    var s = /\/p\/([A-Za-z0-9]+)/.exec(t);   // the server's slug alphabet, any case
+    if (s) return { slug: s[1].toLowerCase() };
+    var bare = extractCode(t);
+    var known = Object.keys(PREFIXES).some(function (k) { return bare.indexOf(PREFIXES[k]) === 0; });
+    return known ? { code: bare } : null;
   }
 
   // ── Wire format ───────────────────────────────────────────────────────────
@@ -1447,7 +1509,7 @@ var BeastCore = (function () {
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,
 
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
-    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength,
+    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
     buildBackup: buildBackup, readBackup: readBackup, backupDiff: backupDiff,
     backupFilename: backupFilename, daysSince: daysSince, BACKUP_TYPE: BACKUP_TYPE,
