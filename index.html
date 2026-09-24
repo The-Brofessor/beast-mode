@@ -130,6 +130,14 @@ nav button {
 }
 nav button.active { color: var(--text); }
 nav button.active svg { color: var(--acc-ink); }
+/* The Brofessor's tab is his face (Chris, 2026-09-24), ringed in volt when open. */
+/* Home is the gorilla (a rounded tile), Profile the client's rank badge.
+   Quieter when the tab is not open, ringed in volt when it is. */
+nav img.navpic { width: 26px; height: 26px; border-radius: 7px; object-fit: cover; box-shadow: 0 0 0 1.5px var(--line); opacity: .75; }
+nav img.navbro { border-radius: 50%; }
+nav button.active img.navpic { box-shadow: 0 0 0 2px var(--acc); opacity: 1; }
+nav svg.navbadge { width: 28px; height: 28px; opacity: .75; }
+nav button.active svg.navbadge { opacity: 1; filter: drop-shadow(0 0 3px var(--acc)); }
 
 /* ── summary ───────────────────────────────────────────────────────────── */
 .summary {
@@ -327,6 +335,23 @@ nav button.active svg { color: var(--acc-ink); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pair button { padding: 11px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); font-size: 14px; font-weight: 600; min-height: 44px; }
 .pair button.picked { background: var(--acc); color: var(--on-acc); border-color: var(--acc); }
+/* Chips: as many as fit, each as wide as its words. */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); font-size: 14px; font-weight: 600; min-height: 44px; }
+.chip.picked { background: var(--acc); color: var(--on-acc); border-color: var(--acc); }
+.fgroup { font-family: "Barlow Condensed", Inter, sans-serif; font-weight: 700; font-size: 20px; text-transform: uppercase; letter-spacing: .02em; margin: 22px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.timerow { display: flex; gap: 8px; align-items: center; }
+.timerow input { flex: 1; min-width: 0; }
+.timerow .chip { flex: none; }
+/* A meal's where: joined buttons beside the time. */
+.seg { flex: none; display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { padding: 0 10px; min-height: 44px; background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; border: 0; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.picked { background: var(--acc); color: var(--on-acc); }
+/* Two answers (a day off: home or out): a narrower time, wider buttons. */
+.timerow:has(.seg.two) input { flex: 0 0 46%; }
+.seg.two { flex: 1; }
+.seg.two button { flex: 1; }
 .btn.wait { opacity: .45; }
 
 /* ── sheets ────────────────────────────────────────────────────────────── */
@@ -379,6 +404,7 @@ nav button.active svg { color: var(--acc-ink); }
   line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
 }
 .bubble.me { align-self: flex-end; background: var(--acc); color: var(--on-acc); border-bottom-right-radius: 6px; }
+.songbtn { display: inline-block; margin-left: 6px; padding: 3px 12px; border-radius: 999px; background: var(--acc); color: var(--on-acc); font-size: 13px; font-weight: 700; text-decoration: none; }
 .bubble.coach { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
 .bubble.err { align-self: flex-start; background: var(--bad-soft); color: var(--bad); font-size: 14px; }
 .bubble.thinking { color: var(--text2); }
@@ -592,7 +618,7 @@ nav button.active svg { color: var(--acc-ink); stroke-width: 2.6; }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.15.0';
+var BUILT_AGAINST = '2.16.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -1090,6 +1116,13 @@ function startIntake(data) {
              token: data.token || null, step: 0, answers: {}, code: null,
              // The first screen says what this is and how long it takes.
              intro: !!data.token, boss: data.boss || '' };
+  // The name Chris typed fills the name boxes; the client only fixes it if
+  // it is wrong (intake review, Chris, 2026-09-24).
+  if (BeastCore.nameParts && intake.clientName) {
+    var parts = BeastCore.nameParts(intake.clientName);
+    if (parts.first) intake.answers.firstName = parts.first;
+    if (parts.last) intake.answers.lastName = parts.last;
+  }
   saveIntake();
 }
 
@@ -1244,7 +1277,12 @@ function answersHtml(answers, sections, withChange) {
   return sections.map(function (sec) {
     var shown = BeastCore.visibleFields ? BeastCore.visibleFields(sec, a) : sec.fields;
     var lines = shown.filter(function (f) { return a[f.key] !== undefined && String(a[f.key]).trim() !== ''; })
-      .map(function (f) { return '<div class="ans"><span>' + esc(f.label) + '</span><b>' + esc(String(a[f.key]).trim()) + '</b></div>'; });
+      .map(function (f) {
+        var v = String(a[f.key]).trim();
+        if (f.type === 'multi') v = v.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).join(', ');
+        if (f.type === 'height' && BeastCore.heightWords) v = BeastCore.heightWords(v);
+        return '<div class="ans"><span>' + esc(f.label) + '</span><b>' + esc(v) + '</b></div>';
+      });
     return '<div class="revsec' + (sec.featured ? ' featured' : '') + '"><div class="revhead"><h3>' + esc(sec.title) + '</h3>' +
       (withChange ? '<button class="lnk" onclick="editSection(' + attr(jsq(sec.title)) + ')">Change</button>' : '') + '</div>' +
       (lines.length ? lines.join('') : '<div class="imeta">Nothing here yet.</div>') + '</div>';
@@ -1323,6 +1361,45 @@ function stopForMissing(onlyThisStep) {
   return false;
 }
 
+// One of the two height wheels changed: the other keeps its value. The
+// wheels as picked are held on the form, so inches picked before feet are
+// not lost (no height is stored until the feet are set).
+function setHeight(part, value) {
+  var fi = intake.heightPick || BeastCore.feetInchesOf(intake.answers.height);
+  fi[part] = value;
+  intake.heightPick = fi;
+  setAnswer('height', BeastCore.inchesOf(fi.feet, fi.inches));
+}
+
+// A meal's where (home, work, out) as small joined buttons on the same line
+// as its time wheel (Chris, 2026-09-24): five meals on five lines, not ten.
+function mealWhere(f, shown) {
+  if (!f.whereKey) return '';
+  var w = shown.filter(function (x) { return x.key === f.whereKey; })[0];
+  if (!w) return '';
+  var v = intake.answers[w.key] || '';
+  return '<div class="seg' + (w.options.length === 2 ? ' two' : '') + '">' + w.options.map(function (o) {
+    return '<button class="' + (v === o ? 'picked' : '') + '" onclick="pickAnswer(' + attr(jsq(w.key)) + ',' + attr(jsq(o)) + ')">' +
+      esc(o.charAt(0).toUpperCase() + o.slice(1)) + '</button>';
+  }).join('') + '</div>';
+}
+
+// A chip in a `multi` field: tap to add, tap again to take off. The field's
+// `none` pick clears the rest, and any other pick clears `none`. Stored one
+// pick per line, in the order the options are listed.
+function toggleChip(key, value) {
+  var f = BeastCore.intakeFields().find(function (x) { return x.key === key; });
+  if (!f) return;
+  var picked = String(intake.answers[key] || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+  var on = picked.indexOf(value) >= 0;
+  if (on) picked = picked.filter(function (p) { return p !== value; });
+  else if (f.none && value === f.none) picked = [value];
+  else picked = picked.filter(function (p) { return p !== f.none; }).concat([value]);
+  var order = f.options || [];
+  picked.sort(function (x, y) { return order.indexOf(x) - order.indexOf(y); });
+  pickAnswer(key, picked.join('\n'));
+}
+
 function pickAnswer(key, value) {
   setAnswer(key, value);
   var y = window.scrollY;
@@ -1364,7 +1441,9 @@ function submitIntake() {
 // The texted code: the fallback for a client who cannot reach the server.
 function makeIntakeCode() {
   intake.code = BeastCore.encodePayload('intake', {
-    name: intake.clientName, answers: intake.answers
+    // Only what the client can see stands, as with a sent intake (CTO,
+    // 2026-09-24): shorter to text, and nothing behind a No.
+    name: intake.clientName, answers: BeastCore.visibleAnswers ? BeastCore.visibleAnswers(intake.answers) : intake.answers
   });
   saveIntake();
   render();
@@ -1601,6 +1680,8 @@ function intakeScreen() {
 
   var shown = BeastCore.visibleFields ? BeastCore.visibleFields(sec, intake.answers) : sec.fields;
   var fields = shown.map(function (f) {
+    // A meal's where is drawn on its time's line (below), not on its own.
+    if (f.joined) return '';
     var v = intake.answers[f.key] == null ? '' : intake.answers[f.key];
     var on = 'onchange="setAnswer(\'' + attr(f.key) + '\',this.value)"';
     var input;
@@ -1609,9 +1690,24 @@ function intakeScreen() {
       // options. Picking one may reveal the field that follows, so the
       // screen is drawn again in place.
       var opts = f.type === 'yesno' ? BeastCore.YESNO : f.options;
-      input = '<div class="pair" style="grid-template-columns:repeat(' + opts.length + ',1fr)">' + opts.map(function (o) {
-        var word = f.type === 'yesno' ? (o === 'yes' ? 'Yes' : 'No') : o.charAt(0).toUpperCase() + o.slice(1);
-        return '<button class="' + (v === o ? 'picked' : '') + '" onclick="pickAnswer(' + attr(jsq(f.key)) + ',' + attr(jsq(o)) + ')">' + esc(word) + '</button>';
+      // Long options (more than a word or two) go two to a row, or they
+      // wrap into tall narrow buttons on a phone.
+      // More than three answers wrap as chips, one pick, each as wide as its
+      // words, so five never squeeze into one row.
+      // (A row of short answers, like the counts 1 to 6, stays one row.)
+      var many = opts.length > 3 && opts.some(function (o) { return o.length > 2; });
+      var cols = opts.some(function (o) { return o.length > 12; }) ? 2 : opts.length;
+      input = (many ? '<div class="chips">' : '<div class="pair" style="grid-template-columns:repeat(' + cols + ',1fr)">') + opts.map(function (o) {
+        var word = f.type === 'yesno' ? (o === 'yes' ? 'Yes' : 'No') : f.asIs ? o : o.charAt(0).toUpperCase() + o.slice(1);
+        return '<button class="' + (many ? 'chip' : '') + (v === o ? ' picked' : '') + '" onclick="pickAnswer(' + attr(jsq(f.key)) + ',' + attr(jsq(o)) + ')">' + esc(word) + '</button>';
+      }).join('') + '</div>';
+    }
+    if (f.type === 'multi') {
+      // Chips: tap as many as fit (intake review, Chris, 2026-09-24).
+      var have = String(v).split('\n').map(function (s) { return s.trim(); });
+      input = '<div class="chips">' + f.options.map(function (o) {
+        return '<button class="chip' + (have.indexOf(o) >= 0 ? ' picked' : '') + '" onclick="toggleChip(' + attr(jsq(f.key)) + ',' + attr(jsq(o)) + ')">' +
+          esc(o.charAt(0).toUpperCase() + o.slice(1)) + '</button>';
       }).join('') + '</div>';
     }
     // A typed field carries its example inside the box, in a lighter type,
@@ -1624,12 +1720,19 @@ function intakeScreen() {
     // characters fit a line on a phone.
     var LINE = 36;
     var tall = f.type === 'text' && f.hint && f.hint.length > LINE;
-    if (f.type === 'yesno' || f.type === 'choice') {
+    if (f.type === 'yesno' || f.type === 'choice' || f.type === 'multi') {
       note = f.hint || '';
     } else if (f.type === 'date') {
       // The phone's own date picker: it shows the date the way the phone
-      // does (month first in the US) and stores YYYY-MM-DD.
-      input = '<input type="date" max="' + attr(BeastCore.todayLocal()) + '" value="' + attr(v) + '" ' + on + '>';
+      // does (month first in the US) and stores YYYY-MM-DD. A date of birth
+      // is in the past; a test date (`future`) is ahead.
+      input = '<input type="date" ' + (f.future ? 'min' : 'max') + '="' + attr(BeastCore.todayLocal()) + '" value="' + attr(v) + '" ' + on + '>';
+    } else if (f.type === 'time') {
+      // The phone's own time wheel (intake review, 2026-09-24), stored in
+      // words, '5:30pm' (BeastCore.clockWords); a meal's where beside it.
+      input = '<div class="timerow"><input type="time" value="' + attr(BeastCore.hhmm(v)) + '" onchange="pickAnswer(' + attr(jsq(f.key)) + ',BeastCore.clockWords(this.value))">' +
+        mealWhere(f, shown) +
+        '</div>';
     } else if (f.type === 'textarea' || tall) {
       input = '<textarea rows="' + (f.type === 'textarea' ? 3 : 2) + '"' + ph + ' ' + on + '>' + esc(v) + '</textarea>';
     } else if (f.type === 'select') {
@@ -1638,13 +1741,32 @@ function intakeScreen() {
           return '<option value="' + attr(o) + '"' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
         }).join('') + '</select>';
       note = f.hint || '';
+    } else if (f.type === 'height') {
+      // Two wheels, feet and inches, stored as inches (Chris, 2026-09-24).
+      var fi = intake.heightPick || BeastCore.feetInchesOf(v);
+      var wheel = function (part, from, to, unit, cur) {
+        var o = '<option value="">' + unit + '</option>';
+        for (var n = from; n <= to; n++) o += '<option value="' + n + '"' + (String(n) === cur ? ' selected' : '') + '>' + n + ' ' + unit + '</option>';
+        return '<select onchange="setHeight(\'' + part + '\',this.value)">' + o + '</select>';
+      };
+      input = '<div class="timerow">' + wheel('feet', 4, 7, 'ft', fi.feet) + wheel('inches', 0, 11, 'in', fi.inches) + '</div>';
     } else {
+      // A number the client may not know gets an "I don't know" button
+      // (`dunno`), which stores just that.
+      var unknown = f.dunno && v === 'don’t know';
+      var change = f.dunno ? 'onchange="pickAnswer(' + attr(jsq(f.key)) + ',this.value)"' : on;
       input = '<input type="' + (f.type === 'number' ? 'number' : 'text') + '"' +
         (f.type === 'number' ? ' inputmode="decimal"' : '') +
-        ' value="' + attr(v) + '"' + ph + ' ' + on + '>';
+        ' value="' + attr(unknown ? '' : v) + '"' + ph + ' ' + change + '>';
+      if (f.dunno) {
+        input = '<div class="timerow">' + input + '<button class="chip' + (unknown ? ' picked' : '') + '" onclick="pickAnswer(' +
+          attr(jsq(f.key)) + ',' + attr(jsq(unknown ? '' : 'don’t know')) + ')">I don’t know</button></div>';
+      }
     }
     var need = intake.missing && intake.missing.indexOf(f.key) >= 0;
-    return '<div class="field' + (need ? ' need' : '') + '" id="need-' + attr(f.key) + '"><label>' + esc(f.label) + '</label>' + input +
+    // A group's name heads its questions (each medication on the prescription page).
+    return (f.group ? '<h3 class="fgroup">' + esc(f.group) + '</h3>' : '') +
+      '<div class="field' + (need ? ' need' : '') + '" id="need-' + attr(f.key) + '">' + (f.hideLabel ? '' : '<label>' + esc(f.shortLabel || f.label) + '</label>') + input +
       (need ? '<div class="needmsg">' + esc(f.need || 'This one is needed.') + '</div>' : '') +
       (note ? '<div class="imeta">' + esc(note) + '</div>' : '') + '</div>';
   }).join('');
@@ -1655,10 +1777,12 @@ function intakeScreen() {
         Math.round(((intake.step + 1) / secs.length) * 100) + '%"></i></div></div>' +
     '<div class="card' + (sec.featured ? ' featured' : '') + '" style="margin-top:16px">' +
       (sec.lead ? '<div class="lead">' + esc(sec.lead) + '</div>' : '') +
-      (sec.heading
-        ? '<h2 class="condensed">' + esc(sec.heading) + '</h2>'
+      (sec.noTitle ? ''
+        : sec.heading ? '<h2 class="condensed">' + esc(sec.heading) + '</h2>'
         : '<h2 class="sectitle">' + esc(sec.title) + '</h2>') +
-      (sec.hint ? '<p class="imeta" style="margin-bottom:12px">' + esc(sec.hint) + '</p>' : '<div style="height:10px"></div>') +
+      // On the page that matters, the line is the instruction: question-sized
+      // and in full colour (Chris, 2026-09-24).
+      (sec.hint ? '<p class="imeta" style="margin-bottom:12px' + (sec.featured ? ';font-size:16px;line-height:1.45;font-weight:600;color:var(--text)' : '') + '">' + esc(sec.hint) + '</p>' : '<div style="height:10px"></div>') +
       (sec.example ? '<div class="example"><b>For example</b>' + esc(sec.example) + '</div>' : '') +
       fields +
       '<button class="btn" onclick="' + (last ? (intake.routineOnly ? 'submitIntake()' : 'openReview()') : 'intakeStep(1)') + '">' +
@@ -2499,6 +2623,22 @@ function withFace(bubble) {
   return '<div class="crow"><img class="bro sm" src="icons/brofessor.png" alt="">' + bubble + '</div>';
 }
 
+// A coach message as HTML: escaped text, and a Play button beside every
+// "Song: Artist - Title" line that opens it in the client's own music
+// service (methods 6c; Chris, 2026-09-24). Guarded for a cached older core.
+function coachText(text) {
+  var s = String(text == null ? '' : text);
+  if (!BeastCore.songOf) return esc(s);
+  var service = state && state.intakeAnswers ? state.intakeAnswers.musicService : '';
+  return s.split('\n').map(function (line) {
+    var song = BeastCore.songOf(line);
+    if (!song) return esc(line);
+    // The "Song:" marker is for the app, not the client (Chris, 2026-09-24).
+    return esc(song.replace(/\s+-\s+/, ' – ')) + ' <a class="songbtn" target="_blank" rel="noopener" href="' +
+      attr(BeastCore.songSearchUrl(service, song)) + '">Play</a>';
+  }).join('\n');
+}
+
 function coachNotice(paragraphs) {
   return withFace('<div class="bubble coach">' + paragraphs.map(esc).join('\n\n') + '</div>');
 }
@@ -2564,7 +2704,7 @@ function coachTab() {
   var body = state.coachLog.length
     ? state.coachLog.map(function (m) {
         var bubble = '<div class="bubble ' + (m.role === 'user' ? 'me' : 'coach') + '">' +
-          esc(m.content) + '</div>';
+          (m.role === 'user' ? esc(m.content) : coachText(m.content)) + '</div>';
         if (m.role !== 'user') bubble = withFace(bubble);
         return m.notice ? bubble + bossButton() : bubble;
       }).join('')
@@ -3145,6 +3285,20 @@ function header() {
     '</div></div></header>';
 }
 
+// The bottom bar's pictures (Chris, 2026-09-24): Home is the Beast Mode
+// gorilla, the Brofessor tab is his face, Profile is the client's own rank
+// badge. Week keeps its icon.
+function navIcon(name) {
+  if (name === 'today') return '<img class="navpic" src="icons/gorilla.png" alt="">';
+  if (name === 'coach') return '<img class="navpic navbro" src="icons/brofessor.png" alt="">';
+  if (name === 'profile') {
+    var level = 1;
+    try { if (!state.waiting) level = progress().level.level; } catch (e) {}
+    return badge(level, 'navbadge');
+  }
+  return icon(name);
+}
+
 function navBar() {
   // Every client gets the Brofessor tab (Chris, 2026-09-23: named for him,
   // not "Coach"). Without coaching it offers it.
@@ -3156,7 +3310,7 @@ function navBar() {
   if (state.waiting) tabs = [['today', 'Home'], ['coach', 'Brofessor'], ['profile', 'Profile']];
   return '<nav><div class="in">' + tabs.map(function (t) {
     return '<button class="' + (tab === t[0] ? 'active' : '') + '" onclick="go(\'' + t[0] + '\')">' +
-      icon(t[0]) + t[1] + '</button>';
+      navIcon(t[0]) + t[1] + '</button>';
   }).join('') + '</div></nav>';
 }
 

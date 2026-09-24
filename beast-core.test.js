@@ -575,6 +575,49 @@ test('ageUnknown: a blank or unreadable date of birth, with no stated age, is un
   assert.strictEqual(C.ageUnknown(null, today), true);
 });
 
+test('Goals as taps: the lean question only when gaining, How did it go only after a real diet, the test after a yes', () => {
+  const goals = C.INTAKE_SECTIONS[1];
+  const shown = a => C.visibleFields(goals, a).map(f => f.key);
+  assert.ok(!shown({}).includes('bulkStyle'));
+  assert.ok(!shown({ weight: '190', goalWeight: '180' }).includes('bulkStyle'), 'not when losing');
+  assert.ok(!shown({ weight: 'x', goalWeight: '205' }).includes('bulkStyle'), 'not on an unreadable weight');
+  assert.ok(shown({ weight: '190', goalWeight: '205' }).includes('bulkStyle'));
+  assert.ok(!shown({}).includes('cutPace'));
+  assert.ok(!shown({ goals: 'build muscle' }).includes('cutPace'));
+  assert.ok(shown({ goals: 'lose weight' }).includes('cutPace') && shown({ goals: 'build muscle\nlose fat' }).includes('cutPace'), 'either loss goal asks the pace');
+  assert.ok(!shown({ dietsTried: 'none' }).includes('dietsResult'), 'none is not a diet');
+  assert.ok(shown({ dietsTried: 'fasting' }).includes('dietsResult'));
+  assert.ok(!shown({}).includes('testKind') && !shown({ testYes: 'no' }).includes('testOn'));
+  assert.ok(shown({ testYes: 'yes' }).includes('testKind') && shown({ testYes: 'yes' }).includes('testOn'));
+  assert.deepStrictEqual(C.picksOf('build muscle\n look younger \n'), ['build muscle', 'look younger']);
+  assert.deepStrictEqual(C.picksOf(''), []);
+  // Picks read as goals, one each, and print on one line for the coach.
+  assert.deepStrictEqual(C.goalsFromIntake({ goals: 'build muscle\nlook younger' }).map(g => g.text), ['build muscle', 'look younger']);
+  assert.match(C.formatIntakeForCoach('V', { goals: 'build muscle\nlook younger' }), /Your goals: build muscle, look younger/);
+  // An old typed answer to a question that went still prints.
+  assert.match(C.formatIntakeForCoach('V', { habitKeep: 'the morning walk' }), /GOALS\nWhat do you like most about your day\?: the morning walk/);
+});
+
+test('songs: a "Song:" line is found, and searched in the client\'s own service', () => {
+  assert.strictEqual(C.songOf('Song: Lil Wayne - A Milli'), 'Lil Wayne - A Milli');
+  assert.strictEqual(C.songOf('  - song: Snoop Dogg - Still D.R.E.  '), 'Snoop Dogg - Still D.R.E.');
+  assert.strictEqual(C.songOf('3. Song: E-40 - Dusted ’N’ Disgusted'), 'E-40 - Dusted ’N’ Disgusted');
+  assert.strictEqual(C.songOf('The song for today is great'), null);
+  assert.strictEqual(C.songOf('Zone 2 - 20 min'), null);
+  assert.strictEqual(C.songOf('Song:   '), null);
+  assert.strictEqual(C.songOf(null), null);
+  assert.strictEqual(C.songSearchUrl('Spotify', 'Lil Wayne - A Milli'), 'https://open.spotify.com/search/Lil%20Wayne%20A%20Milli');
+  assert.strictEqual(C.songSearchUrl('Apple Music', 'Lil Wayne - A Milli'), 'https://music.apple.com/us/search?term=Lil%20Wayne%20A%20Milli');
+  assert.strictEqual(C.songSearchUrl('Amazon Music', 'X - Y'), 'https://music.amazon.com/search/X%20Y');
+  for (const other of ['YouTube Music', 'something else', 'I raw dog training', '', undefined]) {
+    assert.strictEqual(C.songSearchUrl(other, 'X - Y'), 'https://music.youtube.com/search?q=X%20Y', String(other));
+  }
+  assert.strictEqual(C.songSearchUrl('Spotify', 'AC/DC - T.N.T. & more?'), 'https://open.spotify.com/search/AC%2FDC%20T.N.T.%20%26%20more%3F', 'escaped');
+  // Every service the intake offers has a search, or falls back to one.
+  const music = C.INTAKE_SECTIONS.find(s => s.title === 'Music').fields.find(f => f.key === 'musicService');
+  for (const s of music.options) assert.match(C.songSearchUrl(s, 'x'), /^https:\/\//);
+});
+
 test('the date of birth is required on the form, and missingRequired finds it blank', () => {
   const personal = C.INTAKE_SECTIONS[0];
   const dob = personal.fields.find(f => f.key === 'birthday');
@@ -591,50 +634,103 @@ test('the date of birth is required on the form, and missingRequired finds it bl
 // ── the intake and the routine baseline ────────────────────────────────────
 
 test('the intake asks the routine for a work day and a day off, keyed by pass, with no duplicate keys', () => {
-  assert.strictEqual(C.INTAKE_VERSION, 2);
+  assert.strictEqual(C.INTAKE_VERSION, 3, 'the form as taps (2026-09-24)');
   const routine = C.routineSections();
   assert.deepStrictEqual(routine.map(s => s.pass), ['work', 'off', 'most']);
-  assert.deepStrictEqual(routine.map(s => s.title), ['Your work day', 'Your day off', 'Typical Day']);
-  assert.deepStrictEqual(C.INTAKE_SECTIONS.map(s => s.title), ['Personal Info', 'Goals', 'Your work day', 'Your day off', 'Typical Day', 'Training', 'Health', 'Your prescription', 'Tools', 'Music']);
+  assert.deepStrictEqual(routine.map(s => s.title), ['Your work day', 'Your day off', 'Most days']);
+  assert.deepStrictEqual(C.INTAKE_SECTIONS.map(s => s.title), ['Personal Info', 'Goals', 'Your work day', 'Your day off', 'Most days', 'Training', 'Health', 'Your prescription', 'Tools', 'Music']);
   // Personal Info (Chris, 2026-09-23): date of birth, not age; pounds and inches; two buttons for sex.
   const you = C.INTAKE_SECTIONS[0];
-  assert.deepStrictEqual(you.fields.map(f => f.key), ['firstName', 'lastName', 'birthday', 'sex', 'height', 'weight', 'goalWeight', 'waist', 'bodyFat', 'maxHr', 'household']);
+  assert.deepStrictEqual(you.fields.map(f => f.key), ['firstName', 'lastName', 'birthday', 'sex', 'height', 'weight', 'goalWeight', 'goalBy', 'waist', 'bodyFat', 'maxHr', 'maxHrHow', 'household', 'personalMore']);
+  // How they got the max heart rate, asked only once there is a number (Chris, 2026-09-24).
+  const shownYou = a => C.visibleFields(you, a).map(f => f.key);
+  assert.ok(!shownYou({}).includes('maxHrHow'));
+  assert.ok(!shownYou({ maxHr: 'don’t know' }).includes('maxHrHow'));
+  assert.ok(shownYou({ maxHr: '202' }).includes('maxHrHow'));
+  // Every page ends with Anything else (Chris, 2026-09-24).
+  for (const s of C.INTAKE_SECTIONS) assert.strictEqual(s.fields[s.fields.length - 1].label, 'Anything else?', s.title + ' ends with Anything else');
   assert.strictEqual(C.profileFromIntake('Vince', { firstName: ' Vince ', lastName: 'Carter' }).name, 'Vince Carter', 'the typed name wins');
   assert.strictEqual(C.profileFromIntake('Vince', { firstName: '', lastName: '' }).name, 'Vince', 'the link\'s name stands when none was typed');
   assert.strictEqual(you.fields[2].type, 'date');
   assert.strictEqual(you.fields[3].type, 'choice');
   assert.match(you.fields.find(f => f.key === 'weight').label, /\(lb\)/);
-  assert.match(you.fields.find(f => f.key === 'height').label, /\(inches\)/);
+  // Height on two wheels, stored as inches (Chris, 2026-09-24).
+  assert.strictEqual(you.fields.find(f => f.key === 'height').type, 'height');
+  assert.strictEqual(C.inchesOf('6', '2'), '74');
+  assert.strictEqual(C.inchesOf('5', ''), '60');
+  assert.strictEqual(C.inchesOf('', ''), '');
+  assert.deepStrictEqual(C.feetInchesOf('74'), { feet: '6', inches: '2' });
+  assert.deepStrictEqual(C.feetInchesOf('71.4'), { feet: '5', inches: '11' });
+  assert.deepStrictEqual(C.feetInchesOf(''), { feet: '', inches: '' });
+  assert.strictEqual(C.heightWords('74'), '6 ft 2 in (74 in)');
+  assert.strictEqual(C.heightWords("5'11"), "5'11", 'a typed height is shown as typed');
+  assert.match(C.formatIntakeForCoach('V', { height: '74' }), /Height: 6 ft 2 in \(74 in\)/);
+  // The name from the link fills the boxes.
+  assert.deepStrictEqual(C.nameParts('Mary Ann Smith'), { first: 'Mary', last: 'Ann Smith' });
+  assert.deepStrictEqual(C.nameParts(' Vince '), { first: 'Vince', last: '' });
+  assert.deepStrictEqual(C.nameParts(''), { first: '', last: '' });
+  assert.ok(['bodyFat', 'maxHr'].every(k => you.fields.find(f => f.key === k).dunno), 'an I don\'t know button');
+  assert.deepStrictEqual(you.fields.find(f => f.key === 'goalBy').options, ['3 months', '6 months', '1 year', 'no date']);
   assert.ok(C.INTAKE_LEGACY.age, 'an old age answer still prints');
   assert.strictEqual(C.INTAKE_SECTIONS[1].featured, true, 'the goals page is the one that matters');
   assert.ok(C.INTAKE_SECTIONS[1].lead);
   // Chris's additions and edits, 2026-09-23.
-  for (const k of ['waist', 'household', 'workCooks', 'awayNights', 'calories', 'treadmill', 'hrMonitor', 'scale', 'bands', 'bodyTools', 'sports', 'hobbies', 'allergies',
-                   'ancillariesYes', 'ancName', 'ancDose', 'ancSchedule', 'ancSince', 'ancSideEffectsYes', 'ancSideEffects', 'dietsTried', 'testComing', 'otherGoals', 'cleanOnly',
-                   'foodAppYes', 'foodApp', 'treadmillYes', 'bandsYes', 'bodyToolsYes', 'musicType', 'bandsMusic', 'songs', 'currentTraining', 'gym', 'supplementsOpen', 'sleep', 'stress', 'toolsOpen']) {
+  for (const k of ['waist', 'household', 'workCooks', 'alcoholNights', 'alcoholMost', 'caffeineCount', 'caffeineLast', 'teethBrush', 'teethFloss', 'tools', 'sports', 'trainWhere', 'allergies',
+                   'ancillariesYes', 'rxMeds', 'rxTestForm', 'rxTestWeek', 'rxTestDose', 'rxTestUnit', 'rxTestOften', 'rxTestSince', 'rxTestSide', 'rxTestSideWhat', 'rxOtherName',
+                   'injuryHowLong', 'injuryWhen', 'injurySeen', 'parq', 'pregnant', 'creatineDose', 'sleepHours', 'sleepHow', 'dietsTried', 'dietsResult', 'cutPace', 'testYes', 'testKind', 'testOn', 'goalsMore', 'bulkStyle', 'cleanOnly',
+                   'musicType', 'musicFavs', 'currentTraining', 'stress', 'toolsOpen']) {
     assert.ok(C.intakeFields().some(f => f.key === k), k + ' is asked');
   }
-  for (const gone of ['ancPrescriber', 'testEvents', 'testDate', 'testScores', 'testVenue']) {
+  for (const gone of ['ancPrescriber', 'testEvents', 'testDate', 'testScores', 'testVenue', 'habitKeep', 'habitBreak', 'testComing', 'otherGoals', 'calories', 'awayNights', 'teeth', 'alcohol', 'caffeine', 'gym', 'hobbies',
+                     'supplementsOpen', 'sleep', 'ancName', 'ancDose', 'ancSchedule', 'ancSince', 'ancSideEffectsYes', 'ancSideEffects']) {
     assert.ok(!C.intakeFields().some(f => f.key === gone), gone + ' is not asked');
     assert.ok(C.INTAKE_LEGACY[gone], gone + ' still prints');
   }
   // The tools: a yes or no, then the detail.
+  // (Without the page's Anything else box, which every page ends with.)
+  const ks = (sec, a) => C.visibleFields(sec, a).map(f => f.key).filter(k => !/More$/.test(k));
   const tools = C.INTAKE_SECTIONS.find(s => s.title === 'Tools');
-  assert.deepStrictEqual(C.visibleFields(tools, {}).map(f => f.key), ['foodAppYes', 'scale', 'treadmillYes', 'hrMonitor', 'bandsYes', 'bodyToolsYes', 'toolsOpen']);
-  assert.deepStrictEqual(C.visibleFields(tools, { foodAppYes: 'yes', bandsYes: 'no', bodyToolsYes: 'yes' }).map(f => f.key),
-    ['foodAppYes', 'foodApp', 'scale', 'treadmillYes', 'hrMonitor', 'bandsYes', 'bodyToolsYes', 'bodyTools', 'toolsOpen']);
-  assert.deepStrictEqual(tools.fields.find(f => f.key === 'foodApp').options, ['MyFitnessPal', 'another app']);
+  // One set of chips, then willing to buy (Chris, 2026-09-24).
+  assert.deepStrictEqual(ks(tools, {}), ['tools', 'toolsOpen']);
+  assert.ok(!tools.fields[0].none && !tools.fields[0].options.includes('none of these'), 'no none of these (Chris, 2026-09-24)');
+  for (const gone of ['foodAppYes', 'foodApp', 'scale', 'treadmillYes', 'treadmill', 'hrMonitor', 'bandsYes', 'bands', 'bodyToolsYes', 'bodyTools']) {
+    assert.ok(!C.intakeFields().some(f => f.key === gone) && C.INTAKE_LEGACY[gone], gone + ' still prints, not asked');
+  }
   const rx = C.INTAKE_SECTIONS.find(s => s.title === 'Your prescription');
-  assert.deepStrictEqual(C.visibleFields(rx, { ancSideEffectsYes: 'no' }).map(f => f.key).slice(-1), ['ancSideEffectsYes']);
-  assert.deepStrictEqual(C.visibleFields(rx, { ancSideEffectsYes: 'yes' }).map(f => f.key).slice(-1), ['ancSideEffects']);
+  // Any number of medications, each with its own questions (Chris, 2026-09-24).
+  const test = ['rxTestForm', 'rxTestDose', 'rxTestUnit', 'rxTestOften', 'rxTestSince', 'rxTestSide'];
+  assert.deepStrictEqual(ks(rx, {}), ['rxMeds']);
+  assert.deepStrictEqual(ks(rx, { rxMeds: 'testosterone' }), ['rxMeds', ...test]);
+  assert.deepStrictEqual(ks(rx, { rxMeds: 'testosterone', rxTestSide: 'yes' }), ['rxMeds', ...test, 'rxTestSideWhat']);
+  assert.ok(!ks(rx, { rxMeds: 'GLP-1', rxTestSide: 'yes' }).includes('rxTestSideWhat'), 'a side effect shows only under a med that is picked');
+  assert.deepStrictEqual(ks(rx, { rxMeds: 'testosterone\nGLP-1' }).filter(k => /Form$/.test(k)), ['rxTestForm', 'rxGlpForm']);
+  assert.strictEqual(ks(rx, { rxMeds: 'other' })[1], 'rxOtherName', 'other asks the name first');
+  // An injection: the total a week; anything else: each dose (Chris, 2026-09-24).
+  // Two keys, so a weekly total is never read as a single dose.
+  const inj = ks(rx, { rxMeds: 'testosterone', rxTestForm: 'injection' });
+  assert.ok(inj.includes('rxTestWeek') && !inj.includes('rxTestDose'));
+  const pill = ks(rx, { rxMeds: 'thyroid', rxThyForm: 'pill' });
+  assert.ok(pill.includes('rxThyDose') && !pill.includes('rxThyWeek'));
+  assert.ok(!ks(rx, { rxMeds: 'GLP-1', rxTestForm: 'injection' }).includes('rxTestWeek'), 'only under a med that is picked');
+  assert.strictEqual(rx.fields.find(f => f.key === 'rxTestWeek').label, 'Testosterone: total a week');
+  assert.strictEqual(rx.fields.find(f => f.key === 'rxThyDose').label, 'Thyroid: each dose');
+  assert.ok(rx.fields.find(f => f.key === 'rxTestOften').options.includes('every other day'));
+  assert.ok(!C.intakeFields().some(f => /prescriber|prescribes|follow-up|appointment/i.test(f.label)), 'no prescriber or next appointment (Chris, 2026-09-24)');
+  // Health's follow-ups.
+  const health = C.INTAKE_SECTIONS.find(s => s.title === 'Health');
+  assert.ok(!ks(health, { injuries: 'none' }).includes('injuryHowLong') && ks(health, { injuries: 'knee\nelbow' }).includes('injuryWhen'));
+  assert.ok(!ks(health, { sex: 'male' }).includes('pregnant') && ks(health, { sex: 'female' }).includes('pregnant'));
+  assert.ok(!ks(health, {}).includes('creatineDose') && ks(health, { supplements: 'protein powder\ncreatine' }).includes('creatineDose'));
+  assert.ok(ks(health, {}).includes('parq'), 'the pre-exercise question is always asked');
+  assert.strictEqual(health.fields.find(f => f.key === 'ancillariesYes').hint, undefined, 'no hint (Chris, 2026-09-24)');
   // Music: no music, no music questions; otherwise the clean-versions question is asked.
   const music = C.INTAKE_SECTIONS.find(s => s.title === 'Music');
-  assert.deepStrictEqual(C.visibleFields(music, {}).map(f => f.key), ['musicService', 'musicType', 'bandsMusic', 'songs', 'cleanOnly']);
-  assert.deepStrictEqual(C.visibleFields(music, { musicService: 'Spotify' }).map(f => f.key), ['musicService', 'musicType', 'bandsMusic', 'songs', 'cleanOnly']);
-  assert.deepStrictEqual(C.visibleFields(music, { musicService: 'I raw dog training' }).map(f => f.key), ['musicService']);
+  assert.deepStrictEqual(ks(music, {}), ['musicService', 'musicType', 'musicFavs', 'cleanOnly']);
+  assert.deepStrictEqual(ks(music, { musicService: 'Spotify' }), ['musicService', 'musicType', 'musicFavs', 'cleanOnly']);
+  assert.deepStrictEqual(ks(music, { musicService: 'I raw dog training' }), ['musicService']);
   assert.strictEqual(music.fields.find(f => f.key === 'cleanOnly').type, 'yesno');
   for (const s of C.INTAKE_SECTIONS) assert.ok(!s.example, s.title + ': the examples live in the boxes (Chris, 2026-09-23)');
-  assert.ok(C.intakeFields().some(f => f.key === 'teeth'), 'brushing and flossing is asked');
+  assert.ok(C.INTAKE_SECTIONS.find(s => s.title === 'Health').fields.some(f => f.key === 'teethBrush'), 'brushing and flossing is asked, on Health');
   assert.match(C.INTAKE_SECTIONS.find(s => s.title === 'Music').hint, /The Brofessor can make music suggestions/);
   assert.match(C.formatIntakeForCoach('V', { testEvents: 'push-ups', testDate: '2026-11-01' }), /GOALS\nTest events: push-ups\nTest date: 2026-11-01/, 'an old test-prep answer prints under Goals');
   // The prescription screen appears only after a yes.
@@ -642,20 +738,26 @@ test('the intake asks the routine for a work day and a day off, keyed by pass, w
   assert.ok(!C.visibleSections({ ancillariesYes: 'no' }).some(s => s.title === 'Your prescription'));
   assert.ok(C.visibleSections({ ancillariesYes: 'yes' }).some(s => s.title === 'Your prescription'));
   assert.strictEqual(C.visibleSections({ ancillariesYes: 'yes' }).length, C.INTAKE_SECTIONS.length);
-  assert.match(C.INTAKE_SECTIONS.find(s => s.title === 'Tools').fields[0].hint, /MyFitnessPal/);
+  // No notes under the Tools questions (Chris, 2026-09-24); the title line stays.
+  const toolsPage = C.INTAKE_SECTIONS.find(s => s.title === 'Tools');
+  assert.ok(toolsPage.fields.filter(f => f.type !== 'textarea').every(f => !f.hint));
+  assert.strictEqual(toolsPage.hint, 'None are required to start.');
   const keys = C.intakeFields().map(f => f.key);
   assert.strictEqual(new Set(keys).size, keys.length, 'every key is asked once');
   // The same asks for both passes, so the two days compare field for field.
-  const asks = pass => routine.find(s => s.pass === pass).fields.filter(f => f.ask && f.ask !== 'hours').map(f => f.ask);
-  assert.deepStrictEqual(asks('work'), asks('off'));
-  assert.deepStrictEqual(asks('work'), ['wake', 'meals', 'train', 'evening', 'bed']);
-  assert.ok(keys.includes('workHours') && !keys.includes('offHours'), 'the fixed blocks belong to the work day alone');
+  const asks = pass => routine.find(s => s.pass === pass).fields.filter(f => f.ask).map(f => f.ask);
+  const meals = [1, 2, 3, 4, 5, 6].flatMap(n => ['meal' + n, 'meal' + n + 'Where']);
+  assert.deepStrictEqual(asks('off'), ['wake', 'mealCount', ...meals, 'train', 'train2', 'evening', 'bed']);
+  assert.deepStrictEqual(asks('work').filter(k => !asks('off').includes(k)), ['start', 'end'], 'the day off asks what the work day asks, minus the fixed blocks');
+  assert.ok(keys.includes('workStart') && !keys.includes('offStart') && !keys.includes('workHours'), 'the fixed blocks belong to the work day alone, as wheels');
+  for (const gone of ['workLeave', 'workCommute', 'workFirst']) assert.ok(!keys.includes(gone), gone + ': no plan used it (Chris, 2026-09-24)');
   for (const old of ['wakeTime', 'bedTime']) assert.ok(!keys.includes(old), old + ' is never asked again');
-  assert.ok(keys.includes('habitKeep') && keys.includes('habitBreak') && keys.includes('obstacle'));
+  assert.ok(keys.includes('obstacle') && !keys.includes('habitKeep'), 'likes most and least went to INTAKE_LEGACY (Chris, 2026-09-24)');
   // Every field can be drawn by the app: a known type, options for a select.
   for (const f of C.intakeFields()) {
-    assert.ok(['number', 'text', 'select', 'textarea', 'yesno', 'choice', 'date'].includes(f.type), f.key + ' has type ' + f.type);
-    if (f.type === 'choice') assert.ok(f.options.length >= 2 && f.options.length <= 3, f.key + ': buttons for two or three options, a list beyond');
+    assert.ok(['number', 'text', 'select', 'textarea', 'yesno', 'choice', 'date', 'multi', 'time', 'height'].includes(f.type), f.key + ' has type ' + f.type);
+    if (f.type === 'choice') assert.ok(f.options.length >= 2 && f.options.length <= 7, f.key + ': buttons for two to seven options (more than three wrap as chips), a list beyond');
+    if (f.type === 'multi') assert.ok(f.options.length >= 2 && (!f.none || f.options.includes(f.none)), f.key + ': chips need options, and its none among them');
     if (f.type === 'select') assert.ok(!(f.options.length === 2 && f.options.includes('yes')), f.key + ': a yes or no is two buttons, not a drop-down');
     if (f.type === 'select') assert.ok(f.options.length > 1, f.key + ' needs options');
     assert.ok(f.label, f.key + ' needs a label');
@@ -668,17 +770,18 @@ test('old answers are told apart from new ones, and both still print for the coa
   const v1 = { age: 40, job: 'desk', activity: 'mostly sitting', wakeTime: '05:30', workHours: '8 to 5', bedTime: '22:30', habitBreak: 'late snacks' };
   const v2 = { age: 40, job: 'desk', workWake: '5:30, coffee', workHours: '7:15, 8 to 5, 30 min', workBed: '10:30, 20 min', offWake: '8, kids' };
   assert.strictEqual(C.intakeVersionOf(v1), 1);
-  assert.strictEqual(C.intakeVersionOf(v2), 2);
-  assert.strictEqual(C.intakeVersionOf({}), 2, 'nothing answered is the current version');
-  assert.strictEqual(C.intakeVersionOf({ job: 'desk', workHours: '8 to 5' }), 2, 'the shared keys alone do not make it old');
+  assert.strictEqual(C.intakeVersionOf(v2), C.INTAKE_VERSION, 'not version 1: read as the current shape');
+  assert.strictEqual(C.intakeVersionOf({}), C.INTAKE_VERSION, 'nothing answered is the current version');
+  assert.strictEqual(C.intakeVersionOf({ job: 'desk', workHours: '8 to 5' }), C.INTAKE_VERSION, 'the shared keys alone do not make it old');
   const oldText = C.formatIntakeForCoach('Vince', { ...v1, ancillaries: 'semaglutide 0.5 mg Sundays' });
   assert.match(oldText, /HEALTH\nAnything prescribed: semaglutide 0.5 mg Sundays/, 'the old prescription answer prints under Health');
   assert.match(oldText, /^INTAKE: Vince/);
   assert.match(oldText, /YOUR DAY\nWhat do you do all day\?: desk\nHow active is that\?: mostly sitting\nUsual wake time: 05:30\nWork hours: 8 to 5\nUsual bed time: 22:30/);
   assert.ok(!/YOUR WORK DAY|YOUR DAY OFF/.test(oldText), 'old answers do not print empty new sections');
   const newText = C.formatIntakeForCoach('Vince', v2);
-  assert.match(newText, /YOUR WORK DAY\nWhat do you do all day\?: desk\nWake time, and the first thing you do: 5:30, coffee\nLeave for work, work start and end, commute: 7:15, 8 to 5, 30 min/);
-  assert.match(newText, /YOUR DAY OFF\nWake time, and the first thing you do: 8, kids/);
+  // Typed answers print under today's labels; the typed work hours under their own.
+  assert.match(newText, /YOUR WORK DAY\nYour work is mostly: desk\nWake up: 5:30, coffee\nBed time: 10:30, 20 min\nLeave for work, work start and end, commute: 7:15, 8 to 5, 30 min/);
+  assert.match(newText, /YOUR DAY OFF\nWake up: 8, kids/);
   assert.ok(!/YOUR DAY\n/.test(newText));
   assert.match(C.formatIntakeForCoach('', { workMeals: 'a\nb\n\nc' }), /where: a; b; c/, 'newlines in an answer become one line');
 });
@@ -690,7 +793,7 @@ test('routineBaseline reads either version into one shape, blank as empty string
   assert.strictEqual(b1.off.wake, '');
   assert.strictEqual(b1.empty, false);
   const b2 = C.routineBaseline({ workWake: '6, coffee', wakeTime: '5', offBed: 'midnight', steps: 6000, habitKeep: 'walks' });
-  assert.strictEqual(b2.version, 2);
+  assert.strictEqual(b2.version, C.INTAKE_VERSION);
   assert.strictEqual(b2.work.wake, '6, coffee', 'a new answer wins over an old one');
   assert.strictEqual(b2.off.bed, 'midnight');
   assert.strictEqual(b2.most.steps, '6000', 'numbers come back as strings');
@@ -700,12 +803,103 @@ test('routineBaseline reads either version into one shape, blank as empty string
   assert.deepStrictEqual(Object.keys(C.routineBaseline({}).work), ['wake', 'hours', 'meals', 'train', 'evening', 'bed']);
 });
 
+test('the work day as taps: times in words, the slots built from the taps, typed answers untouched', () => {
+  assert.strictEqual(C.clockWords('05:30'), '5:30am');
+  assert.strictEqual(C.clockWords('17:00'), '5pm');
+  assert.strictEqual(C.clockWords('12:00'), 'noon');
+  assert.strictEqual(C.clockWords('00:00'), 'midnight');
+  assert.strictEqual(C.clockWords('00:30'), '12:30am');
+  assert.strictEqual(C.clockWords('10:30'), '10:30am');
+  assert.strictEqual(C.clockWords('5:30, coffee'), '5:30, coffee', 'typed text is left alone');
+  for (const v of ['05:30', '17:00', '12:00', '00:00', '00:30', '23:45']) assert.strictEqual(C.hhmm(C.clockWords(v)), v, v + ' round trips');
+  assert.strictEqual(C.hhmm('10:30'), '10:30');
+  assert.strictEqual(C.hhmm('after the news'), '');
+  // Chris's own work day, as taps.
+  const b = C.routineBaseline({
+    workDays: 'Mon\nTue\nWed\nThu\nFri', job: 'at a desk', workWake: '5am', workStart: '9am', workEnd: '5pm',
+    workMealCount: '5', workMeal1: '7am', workMeal1Where: 'home', workMeal2: '11am', workMeal2Where: 'work',
+    workMeal3: '2pm', workMeal3Where: 'work', workMeal4: '5pm', workMeal4Where: 'home', workMeal5: '7pm', workMeal5Where: 'home',
+    workMeal6: '9pm', workMeal6Where: 'home',
+    workTrain: '4pm', workTrain2: '6pm', workEvening: 'dinner\nTV', workBed: '10pm', offWake: '6am', offBed: 'midnight'
+  });
+  assert.strictEqual(b.workDays, 'Mon, Tue, Wed, Thu, Fri');
+  assert.deepStrictEqual(b.work, { wake: '5am', hours: '9am to 5pm',
+    meals: '7am at home, 11am at work, 2pm at work, 5pm at home, 7pm at home', train: '4pm, or 6pm', evening: 'dinner, TV', bed: '10pm' },
+    'a sixth meal left over from a higher count is not read');
+  assert.strictEqual(b.off.wake, '6am');
+  const work0 = C.INTAKE_SECTIONS.find(s => s.pass === 'work');
+  const mealsShown = n => C.visibleFields(work0, { workMealCount: n }).filter(f => /^workMeal\d$/.test(f.key)).length;
+  assert.deepStrictEqual([mealsShown(''), mealsShown('1'), mealsShown('5'), mealsShown('6')], [0, 1, 5, 6]);
+  const off0 = C.INTAKE_SECTIONS.find(s => s.pass === 'off');
+  assert.deepStrictEqual(off0.fields.find(f => f.key === 'offMeal1Where').options, ['home', 'out'], 'no work on a day off');
+  // The day strip and the streak-at-risk hour read these words.
+  assert.strictEqual(C.timeFromText(b.work.wake), 5 * 60);
+  assert.strictEqual(C.timeFromText(b.work.bed, { pm: true }), 22 * 60);
+  assert.strictEqual(C.timeFromText(b.off.bed, { pm: true }), 0);
+  // No set work hours: the fixed blocks are not asked, and nothing is built.
+  const work = C.INTAKE_SECTIONS.find(s => s.pass === 'work');
+  const keys = a => C.visibleFields(work, a).map(f => f.key);
+  assert.ok(keys({}).includes('workStart'));
+  assert.ok(!keys({ job: 'no set work hours' }).some(k => ['workStart', 'workEnd'].includes(k)));
+  assert.ok(keys({ job: 'no set work hours' }).includes('workMealCount'));
+  // Most days as taps.
+  const m = C.routineBaseline({ steps: 'over 15,000', water: 'over 150 oz', alcoholNights: 'Fri\nSat', alcoholMost: '10 or more', caffeineCount: '6+', caffeineLast: 'noon' }).most;
+  assert.deepStrictEqual(m, { steps: 'over 15,000', water: 'over 150 oz', alcohol: 'Fri, Sat; 10 or more on the biggest night', caffeine: '6+ a day, the last at noon' });
+  assert.strictEqual(C.routineBaseline({ alcoholNights: 'none', caffeineCount: '0', caffeineLast: 'evening' }).most.caffeine, '0 a day');
+  assert.strictEqual(C.routineBaseline({ alcoholNights: 'none' }).most.alcohol, 'none');
+  assert.strictEqual(C.routineBaseline({ alcohol: '3 beers Friday' }).most.alcohol, '3 beers Friday', 'a typed answer still reads');
+  const most = C.INTAKE_SECTIONS.find(s => s.pass === 'most');
+  const mk = a => C.visibleFields(most, a).map(f => f.key);
+  assert.ok(!mk({}).includes('alcoholMost') && !mk({ alcoholNights: 'none' }).includes('alcoholMost') && mk({ alcoholNights: 'Sat' }).includes('alcoholMost'));
+  assert.ok(!mk({ caffeineCount: '0' }).includes('caffeineLast') && mk({ caffeineCount: '2' }).includes('caffeineLast'));
+  // A change in the taps is named by its slot.
+  const ch = C.routineChanges({ workBed: '10pm', workDays: 'Mon' }, { workBed: '9:30pm', workDays: 'Mon\nTue' });
+  assert.deepStrictEqual(ch.map(c => c.label), ['Your work day: Work days', 'Your work day: Bed']);
+});
+
+test('an existing client answering the same day on the wheels is not a change (CTO, 2026-09-24)', () => {
+  const typed = { workWake: '5:30, coffee', workHours: '7:15, 8 to 5, 30 min', workMeals: '7 home, 12 desk, 6:30 home',
+    workTrain: '5:30 pm, or 6 am', workBed: '10:30, 20 min', offWake: '8', offBed: '11' };
+  const tapped = { workWake: '5:30am', workStart: '8am', workEnd: '5pm', workMealCount: '3', workMeal1: '7am', workMeal1Where: 'home',
+    workMeal2: 'noon', workMeal2Where: 'work', workMeal3: '6:30pm', workMeal3Where: 'home', workTrain: '5:30pm', workTrain2: '6am',
+    workBed: '10:30pm', offWake: '8am', offBed: '11pm' };
+  assert.deepStrictEqual(C.routineChanges(typed, tapped), []);
+  assert.deepStrictEqual(C.routineChanges(typed, { ...tapped, workBed: '9:30pm' }).map(c => c.key), ['workBed'], 'a real change still shows');
+  assert.deepStrictEqual(C.routineChanges(typed, { ...tapped, workEnd: '6pm' }).map(c => c.key), ['workHours']);
+  assert.deepStrictEqual(C.routineChanges({ workWake: 'late' }, { workWake: 'early' }).map(c => c.key), ['workWake'], 'no times: the words');
+  assert.strictEqual(C.routineBaseline(tapped).work.meals, '7am at home, noon at work, 6:30pm at home');
+  assert.strictEqual(C.routineBaseline({ offMealCount: '1', offMeal1: '6pm', offMeal1Where: 'out' }).off.meals, '6pm out');
+});
+
+test('old answers the new form moved still print, and hide after their No (CTO, 2026-09-24)', () => {
+  // How active is that? stays in Chris's paste beside the typed job.
+  assert.match(C.formatIntakeForCoach('V', { job: 'desk', activity: 'mostly sitting' }), /How active is that\?: mostly sitting/);
+  // An old follow-up goes with its No, like a new one.
+  const no = { foodAppYes: 'no', foodApp: 'MyFitnessPal', ancillariesYes: 'yes', ancSideEffectsYes: 'no', ancSideEffects: 'nausea' };
+  const text = C.formatIntakeForCoach('V', no);
+  assert.ok(!/MyFitnessPal|nausea/.test(text));
+  assert.ok(!('foodApp' in C.visibleAnswers(no)) && !('ancSideEffects' in C.visibleAnswers(no)));
+  assert.match(C.formatIntakeForCoach('V', { ...no, foodAppYes: 'yes' }), /Which one\?: MyFitnessPal/);
+  // The routine's own boxes and Who cooks reach the baseline.
+  const b = C.routineBaseline({ workCooks: 'me', workMore: 'Nights every other week', offMore: 'Church Sunday', mostMore: 'Travel monthly' });
+  assert.strictEqual(b.cooks, 'me');
+  assert.deepStrictEqual(b.notes, { work: 'Nights every other week', off: 'Church Sunday', most: 'Travel monthly' });
+  // Height needs its feet.
+  assert.strictEqual(C.inchesOf('', '2'), '');
+  assert.strictEqual(C.inchesOf('6', ''), '72');
+  // Goals: tapped ones take the By when, the client's own words become goals too.
+  const g = C.goalsFromIntake({ goals: 'build muscle\nlook younger', goalBy: '6 months', goalsMore: '15 lb by March\nWalk daily' });
+  assert.deepStrictEqual(g.map(x => x.text + ':' + x.term), ['build muscle:long', 'look younger:long', '15 lb by March:long', 'Walk daily:short']);
+  assert.strictEqual(C.goalsFromIntake({ goals: 'lose fat', goalBy: '3 months' })[0].term, 'short');
+  assert.strictEqual(C.profileFromIntake('V', { whyNow: 'a fresh start\na test coming up' }).why, 'a fresh start, a test coming up');
+});
+
 test('routineChanges names what moved between two baselines, routine fields only', () => {
   const before = { workWake: '5:30', offBed: '', steps: '5000', age: 40, shortGoals: 'x' };
   const after = { workWake: '6, coffee', offBed: '11', steps: '5000', age: 41, shortGoals: 'y' };
   const ch = C.routineChanges(before, after);
   assert.deepStrictEqual(ch.map(c => c.key), ['workWake', 'offBed']);
-  assert.deepStrictEqual(ch[0], { key: 'workWake', label: 'Your work day: Wake time, and the first thing you do', from: '5:30', to: '6, coffee' });
+  assert.deepStrictEqual(ch[0], { key: 'workWake', label: 'Your work day: Wake', from: '5:30', to: '6, coffee' });
   assert.deepStrictEqual(C.routineChanges(after, after), []);
   assert.deepStrictEqual(C.routineChanges(null, {}), []);
   assert.strictEqual(C.routineChanges({ workWake: '6' }, { workWake: ' 6 ' }).length, 0, 'whitespace is not a change');
@@ -775,18 +969,18 @@ test('one goal list: each goal takes the term its own time frame says, and the o
   assert.deepStrictEqual(C.goalsFromIntake({}), []);
   assert.ok(!C.intakeFields().some(f => f.key === 'shortGoals' || f.key === 'longGoals'), 'the two lists are not asked');
   assert.match(C.formatIntakeForCoach('V', { shortGoals: 'Drop 6 lb' }), /GOALS\nNext 4 weeks: Drop 6 lb/, 'an old answer still prints');
-  assert.match(C.INTAKE_SECTIONS[1].hint, /time frame/);
+  assert.strictEqual(C.INTAKE_SECTIONS[1].hint, 'Choose a goal. You can pick more than one. If you have something else in mind write it below.', 'Chris, 2026-09-24');
+  assert.ok(C.INTAKE_SECTIONS[1].noTitle && !C.INTAKE_SECTIONS[1].heading, 'no heading on the Goals page');
   assert.strictEqual(C.INTAKE_SECTIONS[1].lead, 'A goal without a plan is just a wish.');
-  assert.ok(!C.intakeFields().some(f => f.key === 'bulkStyle'), 'the bulking question is gone');
-  assert.strictEqual(C.intakeFields().find(f => f.key === 'habitKeep').label, 'What do you like most about your day?');
-  assert.strictEqual(C.intakeFields().find(f => f.key === 'habitBreak').label, 'What do you like least about your day?');
+  assert.strictEqual(C.INTAKE_LEGACY.habitKeep.label, 'What do you like most about your day?', 'an old answer still prints');
+  assert.strictEqual(C.INTAKE_LEGACY.habitBreak.label, 'What do you like least about your day?');
 });
 
 test('answers hidden by a No never print, never reach the baseline, and drop at send', () => {
-  const a = { ancillariesYes: 'no', ancName: 'Semaglutide', ancDose: '0.5 mg', musicService: 'I raw dog training', songs: 'Enter Sandman',
-              foodAppYes: 'no', foodApp: 'MyFitnessPal', workWake: '6', habitBreak: 'late snacks', wakeTime: '5:30' };
+  const a = { ancillariesYes: 'no', ancName: 'Semaglutide', ancDose: '0.5 mg', musicService: 'I raw dog training', musicFavs: 'Enter Sandman',
+              workWake: '6', habitBreak: 'late snacks', wakeTime: '5:30' };
   const kept = C.visibleAnswers(a);
-  assert.deepStrictEqual(Object.keys(kept).sort(), ['ancillariesYes', 'foodAppYes', 'habitBreak', 'musicService', 'wakeTime', 'workWake']);
+  assert.deepStrictEqual(Object.keys(kept).sort(), ['ancillariesYes', 'habitBreak', 'musicService', 'wakeTime', 'workWake']);
   const text = C.formatIntakeForCoach('V', a);
   assert.ok(!/Semaglutide|MyFitnessPal|Enter Sandman/.test(text), 'nothing the client hid prints');
   assert.match(text, /Are you on anything prescribed\?: no/);
