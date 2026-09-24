@@ -1163,7 +1163,7 @@ async function openIntakeLink(token) {
     });
     data = await res.json().catch(function () { return {}; });
     if (!res.ok) failed = data.error || 'That link did not work.';
-  } catch (e) { failed = 'I couldn\u2019t reach the server. Check your signal and tap the link again.'; }
+  } catch (e) { failed = 'Couldn\u2019t reach the server. Check your signal and tap the link again.'; }
   if (failed) {
     root.innerHTML = '<div class="wrap"><div class="empty" style="padding-top:80px"><div class="big">' + icon('link') + '</div>' +
       '<h2>That link did not work</h2><p>' + esc(failed) + '</p>' +
@@ -1316,11 +1316,11 @@ function intakeIntroScreen() {
 function intakeReviewScreen() {
   var secs = intakeSections();
   return '<div class="wrap">' +
-    '<div class="card" style="margin-top:22px"><h2 style="font-size:20px;margin-bottom:6px">Here\u2019s what you told me</h2>' +
+    '<div class="card" style="margin-top:22px"><h2 style="font-size:20px;margin-bottom:6px">Here\u2019s what you told us</h2>' +
     '<p class="imeta">Check it over. Change anything, then send it.</p></div>' +
     answersHtml(intake.answers, secs.filter(function (s) { return s.featured; }).concat(secs.filter(function (s) { return !s.featured; })), true) +
     '<div class="card">' +
-      '<button class="btn" onclick="submitIntake()">' + (intake.update ? 'Send my updates' : 'Send it to me') + '</button>' +
+      '<button class="btn" onclick="submitIntake()">' + (intake.update ? 'Send my updates' : 'Send it to your coach') + '</button>' +
       (intake.update || state ? '<button class="btn sec" onclick="skipIntake()">Not now</button>' : '') +
     '</div></div>';
 }
@@ -1493,7 +1493,7 @@ async function postIntake(token) {
       state.routineAnsweredAt = new Date().toISOString();
       save();
       clearIntakeSilently();
-      toast(wasUpdate ? 'Got it. Your answers are updated.' : 'Got it. That\u2019s the picture I work from.');
+      toast(wasUpdate ? 'Got it. Your answers are updated.' : 'Got it. Your coach has your day now.');
       if (wasUpdate) tab = 'profile';
       render();
       return;
@@ -1526,7 +1526,7 @@ async function postIntake(token) {
   // No signal: the answers stay on the phone. A routine re-ask offers a
   // retry or Not now; an intake falls back to the texted code.
   if (intake.routineOnly || intake.update) {
-    intake.refused = 'I couldn\u2019t reach the server. Check your signal and try again, or come back to this later.';
+    intake.refused = 'Couldn\u2019t reach the server. Check your signal and try again, or come back to this later.';
     intake.retry = true;
     saveIntake();
     render();
@@ -1624,7 +1624,7 @@ function intakeScreen() {
       '<div class="big">' + mark() + '</div>' +
       '<h2>Beast Mode is for adults</h2>' +
       '<p>You need to be ' + (BeastCore.MIN_AGE || 18) + ' or older to use Beast Mode, ' +
-        'so I can’t build you a plan yet. Nothing you entered has been sent.</p>' +
+        'so we can’t build you a plan yet. Nothing you entered has been sent.</p>' +
       '<button class="btn sec" style="max-width:320px" onclick="fixAge()">I entered my date of birth wrong</button>' +
       '</div></div>';
   }
@@ -1666,13 +1666,13 @@ function intakeScreen() {
   }
   if (intake.code) {
     return '<div class="wrap"><div class="card" style="margin-top:30px">' +
-      '<h2 style="font-size:20px;margin-bottom:8px">Done. Send it to me.</h2>' +
+      '<h2 style="font-size:20px;margin-bottom:8px">Done. Send it to your coach.</h2>' +
       (intake.postFailed
-        ? '<p class="imeta">I couldn\u2019t reach the server, so text me this code instead. It holds your answers.</p>'
-        : '<p class="imeta">I use this to build your plan.</p>') +
+        ? '<p class="imeta">Couldn\u2019t reach the server, so text this code to your coach instead. It holds your answers.</p>'
+        : '<p class="imeta">Your coach uses this to build your plan.</p>') +
       '<button class="btn" onclick="copyIntake()">Copy the code</button>' +
       '<button class="btn sec" onclick="location.href=' +
-        jsq('sms:?&body=' + encodeURIComponent(intakeMsg())) + '">Text it to me</button>' +
+        jsq('sms:?&body=' + encodeURIComponent(intakeMsg())) + '">Text it to your coach</button>' +
       '<button class="btn sec" onclick="shareIntake()">Share</button>' +
       '<div class="inotes" style="word-break:break-all;margin-top:14px">' + esc(intake.code) + '</div>' +
       '<button class="btn sec" onclick="clearIntake()">Start over</button>' +
@@ -1693,9 +1693,9 @@ function intakeScreen() {
     var hey = 'Hey' + (intake.clientName ? ' ' + esc(intake.clientName) : '') + '.';
     opener = '<div class="card" style="margin-top:22px"><h2 style="font-size:20px;margin-bottom:6px">' + hey + '</h2>' +
       (intake.routineOnly
-        ? '<p class="imeta">New plan, new block. Tell me how your days look now, so I can see what changed. ' +
+        ? '<p class="imeta">New plan, new block. How do your days look now? This shows what changed. ' +
           'Three quick screens.</p>'
-        : '<p class="imeta">Your answers, as I have them. Change what\u2019s changed, then send.</p>') +
+        : '<p class="imeta">Your answers, as your coach has them. Change what\u2019s changed, then send.</p>') +
       '</div>';
   }
 
@@ -1822,7 +1822,7 @@ function intakeScreen() {
       (sec.example ? '<div class="example"><b>For example</b>' + esc(sec.example) + '</div>' : '') +
       fields +
       '<button class="btn" onclick="' + (last ? (intake.routineOnly ? 'submitIntake()' : 'openReview()') : 'intakeStep(1)') + '">' +
-        (last ? (intake.routineOnly ? 'Send it to me' : 'Check it over') : 'Next') + '</button>' +
+        (last ? (intake.routineOnly ? 'Send it to your coach' : 'Check it over') : 'Next') + '</button>' +
       (intake.fromReview ? '<button class="btn sec" onclick="openReview()">Back to the summary</button>' : '') +
       (intake.step > 0 ? '<button class="btn sec" onclick="intakeStep(-1)">Back</button>' : '') +
       (intake.routineOnly ? '<button class="btn sec" onclick="skipRoutine()">Not now</button>'
@@ -2102,7 +2102,7 @@ function openRanks() {
     '<div class="rules">' +
       rule('Points', P.base + ' for every item you tick off. ' + P.onTime + ' more if it is on time: ' +
         'by its due time, or any time that day if it has none.') +
-      rule('<span class="key"></span> Key items', 'Items with a dot are the ones I picked as most important. ' +
+      rule('<span class="key"></span> Key items', 'Items with a dot are the ones your coach picked as most important. ' +
         'Tick off every key item on the day and it is a perfect day, worth ' + P.perfectDay +
         ' bonus points for each key item.') +
       rule('Streak', 'Your streak is perfect days in a row. Today counts once it is over. ' +
@@ -2118,7 +2118,7 @@ function openRanks() {
 }
 
 function resetAll() {
-  if (!confirm('This erases your plan and everything you have logged. You will need a new link from me. Continue?')) return;
+  if (!confirm('This erases your plan and everything you have logged. You will need a new link from your coach. Continue?')) return;
   // The remembered link is the plan, tokens included, so erasing takes it too.
   try { localStorage.removeItem(KEY); localStorage.removeItem(LINK_KEY); } catch (e) {}
   state = null;
@@ -2283,7 +2283,7 @@ function openSendDay() {
   var d = BeastCore.dayResult(state.items, state.log, today);
   var prev = (state.sentDays || {})[today];
   showSheet(
-    '<h2 style="font-size:20px;margin-bottom:4px">Send me your day</h2>' +
+    '<h2 style="font-size:20px;margin-bottom:4px">Send your day</h2>' +
     '<p class="imeta">' + d.completed + ' done, ' + dayPct(today) + '% of what was due.' +
       (prev ? ' Already sent once today; this replaces it.' : '') + '</p>' +
     '<div class="field" style="margin-top:14px"><label>One thing you are grateful for today</label>' +
@@ -2316,7 +2316,7 @@ function sendDay() {
 
   showSheet(
     '<h2 style="font-size:20px;margin-bottom:4px">Ready to send</h2>' +
-    '<p class="imeta">Tap one of these and it comes straight to me.</p>' +
+    '<p class="imeta">Tap one of these and it goes straight to your coach.</p>' +
     '<button class="btn" onclick="location.href=' +
       jsq('sms:?&body=' + encodeURIComponent(msg)) + '">Text it</button>' +
     '<button class="btn sec" onclick="shareDay(' + jsq(msg) + ')">Share</button>' +
@@ -2391,7 +2391,7 @@ function coachState() {
   };
 }
 
-var COACH_OFFLINE = 'Could not reach me. Check your signal and try again.';
+var COACH_OFFLINE = 'Could not reach The Brofessor. Check your signal and try again.';
 var COACH_NO_ANSWER = 'No answer came back. Try again.';
 
 // Every call to the coach worker. Resolves to the reply's body with its HTTP
@@ -2908,10 +2908,10 @@ function intakeCard() {
   var open = !!state.intakeOpen;
   return '<div class="card"><h3>Your answers</h3>' +
     (any
-      ? '<p class="imeta" style="margin-bottom:10px">What you told me when we started. The plan is built into this, so keep it true.</p>' +
+      ? '<p class="imeta" style="margin-bottom:10px">What you told your coach when you started. The plan is built on this, so keep it true.</p>' +
         '<button class="btn sec" onclick="state.intakeOpen=!state.intakeOpen;save();render()">' + (open ? 'Hide my answers' : 'See my answers') + '</button>' +
         (open ? '<div style="margin-top:10px">' + answersHtml(a, BeastCore.visibleSections(a), false) + '</div>' : '')
-      : '<p class="imeta" style="margin-bottom:10px">I don\u2019t have your intake on this phone.</p>') +
+      : '<p class="imeta" style="margin-bottom:10px">Your intake isn\u2019t on this phone.</p>') +
     (state.clientToken ? '<button class="btn" onclick="startIntakeUpdate()">' + (any ? 'Update my answers' : 'Fill it in') + '</button>' : '') +
     '</div>';
 }
@@ -2955,7 +2955,7 @@ function reminderNudge() {
   var ios = isIOS() && !isStandalone();
   // "Nudge" is a field name in the code and never on the screen (Chris).
   return '<div class="prompt">' + icon('bell') + '<div class="txt"><b>Want a reminder?</b>' +
-    'I’ll ping you at ' + esc(list) + ', only if something’s still open.' +
+    'Reminders come at ' + esc(list) + ', only if something’s still open.' +
     (ios ? ' On iPhone, add Beast Mode to your home screen first.' : '') +
     '<div class="acts">' + (ios ? '' : '<button class="pbtn" onclick="enableReminders()">Turn on</button>') +
     '<button class="gbtn" onclick="dismissNudge()">' + (ios ? 'Got it' : 'Not now') + '</button></div></div></div>';
@@ -3147,10 +3147,10 @@ function setupScreen() {
   // not share Safari's storage, so the link has to be pasted in here once.
   return '<div class="wrap"><div class="empty" style="padding-top:72px">' +
     '<div class="big">' + mark('', '') + '</div><h2>Beast Mode</h2>' +
-    '<p>No plan on this phone yet.<br>Paste the link I sent you to get started.</p>' +
-    '<div style="margin-top:18px;text-align:left"><textarea id="pastelink" rows="3" placeholder="Paste the text I sent you here"></textarea></div>' +
+    '<p>No plan on this phone yet.<br>Paste the link your coach sent you to get started.</p>' +
+    '<div style="margin-top:18px;text-align:left"><textarea id="pastelink" rows="3" placeholder="Paste the text your coach sent you here"></textarea></div>' +
     '<button class="pbtn full" style="margin-top:10px" onclick="openPasted()">Open my plan</button>' +
-    '<p class="imeta" style="margin-top:22px;color:var(--text3)">Lost the link? Text me and I’ll send it again.</p>' +
+    '<p class="imeta" style="margin-top:22px;color:var(--text3)">Lost the link? Text your coach for a new one.</p>' +
     '</div></div>';
 }
 
@@ -3165,7 +3165,7 @@ async function openPasted() {
   if (pasteBusy) return;
   var box = document.getElementById('pastelink');
   var found = BeastCore.linkFromText(box && box.value);
-  if (!found) { toast('That doesn’t look like a link I sent'); return; }
+  if (!found) { toast('That doesn’t look like a Beast Mode link'); return; }
   if (found.intake) { openIntakeLink(found.intake); return; }
   var code = found.code;
   if (!code) {
@@ -3173,15 +3173,15 @@ async function openPasted() {
     try {
       var res = await fetch(LINK_URL + '/p/' + encodeURIComponent(found.slug), { headers: { accept: 'application/json' } });
       var data = res.ok ? await res.json() : null;
-      if (!data || !data.code) { toast(res.status === 404 ? 'That link has expired. Text me and I’ll send a new one.' : 'I can’t reach the server right now. Try again in a minute.'); return; }
+      if (!data || !data.code) { toast(res.status === 404 ? 'That link has expired. Text your coach for a new one.' : 'Can’t reach the server right now. Try again in a minute.'); return; }
       code = data.code;
-    } catch (e) { toast('I can’t reach the server right now. Try again in a minute.'); return; }
+    } catch (e) { toast('Can’t reach the server right now. Try again in a minute.'); return; }
     finally { pasteBusy = false; }
   }
   // A bad paste keeps the box, rather than the dead-end screen a tapped
   // link gets: a home-screen app has no reload button.
   var decoded = BeastCore.decodePayload(code);
-  if (!decoded.ok) { toast('That link didn’t work. Paste the whole message I sent'); return; }
+  if (!decoded.ok) { toast('That link didn’t work. Paste the whole message your coach sent'); return; }
   importCode(decoded, code);
 }
 
@@ -3240,7 +3240,7 @@ function installFirstScreen(kind) {
       // With a link to copy, the line above the Copy button says what to do
       // (Chris, 2026-09-23: too many words on a phone). Without one there is
       // no button, so this is the only instruction.
-      (link ? '' : 'After following the steps below, open Beast Mode from your home screen and paste in the link I sent you.') +
+      (link ? '' : 'After following the steps below, open Beast Mode from your home screen and paste in the link your coach sent you.') +
     '</p>' +
     '<div class="steps">' +
       step(1, 'dots', 'Tap the three dots', 'bottom right of this screen') +
@@ -3252,13 +3252,13 @@ function installFirstScreen(kind) {
     '<p class="imeta" style="margin-top:-2px;margin-bottom:12px;color:var(--text3)">' +
       'On an older iPhone there are no dots: the Share button is already in the bar at the bottom.<br><br>' +
       (link ? esc(words.already)
-            : 'Already have Beast Mode on your home screen? Open it and paste in the link I sent you.') + '</p>' +
+            : 'Already have Beast Mode on your home screen? Open it and paste in the link your coach sent you.') + '</p>' +
     (link ? '<button class="pbtn" style="margin-top:4px" onclick="copyPlan(' + attr(jsq(link)) + ')">' + esc(words.button) + '</button>' +
       '<p class="imeta" style="margin-top:10px;color:var(--text3)">Puts your link on the clipboard, ready to paste.</p>' +
-      (copyFailed ? '<p class="imeta" style="color:var(--text3)">This browser will not copy for me. Hold on the link below, Select All, then Copy.</p>' +
+      (copyFailed ? '<p class="imeta" style="color:var(--text3)">This browser won’t copy it. Hold on the link below, Select All, then Copy.</p>' +
         '<div class="code" style="text-align:left;word-break:break-all">' + esc(link) + '</div>' : '') : '') +
     '<p class="imeta" style="margin-top:16px;color:var(--text3)">Need help? ' +
-      '<a href="' + attr('sms:' + number) + '">Text me</a>' +
+      '<a href="' + attr('sms:' + number) + '">Text your coach</a>' +
       '<br><br><a href="#" onclick="skipInstall(' + (forIntake ? '\'intake\'' : '') + ');return false">Keep going in Safari for now</a></p>' +
     '</div></div>';
 }
@@ -3295,7 +3295,7 @@ function agreementScreen() {
     '<div class="amark">' + mark() + '</div>' +
     '<h2>Your goals</h2><p class="asub">Agreeing starts the clock. Day one is today.</p>' +
     byTerm('short') + byTerm('long') +
-    (state.goals.length ? '' : '<p style="margin-top:14px">I haven’t set your goals yet. You can start anyway.</p>') +
+    (state.goals.length ? '' : '<p style="margin-top:14px">Your coach hasn’t set your goals yet. You can start anyway.</p>') +
     '<button class="btn" style="margin-top:20px" onclick="agreeToGoals()">I’m in. Let’s go.</button>' +
     '</div></div>';
 }
