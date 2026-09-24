@@ -1207,7 +1207,7 @@ test('the consent wording is exactly what Chris approved', () => {
   assert.strictEqual(c2.title, 'Help The Brofessor learn?');
   assert.strictEqual(c2.yes, 'Yes, use my chats');
   assert.strictEqual(c2.no, 'No thanks');
-  assert.strictEqual(w.version, 'w2-2026-09-22');   // w2: the nudge question reworded, 2026-09-22
+  assert.strictEqual(w.version, 'w3-2026-09-23');   // w2: the nudge question reworded, 2026-09-22; w3: the intro cut, 2026-09-23
   assert.strictEqual(w.title, 'Welcome to Beast Mode');
   assert.strictEqual(w.tagline, 'Unleash the Beast, one habit at a time');
   assert.strictEqual(w.features.length, 4);
@@ -1222,8 +1222,8 @@ test('the consent wording is exactly what Chris approved', () => {
     .join(' ');
   assert.ok(!/nudge/i.test(onScreen), 'the word nudge is not one a client reads');
   assert.match(C.COACH_OPENER.learning, /^Welcome to coaching\. I’m The Brofessor, your guide to SHREDZVILLE\./);
-  assert.match(C.COACH_OPENER.learning, /you’re letting me learn from them to coach better/);
-  assert.match(C.COACH_OPENER.notLearning, /you’ve kept them out of my training, which is fine by me/);
+  assert.match(C.COACH_OPENER.learning, /You’re letting me learn from them so I can coach you better\. You can change your choices in Profile, any time\./);
+  assert.match(C.COACH_OPENER.notLearning, /You’ve kept them out of my training, which is fine by me\. You can change your choices in Profile, any time\./);
   for (const t of [C.COACH_OPENER.learning, C.COACH_OPENER.notLearning]) {
     assert.match(t, /call or text 988/, 'the crisis line lives in the chat');
     assert.match(t, /Now, what are we working on\?$/);

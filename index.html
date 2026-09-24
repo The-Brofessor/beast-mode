@@ -441,10 +441,13 @@ nav button.active svg { color: var(--acc-ink); }
 .card.done .big .badge { width: 72px; height: 72px; }
 .card.done h2 { font-size: 24px; margin-bottom: 8px; }
 .card.done p { color: var(--text2); font-size: 15px; line-height: 1.5; }
-.card.done h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin: 18px 0 8px; }
-.card.done .next { text-align: left; margin: 0 0 18px; padding: 0; list-style: none; font-size: 14px; line-height: 1.45; color: var(--text2); }
-.card.done .next li { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
-.card.done .next li svg { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px; color: var(--acc-ink); stroke-width: 2.2; }
+/* What happens next is the point of this screen (Chris, 2026-09-23: it has
+   to read on a phone), so it is the big type here, not the small print. */
+.card.done h3 { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 26px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .01em; color: var(--text); margin: 14px 0 12px; }
+.card.done .next { text-align: left; margin: 0 0 20px; padding: 0; list-style: none; font-size: 17px; line-height: 1.4; color: var(--text2); }
+.card.done .next li { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.card.done .next li svg { flex: 0 0 auto; width: 24px; height: 24px; margin-top: 1px; color: var(--acc-ink); stroke-width: 2.2; }
 .card.done .next b { color: var(--text); font-weight: 600; }
 :root:not([data-theme="light"]) .card.done { border-color: var(--acc); }
 .card.done .lead, .card.featured .lead { margin: -16px -16px 14px; padding: 14px 16px; background: #0B0D10; color: var(--acc); text-align: center;
@@ -703,7 +706,7 @@ function welcomeScreen() {
   return '<div class="wrap welcome">' +
     '<h1 class="wtitle">' + esc(w.title).replace('Beast Mode', '<span>Beast Mode</span>') + '</h1>' +
     '<p class="wtag">' + esc(w.tagline) + '</p>' +
-    '<p class="wintro">' + esc(w.intro) + '</p>' +
+    (w.intro ? '<p class="wintro">' + esc(w.intro) + '</p>' : '') +
     w.features.map(function (f) {
       return '<div class="wfeat">' + icon(f.icon) + '<div><b>' + esc(f.title) + '</b><span>' + esc(f.text) + '</span></div></div>';
     }).join('') +
@@ -1052,8 +1055,7 @@ function intakeIntroScreen() {
     // Chris's wording, 2026-09-23. The Brofessor in the third person here is
     // on purpose: the joke is the point. Never Chris by name; "your coach".
     '<p class="imeta" style="font-size:15px;line-height:1.5;color:var(--text)">Before we build your plan we need some information about you. ' +
-      'It\u2019s not all fitness related. Beast Mode will help you create new routines throughout your day so you can actually achieve ' +
-      'your health (or any other) goals. Having as much accurate info as possible will make your plan much more effective. ' +
+      'Having as much accurate info as possible will make your plan much more effective. ' +
       'So be honest, if you skip leg day The Brofessor wants to know.</p>' +
     '<ul class="introlist">' +
       '<li>About 15 minutes. ' + intakeSections().length + ' short screens.</li>' +
@@ -1158,6 +1160,8 @@ async function postIntake(token) {
     var at = new Date().toISOString();
     if (state) { state.routineAnsweredAt = at; save(); }
     else { try { localStorage.setItem(INTAKE_AT_KEY, at); } catch (e) {} }
+    // The coach opened itself for them (first-client path, 4c).
+    if (data && typeof data.coachToken === 'string' && data.coachToken) openCoachFromIntake(data.coachToken);
     intake.sent = true;
     clearTimeout(draftTimer);
     dropIntakeHash();
@@ -1183,6 +1187,41 @@ async function postIntake(token) {
   }
   intake.postFailed = true;
   makeIntakeCode();
+}
+
+/* The wait for a plan (first-client path, 4c). The intake is in and the
+   coach opened itself, so the phone holds a waiting state: no checklist,
+   just the coach and a place to paste the plan when it comes. The plan
+   replaces it and keeps the chat, when it is the same client's
+   (applySetup). A plan already here, for this same client, just gains the
+   coach. Anyone else's plan is never touched. */
+function openCoachFromIntake(token) {
+  // The Got it screen says the coach is here only when the coach on this phone is
+  // theirs: never over someone else's plan (CTO, 2026-09-23).
+  var same = !!(state && state.clientId && state.clientId === intake.clientId);
+  if (state && !state.waiting) {
+    if (same && !state.coachToken) { state.coachToken = token; save(); intake.coachOpen = true; }
+    return;
+  }
+  // Already waiting, for this client: keep the chat, take the token.
+  if (state && state.waiting && same) { state.coachToken = token; save(); intake.coachOpen = true; return; }
+  intake.coachOpen = true;
+  var held = heldWelcome();
+  var fits = BeastCore.heldWelcomeFits(held, { clientId: intake.clientId });
+  state = {
+    waiting: true,
+    v: BeastCore.PAYLOAD_VERSION,
+    items: [], goals: [], profile: { name: intake.clientName || '' },
+    log: {}, weightLog: {}, seen: [], perfectWeek: BeastCore.perfectWeek([]), earnedLevel: 1,
+    goalsAgreedAt: null,
+    coachToken: token, clientToken: null, clientId: intake.clientId || null,
+    coachLog: []
+  };
+  // The welcome answered before the form covers the coach too. The held
+  // answers stay for the plan, which takes the sharing and reminder ones.
+  if (fits) { state.welcomeVersion = BeastCore.WELCOME.version; if (held.consent) state.coachConsent = held.consent; }
+  tab = 'today';
+  save();
 }
 
 // What they answered stays on the phone, so Profile can show it and an
@@ -1244,22 +1283,22 @@ function intakeScreen() {
   }
   if (intake.sent) {
     // The last screen of the intake: they just gave up fifteen minutes, so
-    // it celebrates and says what comes next. Draft wording for Chris,
+    // it celebrates and says what comes next. Chris's wording, approved
     // 2026-09-23. The level-up for finishing is queued.
     return '<div class="wrap"><div class="card done" style="margin-top:30px">' +
       '<div class="lead">No one said change would be easy.</div>' +
       '<div class="big">' + badge(2) + '</div>' +
       '<h2>Got it' + (intake.clientName ? ', ' + esc(intake.clientName) : '') + '.</h2>' +
-      '<p>Most people never make it this far. You just handed the Beast Mode team the whole picture, ' +
-        'and that\u2019s what a real plan gets built on. Not just a workout program, the structure to actually follow it.</p>' +
       '<h3>What happens next</h3>' +
       '<ul class="next">' +
         '<li>' + icon('dumbbell') + '<span><b>Your coach builds your plan.</b></span></li>' +
         '<li>' + icon('dumbbell') + '<span><b>You get a text with the link.</b> Usually within a day or two.</span></li>' +
         '<li>' + icon('dumbbell') + '<span><b>Paste the link in the app.</b></span></li>' +
         '<li>' + icon('dumbbell') + '<span><b>Open it, review everything, and agree to your goals.</b></span></li>' +
+        // The coach opened itself (first-client path, 4c). Chris's wording,
+        // 2026-09-23.
+        (intake.coachOpen ? '<li>' + icon('dumbbell') + '<span><b>The Brofessor is here now.</b> Start a chat on the next screen.</span></li>' : '') +
       '</ul>' +
-      '<p>A coach is available to answer questions and fine tune anything that doesn\u2019t make sense.</p>' +
       '<button class="btn" onclick="clearIntake()">Let\u2019s GOOO</button>' +
       '</div></div>';
   }
@@ -1380,7 +1419,13 @@ function intakeScreen() {
     '</div></div>';
 }
 
+// What a waiting phone carries into its plan: the chat with the coach, and
+// what the client answered to it (first-client path, 4c).
+var WAITING_CARRIES = ['coachLog', 'coachConversation', 'coachPrevConversation', 'coachConsent', 'coachOpen',
+  'coachHold', 'coachBoss', 'openerSeen', 'welcomeVersion', 'sharing', 'nudges'];
+
 function applySetup(data) {
+  var waited = state && state.waiting ? state : null;
   var intakeAt = null, answers = null;
   try {
     intakeAt = localStorage.getItem(INTAKE_AT_KEY); localStorage.removeItem(INTAKE_AT_KEY);
@@ -1406,10 +1451,23 @@ function applySetup(data) {
     clientId: typeof data.clientId === 'string' ? data.clientId : null,
     coachLog: []
   };
+  // The plan of the client who waited here keeps their chat. Anyone else's
+  // plan starts clean: a phone can be shared.
+  var carried = !!(waited && waited.clientId && waited.clientId === state.clientId);
+  if (carried) {
+    WAITING_CARRIES.forEach(function (k) { if (waited[k] !== undefined) state[k] = waited[k]; });
+    if (!state.coachToken) state.coachToken = waited.coachToken;
+  }
   // The welcome answered before the intake, in this app: the plan takes the
   // answers and skips the screen. Only with a token they can be sent under.
   save();
+  // Whether the held answers are this client's, read before they are taken:
+  // takeHeldWelcome sends their sharing "no" itself (CTO, 2026-09-23).
+  var heldTakes = BeastCore.heldWelcomeFits(heldWelcome(), { clientId: state.clientId });
   takeHeldWelcome();
+  // A sharing "no" answered while waiting is one write saying so, as
+  // finishWelcome sends it.
+  if (carried && !heldTakes && state.clientToken && state.sharing === false) sendStatus(true);
 }
 
 // The welcome answered before the intake, taken by the plan when it is the
@@ -1781,6 +1839,8 @@ function coachAvailable() { return !!(COACH_URL && state && state.coachToken); }
 // Only what the coach needs to answer well. No log keys, no timestamps, no
 // history beyond this week.
 function coachState() {
+  // No plan yet: the coach is told so and nothing else (first-client path, 4c).
+  if (state.waiting) return { name: state.profile.name || '', waiting: true };
   var today = BeastCore.todayLocal();
   var open = [], done = [];
   state.items.forEach(function (it) {
@@ -2034,6 +2094,13 @@ var COACH_STARTERS = [
   'I missed yesterday. How do I get back on track?',
   'My legs are sore. Should I still train today?'
 ];
+// Before the plan (first-client path, 4c). Chris's wording, approved
+// 2026-09-23.
+var COACH_STARTERS_WAITING = [
+  'What happens next?',
+  'What can I start on while I wait?',
+  'Look at my goals. Are they good ones?'
+];
 
 // Approved wording, learning plan section 4. Opens a text to Chris's real
 // number, which the coach worker serves; it is never in this public repo.
@@ -2125,7 +2192,7 @@ function coachTab() {
           esc(m.content) + '</div>';
         return m.notice ? bubble + bossButton() : bubble;
       }).join('')
-    : openerOnce() + '<div class="starters">' + COACH_STARTERS.map(function (q) {
+    : openerOnce() + '<div class="starters">' + (state.waiting ? COACH_STARTERS_WAITING : COACH_STARTERS).map(function (q) {
         return '<button onclick="askCoach(' + attr(jsq(q)) + ')">' + esc(q) + '</button>';
       }).join('') + '</div>';
 
@@ -2444,11 +2511,23 @@ function render() {
   // welcome waits until Beast Mode is on the home screen, so it is answered
   // once, in the app they will keep (BeastCore.needsInstallFirst).
   if (BeastCore.needsInstallFirst({
-    ios: isIOSSafari(), standalone: isStandalone(), hasPlan: true,
+    ios: isIOSSafari(), standalone: isStandalone(), hasPlan: !state.waiting,
     welcomeDone: !needsWelcome(), hasHistory: BeastCore.hasAppHistory(state),
     skipped: !!state.skipInstall
   })) { root.innerHTML = installFirstScreen(); askForBoss(); return; }
   if (needsWelcome()) { root.innerHTML = welcomeScreen(); return; }
+
+  // Waiting for the plan (first-client path, 4c): Home, Coach and Profile.
+  // Profile holds only what exists yet: the coach questions and Delete my
+  // chats (choicesCard shows what a phone with no client token can change).
+  if (state.waiting) {
+    if (tab !== 'coach' && tab !== 'profile') tab = 'today';
+    root.innerHTML = header() + '<div class="wrap">' +
+      (tab === 'coach' ? coachTab() : tab === 'profile' ? '<div style="margin-top:18px">' + choicesCard() + '</div>' : waitingHome()) +
+      '</div>' + navBar();
+    measureNav(root);
+    return;
+  }
   if (!state.goalsAgreedAt) { root.innerHTML = agreementScreen(); return; }
   // A new plan block arrived: the routine, asked again (loop brief 5d).
   if (routineDue()) { if (!intake) startRoutineAgain(); root.innerHTML = intakeScreen(); return; }
@@ -2457,7 +2536,10 @@ function render() {
     (tab === 'today' ? todayTab() : tab === 'week' ? weekTab() :
      tab === 'coach' ? coachTab() : profileTab()) +
     '</div>' + navBar();
+  measureNav(root);
+}
 
+function measureNav(root) {
   // The coach input sits on top of the tab bar, whose height depends on the
   // font and the phone's bottom inset, so it is measured rather than assumed.
   var nav = root.querySelector('nav');
@@ -2486,6 +2568,18 @@ function rememberLink(code) {
 
 function lastLink() {
   try { return localStorage.getItem(LINK_KEY) || ''; } catch (e) { return ''; }
+}
+
+// Home while the plan is built (first-client path, 4c): where the plan
+// link is pasted when it comes, and the way to the coach. Chris's
+// wording, approved 2026-09-23.
+function waitingHome() {
+  return '<div class="card" style="margin-top:18px"><h3>Your plan is on its way</h3>' +
+      '<p class="imeta">Your coach is building it from your answers. When the link comes, paste it here.</p>' +
+      '<div style="margin-top:12px"><textarea id="pastelink" rows="3" placeholder="Paste the text your coach sent you here"></textarea></div>' +
+      '<button class="btn" style="margin-top:10px" onclick="openPasted()">Open my plan</button></div>' +
+    '<div class="card"><h3>Questions while you wait?</h3>' +
+      '<button class="btn sec" style="margin-top:6px" onclick="go(\'coach\')">Talk to The Brofessor</button></div>';
 }
 
 function setupScreen() {
@@ -2583,9 +2677,10 @@ function installFirstScreen(kind) {
     '<div class="big">' + badge(1) + '</div><h2 class="fit">' + esc(words.heading) + '</h2>' +
     '<p>On iPhone, Beast Mode has to live on your home screen, not in Safari. It is the only place ' +
       'that allows it to have full functionality and work offline. ' +
-      (link ? 'After following the steps below and putting Beast Mode on your home screen click on the ' +
-        esc(words.button) + ' button below and paste it in the app.'
-            : 'After following the steps below, open Beast Mode from your home screen and paste in the link I sent you.') +
+      // With a link to copy, the line above the Copy button says what to do
+      // (Chris, 2026-09-23: too many words on a phone). Without one there is
+      // no button, so this is the only instruction.
+      (link ? '' : 'After following the steps below, open Beast Mode from your home screen and paste in the link I sent you.') +
     '</p>' +
     '<div class="steps">' +
       step(1, 'dots', 'Tap the three dots', 'bottom right of this screen') +
@@ -2645,6 +2740,13 @@ function agreementScreen() {
 
 function header() {
   var p = state.profile;
+  // No plan yet: no day count and no rank to open.
+  if (state.waiting) {
+    var date = BeastCore.localToDate(BeastCore.todayLocal()).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return '<header><div class="wrap"><div class="hrow"><span>' + badge(1) + '</span>' +
+      '<div class="hwho"><div class="hsub">' + esc(date) + '</div>' +
+      '<div class="hname">' + esc(p.name || 'Beast Mode') + '</div></div></div></div></header>';
+  }
   var today = BeastCore.todayLocal();
   var day = BeastCore.daysBetween(p.startDate || today, today) + 1;
   var when = BeastCore.localToDate(today).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -2655,10 +2757,14 @@ function header() {
 }
 
 function navBar() {
-  // Every client gets the Coach tab. Without coaching it offers it.
+  // Every client gets the Brofessor tab (Chris, 2026-09-23: named for him,
+  // not "Coach"). Without coaching it offers it.
   var tabs = [['today', 'Today'], ['week', 'Week']];
-  if (COACH_URL) tabs.push(['coach', 'Coach']);
+  if (COACH_URL) tabs.push(['coach', 'Brofessor']);
   tabs.push(['profile', 'Profile']);
+  // Before the plan: Home, the coach, and Profile for their answers to it
+  // and Delete my chats (first-client path, 4c; Chris, 2026-09-23).
+  if (state.waiting) tabs = [['today', 'Home'], ['coach', 'Brofessor'], ['profile', 'Profile']];
   return '<nav><div class="in">' + tabs.map(function (t) {
     return '<button class="' + (tab === t[0] ? 'active' : '') + '" onclick="go(\'' + t[0] + '\')">' +
       icon(t[0]) + t[1] + '</button>';
@@ -2934,16 +3040,20 @@ function importCode(codeOrResult, rawCode) {
       '<button class="pbtn" style="margin-top:16px" onclick="render()">Back</button></div></div>';
     return true;
   }
+  // A phone waiting for its plan takes whichever kind comes as its first
+  // plan: Chris may have sent this client a link before (first-client path).
+  var wasWaiting = !!(state && state.waiting);
   if (imported.kind === 'ask') startIntake(imported.data);
-  else if (imported.kind === 'setup' || !state) applySetup(imported.data);
+  else if (imported.kind === 'setup' || !state || wasWaiting) applySetup(imported.data);
   else if (imported.kind === 'plan') applyPlanUpdate(imported.data);
   // An intake link opened here and never touched: the client went to the
   // home screen and answered there (first-client path, 4a). Left in place it
   // would outrank the plan with a spent link, so a plan retires it.
   if (imported.kind !== 'ask' && intake && intake.token && !intake.sent && !answeredAnything()) clearIntakeSilently();
 
+  if (wasWaiting && imported.kind !== 'ask') tab = 'today';
   render();
-  if (imported.kind === 'plan') toast('Plan updated');
+  if (imported.kind === 'plan' && !wasWaiting) toast('Plan updated');
   return true;
 }
 

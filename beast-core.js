@@ -1279,7 +1279,7 @@ var BeastCore = (function () {
         'Put a time frame on any goal that has one. If it’s open ended that’s fine too, The Brofessor will turn even the biggest goals into manageable pieces.',
       lead: 'A goal without a plan is just a wish.',
       // The heading in full, one line, in the display font (Chris, 2026-09-23).
-      heading: 'Goals - Why we are here so make them good.',
+      heading: 'Goals - It’s why we’re here so make them good.',
       fields: [
       // One list (Chris, 2026-09-23); the plan sorts each goal by its own
       // time frame (goalsFromIntake), and old shortGoals/longGoals still read.
@@ -1795,11 +1795,11 @@ var BeastCore = (function () {
   // two buttons, then one tap. Chris's wording, 2026-09-22. Any change is a
   // new version, and every client sees the screen again.
   var WELCOME = {
-    version: 'w2-2026-09-22',
+    // w3: the intro paragraph cut (Chris, 2026-09-23: too many words on a phone).
+    version: 'w3-2026-09-23',
     title: 'Welcome to Beast Mode',
     tagline: 'Unleash the Beast, one habit at a time',
-    intro: 'Beast Mode helps you build the habits and routines that carry your health and fitness goals. ' +
-      'You get the plan to get fit, and the support to stick with it.',
+    intro: '',
     features: [
       { icon: 'plan', title: 'Your plan, built for you',
         text: 'Training, food, sleep, the habits in between. Written by a real coach who knows your goals and your day.' },
@@ -1828,12 +1828,12 @@ var BeastCore = (function () {
   // One clause differs by the answer to CONSENTS[2]. Chris's wording.
   var COACH_OPENER = {
     learning: 'Welcome to coaching. I’m The Brofessor, your guide to SHREDZVILLE. We are going to get along great ' +
-      '(if you listen to everything I say) LOL!!! Quick reminder before we go: our chats are saved and a human coach ' +
-      'reads them, and you’re letting me learn from them to coach better. You can change either in Profile, any time. ' +
+      '(if you listen to everything I say) LOL!!! A few quick reminders before we go: our chats are saved and a human coach ' +
+      'reads them. You’re letting me learn from them so I can coach you better. You can change your choices in Profile, any time. ' +
       'If you’re ever in a crisis, call or text 988. Now, what are we working on?',
     notLearning: 'Welcome to coaching. I’m The Brofessor, your guide to SHREDZVILLE. We are going to get along great ' +
-      '(if you listen to everything I say) LOL!!! Quick reminder before we go: our chats are saved and a human coach ' +
-      'reads them, and you’ve kept them out of my training, which is fine by me. You can change that in Profile, any time. ' +
+      '(if you listen to everything I say) LOL!!! A few quick reminders before we go: our chats are saved and a human coach ' +
+      'reads them. You’ve kept them out of my training, which is fine by me. You can change your choices in Profile, any time. ' +
       'If you’re ever in a crisis, call or text 988. Now, what are we working on?'
   };
 
