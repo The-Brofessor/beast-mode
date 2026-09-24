@@ -779,7 +779,9 @@ async function setNudges(on) {
 function readIntakeHash() {
   var m = /[#&]intake=([^&]+)/.exec(location.hash);
   if (!m) return null;
-  history.replaceState(null, '', location.pathname + location.search);
+  // The hash stays until the answers are sent: a browser that reloads the
+  // page from its original address (Mail's built-in viewer does) reopens
+  // the same link and resumes, instead of landing on an empty app.
   return decodeURIComponent(m[1]);
 }
 
@@ -812,9 +814,27 @@ function loadIntake() {
 }
 
 function saveIntake() {
-  // A half-finished form survives a closed tab. The answers stay on the phone
-  // until the client chooses to send them.
+  // A half-finished form survives a closed tab: on the phone, and, for a
+  // form opened from a link, on the server under that link as well, since
+  // Apple's in-app browsers keep no storage between visits.
   try { localStorage.setItem(INTAKE_KEY, JSON.stringify(intake)); } catch (e) {}
+  if (intake && intake.token && !intake.sent) scheduleDraft();
+}
+
+var DRAFT_DEBOUNCE_MS = 1500;
+var draftTimer = null;
+function scheduleDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(sendDraft, DRAFT_DEBOUNCE_MS);
+}
+async function sendDraft() {
+  if (!intake || !intake.token || intake.sent) return;
+  try {
+    await fetch(COACH_URL + '/intake/draft', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: intake.token, answers: intake.answers, step: intake.step, version: BeastCore.INTAKE_VERSION })
+    });
+  } catch (e) { /* offline: the phone's copy stands, the next change tries again */ }
 }
 
 function startIntake(data) {
@@ -867,8 +887,31 @@ async function openIntakeLink(token) {
       '<button class="pbtn" style="margin-top:16px" onclick="render()">Back</button></div></div>';
     return;
   }
-  startIntake({ name: data.name || '', token: token, boss: data.boss || '' });
+  // Resume rather than restart: the phone's own copy of this link's form if
+  // it has one, else the draft the server kept, else a fresh form.
+  var mine = intake && intake.token === token && !intake.sent ? intake : null;
+  var draft = data.draft && data.draft.answers && typeof data.draft.answers === 'object' ? data.draft : null;
+  if (mine) {
+    if (draft && Object.keys(draft.answers).length > Object.keys(mine.answers || {}).length) { mine.answers = draft.answers; mine.step = draft.step || mine.step; }
+    mine.boss = data.boss || mine.boss;
+    saveIntake();
+  } else {
+    startIntake({ name: data.name || '', token: token, boss: data.boss || '' });
+    if (draft && Object.keys(draft.answers).length) {
+      intake.answers = draft.answers;
+      intake.step = Math.max(0, Math.min(Number(draft.step) || 0, intakeSections().length - 1));
+      intake.intro = false;
+      saveIntake();
+      toast('Picked up where you left off');
+    }
+  }
   render();
+}
+
+// Once the answers are sent the link has done its job: the hash goes, so
+// a reload lands on the app and not on the spent link.
+function dropIntakeHash() {
+  if (/[#&]intake=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 }
 
 // The routine, asked again after a new plan block (loop brief 5d): the
@@ -1070,6 +1113,8 @@ async function postIntake(token) {
     if (state) { state.routineAnsweredAt = at; save(); }
     else { try { localStorage.setItem(INTAKE_AT_KEY, at); } catch (e) {} }
     intake.sent = true;
+    clearTimeout(draftTimer);
+    dropIntakeHash();
     setTimeout(confetti, 150);
     saveIntake();
     render();
@@ -2145,9 +2190,25 @@ function setQuiet(which, value) {
 
 // What they told me at intake, and a way to change it. Only a phone with a
 // client token can send an update; an older link shows the answers alone.
+// The answers live on the server. A phone that has none (the intake was
+// done in Safari, or on another phone) asks for them once per open.
+var answersAsked = false;
+async function fetchAnswers() {
+  if (answersAsked || !state || !state.clientToken) return;
+  answersAsked = true;
+  try {
+    var res = await fetch(COACH_URL + '/intake/mine', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: state.clientToken })
+    });
+    var data = res.ok ? await res.json() : null;
+    if (data && data.answers && Object.keys(data.answers).length) { state.intakeAnswers = data.answers; save(); render(); }
+  } catch (e) { /* offline: the card says so until next time */ }
+}
+
 function intakeCard() {
   var a = state.intakeAnswers || {};
   var any = Object.keys(a).some(function (k) { return String(a[k] || '').trim() !== ''; });
+  if (!any) fetchAnswers();
   if (!any && !state.clientToken) return '';
   var open = !!state.intakeOpen;
   return '<div class="card"><h3>Your answers</h3>' +
@@ -2370,6 +2431,7 @@ async function openPasted() {
   var box = document.getElementById('pastelink');
   var found = BeastCore.linkFromText(box && box.value);
   if (!found) { toast('That doesn’t look like a link I sent'); return; }
+  if (found.intake) { openIntakeLink(found.intake); return; }
   var code = found.code;
   if (!code) {
     pasteBusy = true;

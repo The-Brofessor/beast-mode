@@ -374,6 +374,8 @@ test('linkFromText finds a long link, a short link, or a bare code in a pasted m
   assert.deepStrictEqual(C.linkFromText('thebrofessor.coach/p/x7k2'), { slug: 'x7k2' });
   assert.deepStrictEqual(C.linkFromText(code), { code });
   assert.deepStrictEqual(C.linkFromText('  ' + code + '\n'), { code });
+  assert.deepStrictEqual(C.linkFromText('Before I build your plan: https://app.thebrofessor.coach/#intake=bmi_' + 'a'.repeat(36)), { intake: 'bmi_' + 'a'.repeat(36) }, 'an intake link pastes too');
+  assert.strictEqual(C.linkFromText('#intake=not-a-token'), null);
   assert.strictEqual(C.linkFromText('yo whats up'), null);
   assert.strictEqual(C.linkFromText(''), null);
   assert.strictEqual(C.linkFromText(null), null);
@@ -489,9 +491,11 @@ test('the intake asks the routine for a work day and a day off, keyed by pass, w
   assert.deepStrictEqual(C.INTAKE_SECTIONS.map(s => s.title), ['Personal Info', 'Goals', 'Your work day', 'Your day off', 'Typical Day', 'Training', 'Health', 'Your prescription', 'Tools', 'Music']);
   // Personal Info (Chris, 2026-09-23): date of birth, not age; pounds and inches; two buttons for sex.
   const you = C.INTAKE_SECTIONS[0];
-  assert.deepStrictEqual(you.fields.map(f => f.key), ['birthday', 'sex', 'height', 'weight', 'goalWeight', 'waist', 'bodyFat', 'maxHr', 'household']);
-  assert.strictEqual(you.fields[0].type, 'date');
-  assert.strictEqual(you.fields[1].type, 'choice');
+  assert.deepStrictEqual(you.fields.map(f => f.key), ['firstName', 'lastName', 'birthday', 'sex', 'height', 'weight', 'goalWeight', 'waist', 'bodyFat', 'maxHr', 'household']);
+  assert.strictEqual(C.profileFromIntake('Vince', { firstName: ' Vince ', lastName: 'Carter' }).name, 'Vince Carter', 'the typed name wins');
+  assert.strictEqual(C.profileFromIntake('Vince', { firstName: '', lastName: '' }).name, 'Vince', 'the link\'s name stands when none was typed');
+  assert.strictEqual(you.fields[2].type, 'date');
+  assert.strictEqual(you.fields[3].type, 'choice');
   assert.match(you.fields.find(f => f.key === 'weight').label, /\(lb\)/);
   assert.match(you.fields.find(f => f.key === 'height').label, /\(inches\)/);
   assert.ok(C.INTAKE_LEGACY.age, 'an old age answer still prints');

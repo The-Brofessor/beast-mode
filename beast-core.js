@@ -823,6 +823,10 @@ var BeastCore = (function () {
   // fine; the longer match wins when both are present.
   function linkFromText(text) {
     var t = String(text || '');
+    // An intake link, pasted into the home-screen app after Safari opened it
+    // (the same iPhone limit the plan link has). The token is spent on send.
+    var i = /[#&]intake=(bmi_[0-9a-f]{36})/.exec(t);
+    if (i) return { intake: i[1] };
     var m = /[#&]import=([^\s&"'<>]+)/.exec(t);
     if (m) {
       var code = m[1];
@@ -1229,6 +1233,8 @@ var BeastCore = (function () {
     // of birth is a date field (the phone's own picker, stored YYYY-MM-DD,
     // which the adults-only check reads); sex is two buttons, not a list.
     { title: 'Personal Info', hint: 'We base our calculations from this data so be as accurate as possible.', fields: [
+      { key: 'firstName', label: 'First name', type: 'text' },
+      { key: 'lastName', label: 'Last name', type: 'text' },
       { key: 'birthday', label: 'Date of birth', type: 'date' },
       { key: 'sex', label: 'Sex', type: 'choice', options: ['male', 'female'] },
       { key: 'height', label: 'Height (inches)', type: 'number', hint: '71' },
@@ -1603,9 +1609,11 @@ var BeastCore = (function () {
   }
 
   // The intake fields that belong on the client's profile from day one.
+  // The name the client typed wins over the one on the link, when they gave one.
   function profileFromIntake(name, answers) {
+    var typed = [answers.firstName, answers.lastName].map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' ');
     return {
-      name: name || '',
+      name: typed || name || '',
       height: answers.height || '',
       weight: answers.weight || '',
       goalWeight: answers.goalWeight || '',
