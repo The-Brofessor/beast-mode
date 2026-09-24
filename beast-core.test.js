@@ -446,6 +446,17 @@ test('needsInstallFirst sends a fresh iPhone to the home screen before the welco
   assert.strictEqual(C.needsInstallFirst(), false);
 });
 
+test('needsInstallFirst sends a fresh iPhone with an intake link home first, under the same exits', () => {
+  const base = { ios: true, standalone: false, intakeLink: true, welcomeDone: false, hasHistory: false };
+  assert.strictEqual(C.needsInstallFirst(base), true);
+  assert.strictEqual(C.needsInstallFirst({ ...base, standalone: true }), false);
+  assert.strictEqual(C.needsInstallFirst({ ...base, ios: false }), false);
+  // Started the form in this browser already, or chose to stay in Safari.
+  assert.strictEqual(C.needsInstallFirst({ ...base, hasHistory: true }), false);
+  assert.strictEqual(C.needsInstallFirst({ ...base, skipped: true }), false);
+  assert.strictEqual(C.needsInstallFirst({ ...base, intakeLink: false }), false);
+});
+
 // ── the app page ───────────────────────────────────────────────────────────
 
 test('every inline script in index.html parses', () => {

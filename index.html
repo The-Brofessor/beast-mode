@@ -237,8 +237,9 @@ nav button.active svg { color: var(--acc-ink); }
 .empty .big svg { width: 44px; height: 44px; stroke-width: 1.6; }
 .empty .big .badge { width: 64px; height: 64px; }
 .empty h2 { color: var(--text); font-size: 22px; margin-bottom: 8px; }
-/* One line on a phone: the condensed face, sized to the screen. */
-.empty h2.fit { font-family: "Barlow Condensed", Inter, sans-serif; font-size: min(7.4vw, 30px); letter-spacing: 0; white-space: nowrap; }
+/* The condensed face, sized to the screen, wrapping to balanced lines
+   where a heading is too long for one (the install screen's are). */
+.empty h2.fit { font-family: "Barlow Condensed", Inter, sans-serif; font-size: min(7.4vw, 30px); letter-spacing: 0; line-height: 1.1; text-wrap: balance; }
 .empty a { color: var(--acc-ink); text-decoration: underline; text-underline-offset: 2px; }
 .steps { text-align: left; margin: 16px auto 12px; max-width: 320px; }
 .step { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 6px; background: var(--surface); border-radius: 12px; }
@@ -829,6 +830,9 @@ function scheduleDraft() {
 }
 async function sendDraft() {
   if (!intake || !intake.token || intake.sent) return;
+  // An empty form never overwrites the server's draft: Safari's untouched
+  // copy of the link must not wipe what the home-screen app has saved.
+  if (!answeredAnything()) return;
   try {
     await fetch(COACH_URL + '/intake/draft', {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -2290,9 +2294,11 @@ function isIOSSafari() {
 // The way out of the install screen, for a client who cannot or will not add
 // it to the home screen. Their plan still works here; it is Safari that will
 // forget it eventually, which is what the screen was trying to prevent.
-function skipInstall() {
-  state.skipInstall = true;
-  save();
+// On an intake link there may be no plan here yet, so the choice is kept
+// with the form, which the phone and the server already hold.
+function skipInstall(kind) {
+  if (kind === 'intake') { intake.skipInstall = true; saveIntake(); }
+  else { state.skipInstall = true; save(); }
   render();
 }
 
@@ -2357,7 +2363,10 @@ function render() {
   // A questionnaire in progress outranks everything: the client has not been
   // sent a plan yet, so there is nothing else for them to look at. A form
   // opened from an intake link shows even beside a plan (a returning client).
-  if (intake && (!state || intake.token || intake.sent || intake.routineOnly || intake.update)) { root.innerHTML = intakeScreen(); return; }
+  // On iPhone Safari the install comes first, as it does for a plan: the
+  // form is answered once, in the app they will keep (first-client path, 4a).
+  if (intakeNeedsInstall()) { root.innerHTML = installFirstScreen('intake'); return; }
+  if (intake &&(!state || intake.token || intake.sent || intake.routineOnly || intake.update)) { root.innerHTML = intakeScreen(); return; }
   if (!state) { root.innerHTML = setupScreen(); return; }
   // iPhone, Safari, a plan just arrived and nothing answered yet: the
   // welcome waits until Beast Mode is on the home screen, so it is answered
@@ -2468,14 +2477,42 @@ function inlineIcon(name) {
     'stroke-linecap="round" stroke-linejoin="round" class="inline-icon">' + ICONS[name] + '</svg>';
 }
 
-function installFirstScreen() {
-  var link = lastLink();
+// The install screen's words for each link it can hand back. The plan's are
+// Chris's, approved 2026-09-22; the intake's approved 2026-09-23 (first-
+// client path, decision 6).
+var INSTALL_WORDS = {
+  plan: { heading: 'Put Beast Mode home, then upload your plan', button: 'Copy My Plan',
+          already: 'Already have Beast Mode on your home screen? Tap Copy My Plan, open it, and paste.' },
+  // A client with a plan updates their answers from Profile, not from a
+  // link (Chris, 2026-09-23); Keep going in Safari covers one sent anyway.
+  intake: { heading: 'Put Beast Mode home, then start your intake', button: 'Copy My Link',
+            already: 'Already have Beast Mode on your home screen? Tap Copy My Link, open it, and paste.' }
+};
+
+// An intake link opened in Safari on an iPhone, by someone who has not yet
+// started the form or had a plan in this browser, and has not chosen to stay.
+function intakeNeedsInstall() {
+  if (!intake || !intake.token || intake.sent) return false;
+  return BeastCore.needsInstallFirst({
+    ios: isIOSSafari(), standalone: isStandalone(), intakeLink: true,
+    welcomeDone: false, hasHistory: BeastCore.hasAppHistory(state) || answeredAnything(),
+    skipped: !!intake.skipInstall
+  });
+}
+
+function installFirstScreen(kind) {
+  var forIntake = kind === 'intake';
+  var words = INSTALL_WORDS[forIntake ? 'intake' : 'plan'];
+  // The intake link is rebuilt from its token rather than read from the
+  // address bar, so it is always the bare link, whatever Safari added to it.
+  var link = forIntake ? APP_URL + '/#intake=' + encodeURIComponent(intake.token) : lastLink();
+  var number = forIntake ? intakeBossNumber() : bossNumber();
   return '<div class="wrap"><div class="empty" style="padding-top:28px;padding-bottom:24px">' +
-    '<div class="big">' + badge(1) + '</div><h2 class="fit">Put Beast Mode home, then upload your plan</h2>' +
+    '<div class="big">' + badge(1) + '</div><h2 class="fit">' + esc(words.heading) + '</h2>' +
     '<p>On iPhone, Beast Mode has to live on your home screen, not in Safari. It is the only place ' +
       'that allows it to have full functionality and work offline. ' +
       (link ? 'After following the steps below and putting Beast Mode on your home screen click on the ' +
-        'Copy My Plan button below and paste it in the app.'
+        esc(words.button) + ' button below and paste it in the app.'
             : 'After following the steps below, open Beast Mode from your home screen and paste in the link I sent you.') +
     '</p>' +
     '<div class="steps">' +
@@ -2487,15 +2524,15 @@ function installFirstScreen() {
     '</div>' +
     '<p class="imeta" style="margin-top:-2px;margin-bottom:12px;color:var(--text3)">' +
       'On an older iPhone there are no dots: the Share button is already in the bar at the bottom.<br><br>' +
-      (link ? 'Already have Beast Mode on your home screen? Tap Copy My Plan, open it, and paste.'
+      (link ? esc(words.already)
             : 'Already have Beast Mode on your home screen? Open it and paste in the link I sent you.') + '</p>' +
-    (link ? '<button class="pbtn" style="margin-top:4px" onclick="copyPlan(' + attr(jsq(link)) + ')">Copy My Plan</button>' +
+    (link ? '<button class="pbtn" style="margin-top:4px" onclick="copyPlan(' + attr(jsq(link)) + ')">' + esc(words.button) + '</button>' +
       '<p class="imeta" style="margin-top:10px;color:var(--text3)">Puts your link on the clipboard, ready to paste.</p>' +
       (copyFailed ? '<p class="imeta" style="color:var(--text3)">This browser will not copy for me. Hold on the link below, Select All, then Copy.</p>' +
         '<div class="code" style="text-align:left;word-break:break-all">' + esc(link) + '</div>' : '') : '') +
     '<p class="imeta" style="margin-top:16px;color:var(--text3)">Need help? ' +
-      '<a href="' + attr('sms:' + bossNumber()) + '">Text me</a>' +
-      '<br><br><a href="#" onclick="skipInstall();return false">Keep going in Safari for now</a></p>' +
+      '<a href="' + attr('sms:' + number) + '">Text me</a>' +
+      '<br><br><a href="#" onclick="skipInstall(' + (forIntake ? '\'intake\'' : '') + ');return false">Keep going in Safari for now</a></p>' +
     '</div></div>';
 }
 
@@ -2828,6 +2865,10 @@ function importCode(codeOrResult, rawCode) {
   if (imported.kind === 'ask') startIntake(imported.data);
   else if (imported.kind === 'setup' || !state) applySetup(imported.data);
   else if (imported.kind === 'plan') applyPlanUpdate(imported.data);
+  // An intake link opened here and never touched: the client went to the
+  // home screen and answered there (first-client path, 4a). Left in place it
+  // would outrank the plan with a spent link, so a plan retires it.
+  if (imported.kind !== 'ask' && intake && intake.token && !intake.sent && !answeredAnything()) clearIntakeSilently();
 
   render();
   if (imported.kind === 'plan') toast('Plan updated');

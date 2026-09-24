@@ -785,10 +785,12 @@ var BeastCore = (function () {
      and recording two consents, so a fresh phone is sent to install before
      the welcome starts. A client who has already answered the welcome, or
      who has ticked anything, is left alone: stranding someone mid-program
-     would cost them their history, which lives in the browser they used. */
+     would cost them their history, which lives in the browser they used.
+     An intake link counts the same as a plan (first-client path, 4a): the
+     install happens once, up front, and the form is answered in the app. */
   function needsInstallFirst(o) {
     o = o || {};
-    return !!(o.ios && !o.standalone && o.hasPlan && !o.welcomeDone && !o.hasHistory && !o.skipped);
+    return !!(o.ios && !o.standalone && (o.hasPlan || o.intakeLink) && !o.welcomeDone && !o.hasHistory && !o.skipped);
   }
 
   /* Only real Safari on an iPhone can add an app to the home screen, and only
