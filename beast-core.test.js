@@ -446,6 +446,22 @@ test('needsInstallFirst sends a fresh iPhone to the home screen before the welco
   assert.strictEqual(C.needsInstallFirst(), false);
 });
 
+test('the welcome on file is finished only when all four answers stand for today\'s wording', () => {
+  const W = C.WELCOME.version;
+  const full = {
+    consent: { 1: { answer: 'yes', version: C.CONSENTS[1].version }, 2: { answer: 'no', version: C.CONSENTS[2].version } },
+    sharing: { on: false, version: W }, nudges: { on: true, version: W }
+  };
+  assert.strictEqual(C.welcomeOnFile(full), true, 'a no to learning or sharing is still an answer');
+  assert.strictEqual(C.welcomeOnFile({ ...full, sharing: null }), false, 'never answered sharing here');
+  assert.strictEqual(C.welcomeOnFile({ ...full, nudges: { on: true, version: 'w2-2026-09-22' } }), false, 'an older welcome');
+  assert.strictEqual(C.welcomeOnFile({ ...full, consent: { ...full.consent, 1: null } }), false);
+  assert.strictEqual(C.welcomeOnFile({ ...full, consent: { ...full.consent, 2: { answer: 'yes', version: 'c2-old' } } }), false, 'old consent wording');
+  assert.strictEqual(C.welcomeOnFile({ ...full, sharing: { on: 'yes', version: W } }), false, 'the answer must be a real one');
+  assert.strictEqual(C.welcomeOnFile(null), false);
+  assert.strictEqual(C.welcomeOnFile({}), false);
+});
+
 test('a held welcome stands only for the person who answered it', () => {
   const today = '2026-09-23';
   const held = { stamp: C.welcomeStamp(), at: '2026-09-23T17:00:00Z', intakeToken: 'bmi_a', clientId: 'dana' };

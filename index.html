@@ -478,7 +478,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.13.0';
+var BUILT_AGAINST = '2.14.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -636,11 +636,16 @@ function statusBody(sharing) {
 async function sendStatus(finalOff) {
   if (!state || !state.clientToken) return;
   if (!finalOff && !sharingOn()) return;
+  // Nothing goes while the welcome is owed: the answers on the phone belong
+  // to older wording, and the server must never file them as today's (CTO,
+  // 2026-09-24). Once answered, they go stamped with the wording the client
+  // actually saw, never the version this code happens to carry.
+  if (needsWelcome()) return;
   try {
     await fetch(COACH_URL + '/status', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token: state.clientToken, status: statusBody(!finalOff),
-        sharingVersion: BeastCore.WELCOME.version })
+        sharingVersion: state.welcomeVersion || undefined })
     });
   } catch (e) { /* offline: the next change or open sends the current numbers */ }
 }
@@ -686,6 +691,47 @@ function heldWelcome() {
 function intakeNeedsWelcome() {
   if (!intake || !intake.token || intake.sent || intake.intro || intake.routineOnly || intake.update) return false;
   return !BeastCore.heldWelcomeFits(heldWelcome(), { intakeToken: intake.token });
+}
+
+/* A plan opened on a phone that holds no welcome (a new phone, a
+   reinstall, an intake Chris entered himself) asks the server what the
+   client already answered. All four standing for today's wording: the
+   answers are taken and the screen is skipped. Anything less, no signal,
+   or no answer inside five seconds: the welcome, as before. Asked once per
+   open; nothing is recorded by asking (Chris, 2026-09-24). */
+var welcomeCheck = null;   // null, 'pending' or 'done'
+var welcomeCheckSeq = 0;   // only the newest check may act
+var WELCOME_CHECK_MS = 5000;
+
+async function checkWelcomeOnFile() {
+  var token = state && (state.clientToken || state.coachToken);
+  if (!token) { welcomeCheck = 'done'; return; }
+  welcomeCheck = 'pending';
+  var mine = ++welcomeCheckSeq;
+  var data = null;
+  try {
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, WELCOME_CHECK_MS) : null;
+    var res = await fetch(COACH_URL + '/welcome/on-file', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: token }), signal: ctrl ? ctrl.signal : undefined
+    });
+    clearTimeout(timer);
+    data = res.ok ? await res.json() : null;
+  } catch (e) { data = null; }
+  if (mine !== welcomeCheckSeq) return;   // a newer plan asked since
+  welcomeCheck = 'done';
+  // Only for the plan that asked: a second link tapped while waiting is a
+  // different plan, perhaps a different client (CTO, 2026-09-24).
+  var still = state && (state.clientToken || state.coachToken) === token;
+  if (still && needsWelcome() && BeastCore.welcomeOnFile(data)) {
+    state.coachConsent = data.consent;
+    state.sharing = data.sharing.on;
+    state.nudges = data.nudges.on;
+    state.welcomeVersion = BeastCore.WELCOME.version;
+    save();
+  }
+  render();
 }
 
 var welcomeAnswers = { share: null, nudges: null, learn: null };
@@ -754,6 +800,14 @@ async function finishWelcome() {
     render();
     return;
   }
+  // The sharing and reminder answers go to the server as well, with the
+  // wording they were given to, so a plan opened in any browser finds all
+  // four (BeastCore.welcomeOnFile). Quietly: the consents are what must
+  // land, and a phone's first status carries these two anyway.
+  fetch(COACH_URL + '/welcome/answers', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: token, sharing: a.share === 'yes', nudges: a.nudges === 'yes', version: BeastCore.WELCOME.version })
+  }).catch(function () {});
   if (viaIntake) {
     welcomeHeld = { stamp: BeastCore.welcomeStamp(), at: new Date().toISOString(),
       intakeToken: intake.token, clientId: intake.clientId || '',
@@ -2515,7 +2569,15 @@ function render() {
     welcomeDone: !needsWelcome(), hasHistory: BeastCore.hasAppHistory(state),
     skipped: !!state.skipInstall
   })) { root.innerHTML = installFirstScreen(); askForBoss(); return; }
-  if (needsWelcome()) { root.innerHTML = welcomeScreen(); return; }
+  if (needsWelcome()) {
+    // Answered already, elsewhere? The server is asked once; the welcome
+    // shows unless it says every answer stands (BeastCore.welcomeOnFile).
+    if (welcomeCheck === null) checkWelcomeOnFile();
+    root.innerHTML = welcomeCheck === 'pending'
+      ? '<div class="wrap"><div class="empty" style="padding-top:80px"><p>One second...</p></div></div>'
+      : welcomeScreen();
+    return;
+  }
 
   // Waiting for the plan (first-client path, 4c): Home, Coach and Profile.
   // Profile holds only what exists yet: the coach questions and Delete my
@@ -3043,6 +3105,9 @@ function importCode(codeOrResult, rawCode) {
   // A phone waiting for its plan takes whichever kind comes as its first
   // plan: Chris may have sent this client a link before (first-client path).
   var wasWaiting = !!(state && state.waiting);
+  // A new plan gets its own check of the welcome on file; any answer still
+  // on its way for the plan before is dropped (checkWelcomeOnFile).
+  if (imported.kind !== 'ask') { welcomeCheck = null; welcomeCheckSeq++; }
   if (imported.kind === 'ask') startIntake(imported.data);
   else if (imported.kind === 'setup' || !state || wasWaiting) applySetup(imported.data);
   else if (imported.kind === 'plan') applyPlanUpdate(imported.data);

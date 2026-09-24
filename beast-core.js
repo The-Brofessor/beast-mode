@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.13.0';
+  var VERSION = '2.14.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1845,6 +1845,18 @@ var BeastCore = (function () {
       (given.answer === 'yes' || (kind === 2 && given.answer === 'no')));
   }
 
+  /* What the server has on file for a client (POST /welcome/on-file) is a
+     finished welcome only if all four answers stand for today's wording:
+     consents 1 and 2 at their versions, and the sharing and reminder answers
+     recorded with this welcome's version. Anything short of that asks again.
+     A phone opening a plan with nothing held uses this to skip a welcome the
+     client already answered elsewhere (Chris, 2026-09-24). */
+  function welcomeOnFile(data) {
+    if (!data || typeof data !== 'object' || !data.consent) return false;
+    var at = function (a) { return !!a && typeof a === 'object' && a.version === WELCOME.version && typeof a.on === 'boolean'; };
+    return consentStands(1, data.consent[1]) && consentStands(2, data.consent[2]) && at(data.sharing) && at(data.nudges);
+  }
+
   // ── Public surface ────────────────────────────────────────────────────────
 
   return {
@@ -1884,7 +1896,7 @@ var BeastCore = (function () {
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,
 
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
-    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, heldWelcomeFits: heldWelcomeFits, welcomeStamp: welcomeStamp, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
+    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, heldWelcomeFits: heldWelcomeFits, welcomeOnFile: welcomeOnFile, welcomeStamp: welcomeStamp, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
     buildBackup: buildBackup, readBackup: readBackup, backupDiff: backupDiff,
     backupFilename: backupFilename, daysSince: daysSince, BACKUP_TYPE: BACKUP_TYPE,
