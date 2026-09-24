@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.16.0';
+  var VERSION = '2.17.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1339,7 +1339,7 @@ var BeastCore = (function () {
     activity: { label: 'How active is that?', section: 'Your work day', always: true },
     workHours: { label: 'Leave for work, work start and end, commute', section: 'Your work day', replaces: 'workStart' },
     workMeals: { label: 'When you eat, roughly, and where', section: 'Your work day', replaces: 'workMealCount' },
-    offMeals: { label: 'When you eat, roughly, and where', section: 'Your day off', replaces: 'offMealCount' },
+    offMeals: { label: 'When you eat, roughly, and where', section: 'Your days off', replaces: 'offMealCount' },
     alcohol: { label: 'Alcohol in a normal week', section: 'Most days', replaces: 'alcoholNights' },
     caffeine: { label: 'Caffeine on a normal day', section: 'Most days', replaces: 'caffeineCount' },
     calories: { label: 'Total calories on a normal day', section: 'Most days' },
@@ -1397,7 +1397,7 @@ var BeastCore = (function () {
     { key: 'train', label: 'Best time to train', type: 'time' },
     { key: 'train2', label: 'Second choice', type: 'time' },
     { key: 'evening', label: 'Your evening', type: 'multi',
-      options: ['dinner', 'kids', 'TV', 'phone', 'drinks', 'gaming', 'chores', 'a second job'] },
+      options: ['dinner', 'kids', 'TV', 'phone', 'alcohol', 'gaming', 'computer', 'chores', 'a second job'] },
     { key: 'bed', label: 'Bed time', type: 'time' }
   );
 
@@ -1456,6 +1456,15 @@ var BeastCore = (function () {
     f[0].group = title;
     return f.map(function (x) { if (!x.when) x.when = show; else x.also = show; return x; });
   }
+
+  // The Tools page's chips, grouped (Chris, 2026-09-24). Wording is draft.
+  var TOOL_GROUPS = [
+    { label: 'Tracking', options: ['MyFitnessPal', 'another food app', 'scale', 'blood pressure cuff'] },
+    { label: 'Cardio', options: ['treadmill at home', 'treadmill at the gym', 'walking pad', 'Peloton', 'stationary bike', 'rower'] },
+    { label: 'Watches and trackers', options: ['Apple Watch', 'Garmin', 'Fitbit', 'Samsung watch', 'Polar watch', 'Whoop', 'Oura',
+      'another fitness tracker', 'heart-rate chest strap'] },
+    { label: 'Bands and recovery', options: ['mini loop bands', 'long band with handles', 'foam roller', 'massage gun', 'the Stick', 'lacrosse ball'] }
+  ];
 
   var INTAKE_SECTIONS = [
     // Chris's wording, 2026-09-23. Pounds and inches throughout; the date
@@ -1535,7 +1544,10 @@ var BeastCore = (function () {
     // hours" hides the leave, start and finish.
     { title: 'Your work day', routine: true, pass: 'work',
       fields: [
+        // "Weekdays" taps Monday to Friday at once (Chris, 2026-09-24). It is
+        // a shortcut, not an answer: only the days themselves are stored.
         { key: 'workDays', label: 'Your work days', type: 'multi', none: 'no set days',
+          shortcuts: { 'Weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
           options: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'no set days'] },
         { key: 'job', label: 'Your work is mostly', type: 'choice',
           options: ['at a desk', 'on my feet', 'physical: lifting, carrying', 'driving', NO_SET_HOURS] }
@@ -1545,7 +1557,7 @@ var BeastCore = (function () {
       ]) },
     // No line under the title (Chris, 2026-09-24). The days off are the
     // days not tapped as work days, so they are not asked.
-    { title: 'Your day off', routine: true, pass: 'off',
+    { title: 'Your days off', routine: true, pass: 'off',
       fields: routinePass('off') },
     // "Most days", as taps, no line under the title (Chris, 2026-09-24).
     // Calories and nights away went (no plan used them); brushing and
@@ -1556,9 +1568,9 @@ var BeastCore = (function () {
           options: ['don’t know', 'under 5,000', '5,000 to 8,000', '8,000 to 10,000', '10,000 to 12,000', '12,000 to 15,000', 'over 15,000'] },
         { key: 'water', label: 'Water a day', type: 'choice',
           options: ['under 32 oz', '32 to 64 oz', '64 to 100 oz', '100 to 150 oz', 'over 150 oz'] },
-        { key: 'alcoholNights', label: 'Nights you drink', type: 'multi', none: 'none',
+        { key: 'alcoholNights', label: 'Nights you drink alcohol', type: 'multi', none: 'none',
           options: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'none'] },
-        { key: 'alcoholMost', label: 'Drinks on your biggest night', type: 'choice', options: ['1 to 2', '3 to 4', '5 to 6', '7 to 9', '10 or more'],
+        { key: 'alcoholMost', label: 'Alcoholic drinks on your biggest night', type: 'choice', options: ['1 to 2', '3 to 4', '5 to 6', '7 to 9', '10 or more'],
           when: { key: 'alcoholNights', picked: true, except: 'none' } },
         { key: 'caffeineCount', label: 'Coffees, energy drinks or pre-workouts a day', type: 'choice', options: ['0', '1', '2', '3', '4', '5', '6+'] },
         { key: 'caffeineLast', label: 'The last one', type: 'choice', options: ['morning', 'noon', 'afternoon', 'evening'],
@@ -1632,10 +1644,10 @@ var BeastCore = (function () {
     // under them. The line under the title is Chris's.
     { title: 'Tools', hint: 'None are required to start.', fields: [
       // No "none of these" (Chris, 2026-09-24): nothing tapped means nothing.
-      { key: 'tools', label: 'What do you have now?', type: 'multi',
-        options: ['MyFitnessPal', 'another food app', 'scale', 'blood pressure cuff', 'treadmill at home', 'treadmill at the gym', 'walking pad',
-          'Apple Watch', 'Garmin', 'Fitbit', 'Samsung watch', 'Polar watch', 'Whoop', 'Oura', 'another fitness tracker', 'heart-rate chest strap',
-          'mini loop bands', 'long band with handles', 'foam roller', 'massage gun', 'the Stick', 'lacrosse ball'] },
+      // The chips sit under four small headings (`groups`; Chris found one
+      // block of 22 too busy on his phone). `options` is every chip in order.
+      { key: 'tools', label: 'What do you have now?', type: 'multi', groups: TOOL_GROUPS,
+        options: TOOL_GROUPS.reduce(function (all, g) { return all.concat(g.options); }, []) },
       { key: 'toolsOpen', label: 'Willing to buy tools if the plan calls for them?', type: 'yesno' }
     ] },
     { title: 'Music', hint: 'The Brofessor can make music suggestions for your sessions.', fields: [
@@ -1660,7 +1672,7 @@ var BeastCore = (function () {
   // 2026-09-24). Pages that word their own (Goals, Your work day) keep it;
   // the rest get this one, under a key fixed here so answers keep their name.
   var MORE_KEYS = {
-    'Personal Info': 'personalMore', 'Your day off': 'offMore', 'Most days': 'mostMore', 'Training': 'trainingMore',
+    'Personal Info': 'personalMore', 'Your days off': 'offMore', 'Most days': 'mostMore', 'Training': 'trainingMore',
     'Health': 'healthMore', 'Your prescription': 'rxMore', 'Tools': 'toolsMore', 'Music': 'musicMore'
   };
   INTAKE_SECTIONS.forEach(function (s) {
@@ -1904,8 +1916,8 @@ var BeastCore = (function () {
     workDays: 'Your work day: Work days', job: 'Your work day: Work', activity: 'Your work day: How active',
     workWake: 'Your work day: Wake', workHours: 'Your work day: Leave, work and commute', workMeals: 'Your work day: Meals',
     workTrain: 'Your work day: Could train', workEvening: 'Your work day: Evening', workBed: 'Your work day: Bed',
-    offWake: 'Your day off: Wake', offMeals: 'Your day off: Meals', offTrain: 'Your day off: Could train',
-    offEvening: 'Your day off: Evening', offBed: 'Your day off: Bed',
+    offWake: 'Your days off: Wake', offMeals: 'Your days off: Meals', offTrain: 'Your days off: Could train',
+    offEvening: 'Your days off: Evening', offBed: 'Your days off: Bed',
     steps: 'Most days: Steps', water: 'Most days: Water', alcohol: 'Most days: Alcohol', caffeine: 'Most days: Caffeine'
   };
 

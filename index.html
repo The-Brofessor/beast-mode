@@ -339,6 +339,8 @@ nav button.active svg.navbadge { opacity: 1; filter: drop-shadow(0 0 3px var(--a
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); font-size: 14px; font-weight: 600; min-height: 44px; }
 .chip.picked { background: var(--acc); color: var(--on-acc); border-color: var(--acc); }
+.chipgroup { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 14px 0 8px; }
+.chipgroup:first-child { margin-top: 2px; }
 .fgroup { font-family: "Barlow Condensed", Inter, sans-serif; font-weight: 700; font-size: 20px; text-transform: uppercase; letter-spacing: .02em; margin: 22px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .timerow { display: flex; gap: 8px; align-items: center; }
 .timerow input { flex: 1; min-width: 0; }
@@ -618,7 +620,7 @@ nav button.active svg { color: var(--acc-ink); stroke-width: 2.6; }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.16.0';
+var BUILT_AGAINST = '2.17.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -1326,12 +1328,16 @@ function intakeReviewScreen() {
 function setAnswer(key, value) {
   intake.answers[key] = value;
   saveIntake();
-  // A required field just filled in: take its warning away.
+  // A required field just filled in: take its warning away, in place. No
+  // redraw: it would close the phone's date wheel mid-spin.
   if (intake.missing && intake.missing.indexOf(key) >= 0 && String(value).trim() !== '') {
     intake.missing = intake.missing.filter(function (k) { return k !== key; });
-    var y = window.scrollY;
-    render();
-    window.scrollTo(0, y);
+    var box = document.getElementById('need-' + key);
+    if (box) {
+      box.classList.remove('need');
+      var msg = box.querySelector('.needmsg');
+      if (msg) msg.parentNode.removeChild(msg);
+    }
   }
 }
 
@@ -1382,6 +1388,21 @@ function mealWhere(f, shown) {
     return '<button class="' + (v === o ? 'picked' : '') + '" onclick="pickAnswer(' + attr(jsq(w.key)) + ',' + attr(jsq(o)) + ')">' +
       esc(o.charAt(0).toUpperCase() + o.slice(1)) + '</button>';
   }).join('') + '</div>';
+}
+
+// A shortcut chip: taps all of its days on, or all off when every one is
+// already on. The field's `none` pick goes when anything is tapped.
+function toggleShortcut(key, name) {
+  var f = BeastCore.intakeFields().find(function (x) { return x.key === key; });
+  if (!f || !f.shortcuts || !f.shortcuts[name]) return;
+  var set = f.shortcuts[name];
+  var picked = String(intake.answers[key] || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+  var allOn = set.every(function (o) { return picked.indexOf(o) >= 0; });
+  picked = allOn ? picked.filter(function (p) { return set.indexOf(p) < 0; })
+    : picked.filter(function (p) { return p !== f.none; }).concat(set.filter(function (o) { return picked.indexOf(o) < 0; }));
+  var order = f.options || [];
+  picked.sort(function (x, y) { return order.indexOf(x) - order.indexOf(y); });
+  pickAnswer(key, picked.join('\n'));
 }
 
 // A chip in a `multi` field: tap to add, tap again to take off. The field's
@@ -1705,10 +1726,22 @@ function intakeScreen() {
     if (f.type === 'multi') {
       // Chips: tap as many as fit (intake review, Chris, 2026-09-24).
       var have = String(v).split('\n').map(function (s) { return s.trim(); });
-      input = '<div class="chips">' + f.options.map(function (o) {
+      var chip = function (o) {
         return '<button class="chip' + (have.indexOf(o) >= 0 ? ' picked' : '') + '" onclick="toggleChip(' + attr(jsq(f.key)) + ',' + attr(jsq(o)) + ')">' +
           esc(o.charAt(0).toUpperCase() + o.slice(1)) + '</button>';
-      }).join('') + '</div>';
+      };
+      // A shortcut chip ("Weekdays") taps several at once; it shows picked
+      // when all of its days are.
+      var shortcuts = Object.keys(f.shortcuts || {}).map(function (name) {
+        var all = f.shortcuts[name].every(function (o) { return have.indexOf(o) >= 0; });
+        return '<button class="chip' + (all ? ' picked' : '') + '" onclick="toggleShortcut(' + attr(jsq(f.key)) + ',' + attr(jsq(name)) + ')">' + esc(name) + '</button>';
+      }).join('');
+      // A long list in `groups`, each under its own small heading (Tools).
+      input = f.groups
+        ? f.groups.map(function (g) {
+            return '<div class="chipgroup">' + esc(g.label) + '</div><div class="chips">' + g.options.map(chip).join('') + '</div>';
+          }).join('')
+        : '<div class="chips">' + shortcuts + f.options.map(chip).join('') + '</div>';
     }
     // A typed field carries its example inside the box, in a lighter type,
     // gone the moment they start typing (Chris, 2026-09-23). A pick list or
@@ -1730,7 +1763,10 @@ function intakeScreen() {
     } else if (f.type === 'time') {
       // The phone's own time wheel (intake review, 2026-09-24), stored in
       // words, '5:30pm' (BeastCore.clockWords); a meal's where beside it.
-      input = '<div class="timerow"><input type="time" value="' + attr(BeastCore.hhmm(v)) + '" onchange="pickAnswer(' + attr(jsq(f.key)) + ',BeastCore.clockWords(this.value))">' +
+      // Saved without redrawing the page: iPhone Safari fires `change` each
+      // time the wheel comes to rest, and a redraw closed the wheel on
+      // whatever time it stopped at (Chris, on his phone, 2026-09-24).
+      input = '<div class="timerow"><input type="time" value="' + attr(BeastCore.hhmm(v)) + '" onchange="setAnswer(' + attr(jsq(f.key)) + ',BeastCore.clockWords(this.value))">' +
         mealWhere(f, shown) +
         '</div>';
     } else if (f.type === 'textarea' || tall) {

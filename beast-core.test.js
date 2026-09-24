@@ -575,6 +575,25 @@ test('ageUnknown: a blank or unreadable date of birth, with no stated age, is un
   assert.strictEqual(C.ageUnknown(null, today), true);
 });
 
+test('from Chris\'s phone run (2026-09-24): Weekdays, computer, days off, alcohol named, Tools grouped', () => {
+  const work = C.INTAKE_SECTIONS.find(s => s.pass === 'work');
+  const days = work.fields.find(f => f.key === 'workDays');
+  assert.deepStrictEqual(days.shortcuts.Weekdays, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  assert.ok(days.shortcuts.Weekdays.every(d => days.options.includes(d)), 'a shortcut only taps real options');
+  assert.ok(work.fields.find(f => f.key === 'workEvening').options.includes('computer'));
+  assert.ok(C.INTAKE_SECTIONS.some(s => s.title === 'Your days off') && !C.INTAKE_SECTIONS.some(s => s.title === 'Your day off'));
+  const most = C.INTAKE_SECTIONS.find(s => s.pass === 'most');
+  assert.match(most.fields.find(f => f.key === 'alcoholNights').label, /alcohol/);
+  assert.match(most.fields.find(f => f.key === 'alcoholMost').label, /Alcoholic/);
+  const tools = C.INTAKE_SECTIONS.find(s => s.title === 'Tools').fields.find(f => f.key === 'tools');
+  assert.deepStrictEqual(tools.groups.map(g => g.label), ['Tracking', 'Cardio', 'Watches and trackers', 'Bands and recovery']);
+  const flat = tools.groups.reduce((all, g) => all.concat(g.options), []);
+  assert.deepStrictEqual(tools.options, flat, 'every grouped chip is an option, in order');
+  assert.strictEqual(new Set(flat).size, flat.length, 'no chip in two groups');
+  // The routine's change labels say days off too.
+  assert.deepStrictEqual(C.routineChanges({ offBed: '10pm' }, { offBed: '11pm' }).map(c => c.label), ['Your days off: Bed']);
+});
+
 test('Goals as taps: the lean question only when gaining, How did it go only after a real diet, the test after a yes', () => {
   const goals = C.INTAKE_SECTIONS[1];
   const shown = a => C.visibleFields(goals, a).map(f => f.key);
@@ -637,8 +656,8 @@ test('the intake asks the routine for a work day and a day off, keyed by pass, w
   assert.strictEqual(C.INTAKE_VERSION, 3, 'the form as taps (2026-09-24)');
   const routine = C.routineSections();
   assert.deepStrictEqual(routine.map(s => s.pass), ['work', 'off', 'most']);
-  assert.deepStrictEqual(routine.map(s => s.title), ['Your work day', 'Your day off', 'Most days']);
-  assert.deepStrictEqual(C.INTAKE_SECTIONS.map(s => s.title), ['Personal Info', 'Goals', 'Your work day', 'Your day off', 'Most days', 'Training', 'Health', 'Your prescription', 'Tools', 'Music']);
+  assert.deepStrictEqual(routine.map(s => s.title), ['Your work day', 'Your days off', 'Most days']);
+  assert.deepStrictEqual(C.INTAKE_SECTIONS.map(s => s.title), ['Personal Info', 'Goals', 'Your work day', 'Your days off', 'Most days', 'Training', 'Health', 'Your prescription', 'Tools', 'Music']);
   // Personal Info (Chris, 2026-09-23): date of birth, not age; pounds and inches; two buttons for sex.
   const you = C.INTAKE_SECTIONS[0];
   assert.deepStrictEqual(you.fields.map(f => f.key), ['firstName', 'lastName', 'birthday', 'sex', 'height', 'weight', 'goalWeight', 'goalBy', 'waist', 'bodyFat', 'maxHr', 'maxHrHow', 'household', 'personalMore']);
@@ -777,11 +796,11 @@ test('old answers are told apart from new ones, and both still print for the coa
   assert.match(oldText, /HEALTH\nAnything prescribed: semaglutide 0.5 mg Sundays/, 'the old prescription answer prints under Health');
   assert.match(oldText, /^INTAKE: Vince/);
   assert.match(oldText, /YOUR DAY\nWhat do you do all day\?: desk\nHow active is that\?: mostly sitting\nUsual wake time: 05:30\nWork hours: 8 to 5\nUsual bed time: 22:30/);
-  assert.ok(!/YOUR WORK DAY|YOUR DAY OFF/.test(oldText), 'old answers do not print empty new sections');
+  assert.ok(!/YOUR WORK DAY|YOUR DAYS OFF/.test(oldText), 'old answers do not print empty new sections');
   const newText = C.formatIntakeForCoach('Vince', v2);
   // Typed answers print under today's labels; the typed work hours under their own.
   assert.match(newText, /YOUR WORK DAY\nYour work is mostly: desk\nWake up: 5:30, coffee\nBed time: 10:30, 20 min\nLeave for work, work start and end, commute: 7:15, 8 to 5, 30 min/);
-  assert.match(newText, /YOUR DAY OFF\nWake up: 8, kids/);
+  assert.match(newText, /YOUR DAYS OFF\nWake up: 8, kids/);
   assert.ok(!/YOUR DAY\n/.test(newText));
   assert.match(C.formatIntakeForCoach('', { workMeals: 'a\nb\n\nc' }), /where: a; b; c/, 'newlines in an answer become one line');
 });
