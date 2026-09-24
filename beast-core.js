@@ -1228,6 +1228,23 @@ var BeastCore = (function () {
     return fromBirthday !== null && fromBirthday < MIN_AGE;
   }
 
+  // True when nothing says how old they are: no readable date of birth and
+  // no stated age (version 1). The coach opens the moment a first intake is
+  // sent, so a blank is not allowed through (intake review, 2026-09-24).
+  function ageUnknown(answers, today) {
+    var a = answers || {};
+    var stated = (a.age === '' || a.age == null) ? NaN : Number(a.age);
+    return isNaN(stated) && ageOn(a.birthday, today) === null;
+  }
+
+  // The keys of the required fields among those shown that are still blank.
+  function missingRequired(fields, answers) {
+    var a = answers || {};
+    return (fields || []).filter(function (f) {
+      return f.required && String(a[f.key] == null ? '' : a[f.key]).trim() === '';
+    }).map(function (f) { return f.key; });
+  }
+
   // The intake's own version (loop brief 5b). Version 1 asked "Your day" in
   // three fields (wakeTime, workHours, bedTime). Version 2 asks for the
   // client's real routine, a work day and a day off, so the plan places each
@@ -1286,7 +1303,10 @@ var BeastCore = (function () {
     { title: 'Personal Info', hint: 'We base our calculations from this data so be as accurate as possible.', fields: [
       { key: 'firstName', label: 'First name', type: 'text' },
       { key: 'lastName', label: 'Last name', type: 'text' },
-      { key: 'birthday', label: 'Date of birth', type: 'date' },
+      // Required: the adults-only check needs it (intake review, 2026-09-24).
+      // `need` is what the form says when it is left blank (Chris, 2026-09-24).
+      { key: 'birthday', label: 'Date of birth', type: 'date', required: true,
+        need: 'Add your date of birth to keep going.' },
       { key: 'sex', label: 'Sex', type: 'choice', options: ['male', 'female'] },
       { key: 'height', label: 'Height (inches)', type: 'number', hint: '71' },
       { key: 'weight', label: 'Current weight (lb)', type: 'number', hint: '196' },
@@ -1908,7 +1928,7 @@ var BeastCore = (function () {
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
     TIMING_LABELS: TIMING_LABELS, timingLabel: timingLabel,
     WEIGHT_UNIT: WEIGHT_UNIT, itemSummary: itemSummary,
-    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge,
+    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge, ageUnknown: ageUnknown, missingRequired: missingRequired,
     detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,

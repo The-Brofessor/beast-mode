@@ -351,6 +351,8 @@ nav button.active svg { color: var(--acc-ink); }
 .modal p { color: var(--text2); font-size: 14px; }
 
 .field { margin-bottom: 14px; }
+.field.need input, .field.need textarea, .field.need select { border-color: var(--bad); }
+.field .needmsg { color: var(--bad); font-size: 14px; font-weight: 600; margin-top: 6px; }
 .field label { display: block; font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 6px; }
 
 .ladder { display: grid; gap: 4px; margin-top: 16px; }
@@ -1227,6 +1229,7 @@ function editSection(title) {
 
 function openReview() {
   if (underAge()) { intake.blocked = true; saveIntake(); render(); return; }
+  if (stopForMissing(false)) return;
   intake.review = true;
   intake.fromReview = false;
   saveIntake();
@@ -1282,7 +1285,43 @@ function intakeReviewScreen() {
     '</div></div>';
 }
 
-function setAnswer(key, value) { intake.answers[key] = value; saveIntake(); }
+function setAnswer(key, value) {
+  intake.answers[key] = value;
+  saveIntake();
+  // A required field just filled in: take its warning away.
+  if (intake.missing && intake.missing.indexOf(key) >= 0 && String(value).trim() !== '') {
+    intake.missing = intake.missing.filter(function (k) { return k !== key; });
+    var y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+  }
+}
+
+// A required field left blank (the date of birth) stops Next, Check it over
+// and Send, on the first screen that has one, with the field marked. Guarded
+// for a phone briefly paired with a cached older core.
+function stopForMissing(onlyThisStep) {
+  if (!BeastCore.missingRequired) return false;
+  var secs = intakeSections();
+  var from = onlyThisStep ? intake.step : 0;
+  var to = onlyThisStep ? intake.step : secs.length - 1;
+  for (var i = from; i <= to; i++) {
+    var sec = secs[i];
+    if (!sec) continue;
+    var shown = BeastCore.visibleFields ? BeastCore.visibleFields(sec, intake.answers) : sec.fields;
+    var gone = BeastCore.missingRequired(shown, intake.answers);
+    if (!gone.length) continue;
+    intake.missing = gone;
+    intake.step = i;
+    intake.review = false;
+    saveIntake();
+    render();
+    var el = document.getElementById('need-' + gone[0]);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    return true;
+  }
+  return false;
+}
 
 function pickAnswer(key, value) {
   setAnswer(key, value);
@@ -1300,6 +1339,7 @@ function underAge() {
 
 function intakeStep(delta) {
   if (delta > 0 && underAge()) { intake.blocked = true; saveIntake(); render(); return; }
+  if (delta > 0 && stopForMissing(true)) return;
   var total = intakeSections().length;
   intake.step = Math.max(0, Math.min(total - 1, intake.step + delta));
   saveIntake();
@@ -1309,6 +1349,7 @@ function intakeStep(delta) {
 
 function submitIntake() {
   if (underAge()) { intake.blocked = true; saveIntake(); render(); return; }
+  if (stopForMissing(false)) return;
   // Nothing answered: a routine re-ask is Not now; an intake needs something.
   if (!answeredAnything()) {
     if (intake.routineOnly) { skipRoutine(); return; }
@@ -1602,7 +1643,9 @@ function intakeScreen() {
         (f.type === 'number' ? ' inputmode="decimal"' : '') +
         ' value="' + attr(v) + '"' + ph + ' ' + on + '>';
     }
-    return '<div class="field"><label>' + esc(f.label) + '</label>' + input +
+    var need = intake.missing && intake.missing.indexOf(f.key) >= 0;
+    return '<div class="field' + (need ? ' need' : '') + '" id="need-' + attr(f.key) + '"><label>' + esc(f.label) + '</label>' + input +
+      (need ? '<div class="needmsg">' + esc(f.need || 'This one is needed.') + '</div>' : '') +
       (note ? '<div class="imeta">' + esc(note) + '</div>' : '') + '</div>';
   }).join('');
 

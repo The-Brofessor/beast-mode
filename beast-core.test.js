@@ -563,6 +563,31 @@ test('isUnderAge turns away under-18s by stated age or birthday', () => {
   assert.strictEqual(C.isUnderAge({ age: '' }, today), false);
 });
 
+test('ageUnknown: a blank or unreadable date of birth, with no stated age, is unknown', () => {
+  const today = '2026-09-24';
+  assert.strictEqual(C.ageUnknown({}, today), true);
+  assert.strictEqual(C.ageUnknown({ birthday: '' }, today), true);
+  assert.strictEqual(C.ageUnknown({ birthday: 'June' }, today), true);
+  assert.strictEqual(C.ageUnknown({ birthday: '2030-01-01' }, today), true);   // in the future
+  assert.strictEqual(C.ageUnknown({ age: '' }, today), true);
+  assert.strictEqual(C.ageUnknown({ birthday: '1976-10-05' }, today), false);
+  assert.strictEqual(C.ageUnknown({ age: '40' }, today), false);               // version 1's stated age
+  assert.strictEqual(C.ageUnknown(null, today), true);
+});
+
+test('the date of birth is required on the form, and missingRequired finds it blank', () => {
+  const personal = C.INTAKE_SECTIONS[0];
+  const dob = personal.fields.find(f => f.key === 'birthday');
+  assert.strictEqual(dob.required, true);
+  assert.ok(dob.need && dob.need.length > 0, 'a required field says what is needed');
+  assert.deepStrictEqual(C.missingRequired(personal.fields, {}), ['birthday']);
+  assert.deepStrictEqual(C.missingRequired(personal.fields, { birthday: '   ' }), ['birthday']);
+  assert.deepStrictEqual(C.missingRequired(personal.fields, { birthday: '1976-10-05' }), []);
+  assert.deepStrictEqual(C.missingRequired(null, {}), []);
+  // Nothing on the routine re-ask is required: it never shows Personal Info.
+  C.routineSections().forEach(s => assert.deepStrictEqual(C.missingRequired(s.fields, {}), []));
+});
+
 // ── the intake and the routine baseline ────────────────────────────────────
 
 test('the intake asks the routine for a work day and a day off, keyed by pass, with no duplicate keys', () => {
