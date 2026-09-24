@@ -28,3 +28,9 @@ workout-nutrition-tool.html
 worker/.wrangler/
 worker/node_modules/
 *vapid*private*
+
+# Design previews and scratch artwork (galleries at the repo root served for
+# review, the recolouring workspace). The brand masters live in the OneDrive
+# hub's design/brand/, never here.
+/_*.html
+/_marks/
