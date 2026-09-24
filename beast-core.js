@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.17.0';
+  var VERSION = '2.17.1';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1447,7 +1447,8 @@ var BeastCore = (function () {
       { key: p + 'Dose', label: title + ': each dose', shortLabel: 'Each dose', type: 'number', hint: '100', unless: injected },
       { key: p + 'Unit', label: title + ': dose unit', hideLabel: true, asIs: true, type: 'choice', options: ['mg', 'mcg', 'units', 'mL'] },
       { key: p + 'Often', label: title + ': how often', shortLabel: 'How often', type: 'choice',
-        options: ['daily', 'every other day', '3 times a week', 'twice a week', 'weekly', 'every 2 weeks', 'monthly'] },
+        // "twice a day": metformin morning and evening (Chris, 2026-09-24).
+        options: ['twice a day', 'daily', 'every other day', '3 times a week', 'twice a week', 'weekly', 'every 2 weeks', 'monthly'] },
       { key: p + 'Since', label: title + ': on it for', shortLabel: 'On it for', type: 'choice', options: ['under 3 months', '3 to 12 months', '1 to 5 years', '5+ years'] },
       { key: p + 'Side', label: title + ': any side effects?', shortLabel: 'Any side effects?', type: 'yesno' },
       { key: p + 'SideWhat', label: title + ': what are they?', shortLabel: 'What are they?', type: 'textarea', when: { key: p + 'Side', is: 'yes' } }

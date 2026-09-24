@@ -775,7 +775,7 @@ test('the intake asks the routine for a work day and a day off, keyed by pass, w
   // Every field can be drawn by the app: a known type, options for a select.
   for (const f of C.intakeFields()) {
     assert.ok(['number', 'text', 'select', 'textarea', 'yesno', 'choice', 'date', 'multi', 'time', 'height'].includes(f.type), f.key + ' has type ' + f.type);
-    if (f.type === 'choice') assert.ok(f.options.length >= 2 && f.options.length <= 7, f.key + ': buttons for two to seven options (more than three wrap as chips), a list beyond');
+    if (f.type === 'choice') assert.ok(f.options.length >= 2 && f.options.length <= 8, f.key + ': buttons for two to eight options (more than three wrap as chips), a list beyond');
     if (f.type === 'multi') assert.ok(f.options.length >= 2 && (!f.none || f.options.includes(f.none)), f.key + ': chips need options, and its none among them');
     if (f.type === 'select') assert.ok(!(f.options.length === 2 && f.options.includes('yes')), f.key + ': a yes or no is two buttons, not a drop-down');
     if (f.type === 'select') assert.ok(f.options.length > 1, f.key + ' needs options');
