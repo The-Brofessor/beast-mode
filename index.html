@@ -450,6 +450,11 @@ nav button.active svg { color: var(--acc-ink); }
 .card.done .next li svg { flex: 0 0 auto; width: 24px; height: 24px; margin-top: 1px; color: var(--acc-ink); stroke-width: 2.2; }
 .card.done .next b { color: var(--text); font-weight: 600; }
 :root:not([data-theme="light"]) .card.done { border-color: var(--acc); }
+/* The level-up's badges (step 5): a pill each, the accent's soft fill. */
+.starts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 6px; }
+.starts .st { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; border-radius: 999px;
+  background: var(--acc-soft); border: 1px solid var(--acc); font-weight: 600; font-size: 14px; color: var(--text); }
+.starts .st svg { width: 20px; height: 20px; color: var(--acc-ink); flex: 0 0 auto; }
 .card.done .lead, .card.featured .lead { margin: -16px -16px 14px; padding: 14px 16px; background: #0B0D10; color: var(--acc); text-align: center;
   font: 700 19px/1.15 "Barlow Condensed", Inter, sans-serif; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; border-radius: 14px 14px 0 0;
   border-bottom: 2px solid var(--acc); }
@@ -478,7 +483,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.14.0';
+var BUILT_AGAINST = '2.15.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -1214,6 +1219,10 @@ async function postIntake(token) {
     var at = new Date().toISOString();
     if (state) { state.routineAnsweredAt = at; save(); }
     else { try { localStorage.setItem(INTAKE_AT_KEY, at); } catch (e) {} }
+    // The level-up (step 5): the intake badge, and the home-screen one if
+    // it was sent from there.
+    earnStart('intake', intake.clientId);
+    if (isStandalone()) earnStart('install', intake.clientId);
     // The coach opened itself for them (first-client path, 4c).
     if (data && typeof data.coachToken === 'string' && data.coachToken) openCoachFromIntake(data.coachToken);
     intake.sent = true;
@@ -1343,6 +1352,8 @@ function intakeScreen() {
       '<div class="lead">No one said change would be easy.</div>' +
       '<div class="big">' + badge(2) + '</div>' +
       '<h2>Got it' + (intake.clientName ? ', ' + esc(intake.clientName) : '') + '.</h2>' +
+      // The level-up fires here (step 5): the badges just earned.
+      startsRow(currentStarts()) +
       '<h3>What happens next</h3>' +
       '<ul class="next">' +
         '<li>' + icon('dumbbell') + '<span><b>Your coach builds your plan.</b></span></li>' +
@@ -1480,6 +1491,10 @@ var WAITING_CARRIES = ['coachLog', 'coachConversation', 'coachPrevConversation',
 
 function applySetup(data) {
   var waited = state && state.waiting ? state : null;
+  // A plan already on this phone: a new setup link is not a first plan, so
+  // it earns no badge (step 5); the same client keeps what they had.
+  var hadPlan = !!(state && !state.waiting);
+  var before = state || {};
   var intakeAt = null, answers = null;
   try {
     intakeAt = localStorage.getItem(INTAKE_AT_KEY); localStorage.removeItem(INTAKE_AT_KEY);
@@ -1519,6 +1534,27 @@ function applySetup(data) {
   // takeHeldWelcome sends their sharing "no" itself (CTO, 2026-09-23).
   var heldTakes = BeastCore.heldWelcomeFits(heldWelcome(), { clientId: state.clientId });
   takeHeldWelcome();
+  // The level-up: badges earned before the plan, for this same client, and
+  // the home-screen one for a client who opens their first plan there
+  // having filled the form in Safari.
+  // All strictly by client id (BeastCore.heldStartsFit): someone else's, or
+  // anyone unnamed, gets nothing.
+  var hs = heldStarts();
+  var mine = !hadPlan && BeastCore.heldStartsFit(hs, state.clientId) ? pickStarts(hs) : {};
+  if (carried && waited.starts) mine = Object.assign({}, waited.starts, mine);
+  // A new setup link for the same client keeps the badges they already
+  // have: "kept for good" (CTO, 2026-09-24).
+  if (hadPlan && before.starts && before.clientId && before.clientId === state.clientId) mine = Object.assign({}, before.starts);
+  // The home screen: only a first plan, only a named client, and never on a
+  // phone that was waiting for somebody else.
+  if (isStandalone() && !mine.install && !hadPlan && state.clientId && (!waited || waited.clientId === state.clientId)) {
+    mine.install = new Date().toISOString();
+  }
+  if (Object.keys(mine).length) { state.starts = mine; save(); }
+  try { localStorage.removeItem(STARTS_KEY); } catch (e) {}
+  // The intake done in another browser (Safari, then the app): the server
+  // knows it came back by link, so a first plan asks.
+  if (!hadPlan && state.clientId && !mine.intake) askIntakeOnFile();
   // A sharing "no" answered while waiting is one write saying so, as
   // finishWelcome sends it.
   if (carried && !heldTakes && state.clientToken && state.sharing === false) sendStatus(true);
@@ -1781,11 +1817,97 @@ function confetti() {
   setTimeout(function () { box.remove(); }, 3200);
 }
 
+/* The level-up (first-client path, step 5): badges for the two big first
+   tasks, earned before any plan exists, so they wait on the phone tied to
+   the client they were earned for, as the welcome's answers do. The plan
+   of that client takes them (applySetup), and each is worth one perfect
+   day of it (BeastCore.startPoints). Someone else's plan on the phone
+   takes nothing. */
+var STARTS_KEY = 'bm2.starts';   // { clientId, install: iso, intake: iso }
+
+function heldStarts() {
+  try { var h = JSON.parse(localStorage.getItem(STARTS_KEY) || 'null'); return h && typeof h === 'object' ? h : null; }
+  catch (e) { return null; }
+}
+
+// Earned only before a first plan, and only for a known client: a phone
+// already on a plan gets nothing from an intake link (its points could
+// never land), and badges nobody can be matched to are never held (CTO,
+// 2026-09-24).
+function earnStart(kind, clientId) {
+  if (!clientId || (state && !state.waiting)) return;
+  var h = heldStarts() || {};
+  // A different client's badges on this phone are not carried over.
+  if (h.clientId !== clientId) h = { clientId: clientId };
+  if (!h[kind]) h[kind] = new Date().toISOString();
+  try { localStorage.setItem(STARTS_KEY, JSON.stringify(h)); } catch (e) {}
+  // A phone already waiting for this client's plan shows them at once.
+  if (state && state.waiting && state.clientId === clientId) {
+    state.starts = Object.assign({}, state.starts || {}, pickStarts(h));
+    save();
+  }
+}
+
+// The intake badge for a client whose intake reached the server from
+// another browser than this one (the phone's own record is empty here). The
+// server counts only an intake the client sent by link, never one Chris
+// pasted. Quiet on failure: the badge is a bonus, not a gate.
+async function askIntakeOnFile() {
+  var token = state && (state.clientToken || state.coachToken);
+  if (!token) return;
+  try {
+    var res = await fetch(COACH_URL + '/welcome/on-file', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: token })
+    });
+    var data = res.ok ? await res.json() : null;
+    if (!data || typeof data.intakeAt !== 'string' || !data.intakeAt) return;
+    if (!state || (state.clientToken || state.coachToken) !== token) return;   // another plan since
+    state.starts = Object.assign({}, state.starts || {}, { intake: state.starts && state.starts.intake || data.intakeAt });
+    save();
+    render();
+  } catch (e) { /* offline: no badge this time */ }
+}
+
+// The badges as pills, in STARTS order. Nothing about points: before a
+// plan the client knows nothing of them (Chris, 2026-09-24); the badges
+// only say both jobs are done.
+function startsRow(starts) {
+  var W = BeastCore.STARTS_WORDING, ICON = { install: 'phone', intake: 'check' };
+  var got = BeastCore.STARTS.filter(function (k) { return starts && starts[k]; });
+  if (!got.length) return '';
+  return '<div class="starts">' + got.map(function (k) {
+      return '<span class="st" title="' + attr(W[k].text) + '">' + icon(ICON[k]) + esc(W[k].title) + '</span>';
+    }).join('') + '</div>';
+}
+
+// Profile while waiting: the badges.
+function waitingBadges() {
+  var row = startsRow(currentStarts());
+  return row ? '<div class="card"><h3>' + esc(BeastCore.STARTS_WORDING.heading) + '</h3>' + row + '</div>' : '';
+}
+
+function pickStarts(h) {
+  var out = {};
+  BeastCore.STARTS.forEach(function (k) { if (h && typeof h[k] === 'string') out[k] = h[k]; });
+  return out;
+}
+
+// The badges on show: the plan's own; before a plan, the ones held for this
+// very client (the waiting phone's, or the intake's just sent).
+function currentStarts() {
+  if (state && state.starts && Object.keys(state.starts).length) return state.starts;
+  if (state && !state.waiting) return {};
+  var cid = (state && state.clientId) || (intake && intake.clientId) || '';
+  var h = heldStarts();
+  return BeastCore.heldStartsFit(h, cid) ? pickStarts(h) : {};
+}
+
 function progress() {
   var p = BeastCore.progress(state.items, state.log, {
     today: BeastCore.todayLocal(),
     perfectWeek: state.perfectWeek,
-    earnedLevel: state.earnedLevel
+    earnedLevel: state.earnedLevel,
+    starts: state.starts
   });
   if (p.level.level > (state.earnedLevel || 1)) { state.earnedLevel = p.level.level; save(); }
   return p;
@@ -1917,7 +2039,9 @@ function coachState() {
     day: BeastCore.daysBetween(state.profile.startDate || today, today) + 1,
     streak: p.streak, points: p.points, rank: p.level.rank,
     goals: state.goals.filter(function (g) { return !g.completed; }).map(function (g) { return g.text; }),
-    doneToday: done, openToday: open, missedWeek: missed
+    doneToday: done, openToday: open, missedWeek: missed,
+    // Where day-one points come from, so the coach never guesses (step 5).
+    startPoints: BeastCore.startPoints(state.starts, state.perfectWeek || BeastCore.perfectWeek(state.items))
   };
 }
 
@@ -2175,7 +2299,12 @@ function openerOnce() {
   state.openerSeen = BeastCore.WELCOME.version;
   save();
   var learning = consentGiven(2) && state.coachConsent[2].answer === 'yes';
-  return coachNotice([learning ? BeastCore.COACH_OPENER.learning : BeastCore.COACH_OPENER.notLearning]);
+  // The level-up's shout-out: its own message, after the opener, for a
+  // client who earned it (Chris, 2026-09-24).
+  var st = currentStarts(), W = BeastCore.STARTS_WORDING;
+  var shout = st.intake && st.install ? W.shout : '';
+  return coachNotice([learning ? BeastCore.COACH_OPENER.learning : BeastCore.COACH_OPENER.notLearning]) +
+    (shout ? coachNotice([shout]) : '');
 }
 
 function coachNotice(paragraphs) {
@@ -2585,7 +2714,7 @@ function render() {
   if (state.waiting) {
     if (tab !== 'coach' && tab !== 'profile') tab = 'today';
     root.innerHTML = header() + '<div class="wrap">' +
-      (tab === 'coach' ? coachTab() : tab === 'profile' ? '<div style="margin-top:18px">' + choicesCard() + '</div>' : waitingHome()) +
+      (tab === 'coach' ? coachTab() : tab === 'profile' ? '<div style="margin-top:18px">' + waitingBadges() + choicesCard() + '</div>' : waitingHome()) +
       '</div>' + navBar();
     measureNav(root);
     return;
@@ -3028,7 +3157,10 @@ function profileTab() {
   var theme = prefs.theme === 'light' || prefs.theme === 'dark' ? prefs.theme : 'auto';
   var accent = prefs.accent === 'ember' || prefs.accent === 'arctic' ? prefs.accent : 'volt';
 
-  var html = '<div class="card"><h3>You</h3>' +
+  // The level-up's badges, kept for good (step 5).
+  var stRow = startsRow(currentStarts());
+  var html = (stRow ? '<div class="card"><h3>' + esc(BeastCore.STARTS_WORDING.heading) + '</h3>' + stRow.replace('class="starts"', 'class="starts" style="justify-content:flex-start"') + '</div>' : '') +
+    '<div class="card"><h3>You</h3>' +
     '<div class="field"><label>Name</label><input value="' + attr(p.name || '') + '" disabled></div>' +
     '<div class="field"><label>Current weight (lb)</label>' +
       '<input id="p-weight" type="number" inputmode="decimal" value="' + attr(p.weight || '') + '"></div>' +

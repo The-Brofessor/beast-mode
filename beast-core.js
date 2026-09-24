@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.14.0';
+  var VERSION = '2.15.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -625,11 +625,38 @@ var BeastCore = (function () {
     return reached;
   }
 
+  /* The level-up for the two big first tasks (first-client path, step 5;
+     Chris, 2026-09-24): Beast Mode on the home screen, and the intake sent.
+     Each is a badge kept for good, and each is worth one perfect day's
+     points, a seventh of the plan's perfect week, so it is the same share of
+     the ladder on any plan. Earned before a plan exists; the points count
+     once a plan does. `starts` is { install: iso, intake: iso }. */
+  var STARTS = ['install', 'intake'];
+
+  /* Badges held on the phone before a plan belong to one client, like the
+     held welcome: they count only for a plan or a waiting phone carrying the
+     same client id, and only within the life of an intake link (CTO,
+     2026-09-24). No id on either side means someone else's. */
+  function heldStartsFit(held, clientId, today) {
+    if (!held || typeof held !== 'object' || !held.clientId || !clientId || held.clientId !== clientId) return false;
+    var at = STARTS.map(function (k) { return held[k]; }).filter(function (v) { return typeof v === 'string' && v; }).sort().pop();
+    if (!at) return false;
+    var age = daysSince(at, today);
+    return age !== null && age >= 0 && age <= HELD_WELCOME_DAYS;
+  }
+
+  function startPoints(starts, pw) {
+    if (!starts || typeof starts !== 'object' || !(pw > 0)) return 0;
+    var each = Math.round(pw / 7 / 10) * 10;
+    return STARTS.filter(function (k) { return typeof starts[k] === 'string' && starts[k]; }).length * each;
+  }
+
   function progress(items, log, opts) {
     opts = opts || {};
     var today = opts.today || todayLocal();
     var pw = opts.perfectWeek || perfectWeek(items);
-    var pts = totalPoints(items, log, today);
+    // A plan with nothing in it has no perfect week and no points to give.
+    var pts = totalPoints(items, log, today) + startPoints(opts.starts, perfectWeek(items) ? pw : 0);
     return {
       points: pts,
       perfectWeek: pw,
@@ -653,7 +680,7 @@ var BeastCore = (function () {
     var items = (state && state.items) || [];
     var log = (state && state.log) || {};
     var today = opts.today || todayLocal();
-    var p = progress(items, log, { today: today, perfectWeek: state && state.perfectWeek, earnedLevel: state && state.earnedLevel });
+    var p = progress(items, log, { today: today, perfectWeek: state && state.perfectWeek, earnedLevel: state && state.earnedLevel, starts: state && state.starts });
     var due = scheduledOn(items, today);
     var core = scheduledCoreOn(items, today);
     var doneOf = function (list) { return list.filter(function (it) { return isDone(log, it.id, today); }).length; };
@@ -1824,6 +1851,22 @@ var BeastCore = (function () {
     note: 'Answer all three to continue. You can change any of them in Profile.'
   };
 
+  // The level-up's words (STARTS): each badge's name and line, and The
+  // Brofessor's shout-out after his opener. No mention of points before a
+  // plan. All Chris's wording, approved 2026-09-24.
+  var STARTS_WORDING = {
+    install: { title: 'Home screen', text: 'Beast Mode on your home screen' },
+    intake: { title: 'Intake done', text: 'The whole picture, handed over' },
+    heading: 'Badges',
+    // Its own message from The Brofessor, after the opener. Chris's wording,
+    // 2026-09-24.
+    // Only for both badges: a client who never put the app on the home
+    // screen gets the badge and no shout (Chris, 2026-09-24: the web app
+    // outside the home screen does not work right; see the native app).
+    shout: 'BANG!! It looks like you already got the app on your home screen and finished your intake! ' +
+      'WELL DONE!! Bonus points and a sick plan are yours.'
+  };
+
   // The Brofessor's first message in the chat, once the welcome is done.
   // One clause differs by the answer to CONSENTS[2]. Chris's wording.
   var COACH_OPENER = {
@@ -1896,7 +1939,7 @@ var BeastCore = (function () {
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,
 
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
-    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, heldWelcomeFits: heldWelcomeFits, welcomeOnFile: welcomeOnFile, welcomeStamp: welcomeStamp, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
+    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, heldWelcomeFits: heldWelcomeFits, welcomeOnFile: welcomeOnFile, STARTS: STARTS, STARTS_WORDING: STARTS_WORDING, startPoints: startPoints, heldStartsFit: heldStartsFit, welcomeStamp: welcomeStamp, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
     buildBackup: buildBackup, readBackup: readBackup, backupDiff: backupDiff,
     backupFilename: backupFilename, daysSince: daysSince, BACKUP_TYPE: BACKUP_TYPE,

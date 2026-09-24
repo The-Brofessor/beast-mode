@@ -446,6 +446,39 @@ test('needsInstallFirst sends a fresh iPhone to the home screen before the welco
   assert.strictEqual(C.needsInstallFirst(), false);
 });
 
+test('each first task is worth one perfect day of the plan it lands on, and counts toward rank', () => {
+  // Chris's block 1: a 2,380 perfect week, so 340 a badge.
+  assert.strictEqual(C.startPoints({ install: '2026-09-24T10:00:00Z', intake: '2026-09-24T09:00:00Z' }, 2380), 680);
+  assert.strictEqual(C.startPoints({ intake: '2026-09-24T09:00:00Z' }, 2380), 340);
+  assert.strictEqual(C.startPoints({ intake: '2026-09-24T09:00:00Z' }, 700), 100, 'the same share on a small plan');
+  assert.strictEqual(C.startPoints({}, 2380), 0);
+  assert.strictEqual(C.startPoints(null, 2380), 0);
+  assert.strictEqual(C.startPoints({ intake: true, install: 5 }, 2380), 0, 'only a real date counts');
+  assert.strictEqual(C.startPoints({ intake: 'x' }, 0), 0, 'no plan, no points');
+  // Through progress: day one starts above zero, and the ladder is unchanged.
+  const items = [{ id: 'a', name: 'Walk', kind: 'habit', freq: 'daily', days: [], core: true, addedAt: '2026-09-24' }].map(C.normalizeItem);
+  const pw = C.perfectWeek(items);
+  const plain = C.progress(items, {}, { today: '2026-09-24', perfectWeek: pw });
+  const started = C.progress(items, {}, { today: '2026-09-24', perfectWeek: pw, starts: { install: 'x', intake: 'y' } });
+  assert.strictEqual(plain.points, 0);
+  assert.strictEqual(started.points, 2 * Math.round(pw / 7 / 10) * 10);
+  assert.strictEqual(C.progress([], {}, { today: '2026-09-24', starts: { intake: 'y' } }).points, 0, 'a waiting phone shows no points');
+  assert.deepStrictEqual(C.STARTS, ['install', 'intake']);
+  C.STARTS.forEach(k => assert.ok(C.STARTS_WORDING[k].title && C.STARTS_WORDING[k].text));
+});
+
+test('badges held before a plan count only for the same client, within the life of an intake link', () => {
+  const held = { clientId: 'dana', install: '2026-09-24T09:00:00Z', intake: '2026-09-24T09:15:00Z' };
+  assert.strictEqual(C.heldStartsFit(held, 'dana', '2026-09-24'), true);
+  assert.strictEqual(C.heldStartsFit(held, 'vince', '2026-09-24'), false, 'someone else on the phone');
+  assert.strictEqual(C.heldStartsFit(held, '', '2026-09-24'), false, 'a plan link with no client id');
+  assert.strictEqual(C.heldStartsFit({ ...held, clientId: '' }, 'dana', '2026-09-24'), false, 'held with no client id');
+  assert.strictEqual(C.heldStartsFit({ clientId: 'dana' }, 'dana', '2026-09-24'), false, 'nothing earned');
+  assert.strictEqual(C.heldStartsFit(held, 'dana', '2026-12-23'), true, 'day 90');
+  assert.strictEqual(C.heldStartsFit(held, 'dana', '2026-12-24'), false, 'day 91');
+  assert.strictEqual(C.heldStartsFit(null, 'dana'), false);
+});
+
 test('the welcome on file is finished only when all four answers stand for today\'s wording', () => {
   const W = C.WELCOME.version;
   const full = {
