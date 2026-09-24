@@ -446,6 +446,28 @@ test('needsInstallFirst sends a fresh iPhone to the home screen before the welco
   assert.strictEqual(C.needsInstallFirst(), false);
 });
 
+test('a held welcome stands only for the person who answered it', () => {
+  const today = '2026-09-23';
+  const held = { stamp: C.welcomeStamp(), at: '2026-09-23T17:00:00Z', intakeToken: 'bmi_a', clientId: 'dana' };
+  // Their own intake link, and later their own plan.
+  assert.strictEqual(C.heldWelcomeFits(held, { intakeToken: 'bmi_a', today }), true);
+  assert.strictEqual(C.heldWelcomeFits(held, { clientId: 'dana', today }), true);
+  // Someone else's link or plan on the same phone is asked again.
+  assert.strictEqual(C.heldWelcomeFits(held, { intakeToken: 'bmi_b', today }), false);
+  assert.strictEqual(C.heldWelcomeFits(held, { clientId: 'vince', today }), false);
+  // A plan from an older dashboard carries no client id: ask.
+  assert.strictEqual(C.heldWelcomeFits(held, { today }), false);
+  assert.strictEqual(C.heldWelcomeFits({ ...held, clientId: '' }, { clientId: '', today }), false);
+  // New wording in force, or held too long: ask.
+  assert.strictEqual(C.heldWelcomeFits({ ...held, stamp: 'w1|c1|c2' }, { clientId: 'dana', today }), false);
+  assert.strictEqual(C.heldWelcomeFits(held, { clientId: 'dana', today: '2026-12-22' }), true, 'day 90 still stands');
+  assert.strictEqual(C.heldWelcomeFits(held, { clientId: 'dana', today: '2026-12-23' }), false, 'day 91 asks again');
+  assert.strictEqual(C.heldWelcomeFits({ ...held, at: 'nonsense' }, { clientId: 'dana', today }), false);
+  assert.strictEqual(C.heldWelcomeFits(null, { clientId: 'dana', today }), false);
+  // The stamp moves with any of the three wordings.
+  assert.ok(C.welcomeStamp().includes(C.WELCOME.version) && C.welcomeStamp().includes(C.CONSENTS[2].version));
+});
+
 test('needsInstallFirst sends a fresh iPhone with an intake link home first, under the same exits', () => {
   const base = { ios: true, standalone: false, intakeLink: true, welcomeDone: false, hasHistory: false };
   assert.strictEqual(C.needsInstallFirst(base), true);

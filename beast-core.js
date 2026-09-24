@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.12.0';
+  var VERSION = '2.13.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -791,6 +791,28 @@ var BeastCore = (function () {
   function needsInstallFirst(o) {
     o = o || {};
     return !!(o.ios && !o.standalone && (o.hasPlan || o.intakeLink) && !o.welcomeDone && !o.hasHistory && !o.skipped);
+  }
+
+  /* The welcome answered before the intake is held on the phone until the
+     plan arrives (first-client path, 4b). It stands only for the person who
+     answered it: the same intake link, or the plan of the same client id,
+     under the wording in force, within the life of an intake link. Anything
+     else asks again: a phone or browser can be shared, and consent is the
+     record that matters (CTO, 2026-09-23). */
+  var HELD_WELCOME_DAYS = 90;
+
+  function welcomeStamp() {
+    return WELCOME.version + '|' + CONSENTS[1].version + '|' + CONSENTS[2].version;
+  }
+
+  function heldWelcomeFits(held, o) {
+    o = o || {};
+    if (!held || typeof held !== 'object' || held.stamp !== welcomeStamp()) return false;
+    var age = daysSince(held.at, o.today);
+    if (age === null || age < 0 || age > HELD_WELCOME_DAYS) return false;
+    if (o.intakeToken) return held.intakeToken === o.intakeToken;
+    if (o.clientId) return !!held.clientId && held.clientId === o.clientId;
+    return false;
   }
 
   /* Only real Safari on an iPhone can add an app to the home screen, and only
@@ -1862,7 +1884,7 @@ var BeastCore = (function () {
     levelThresholds: levelThresholds, levelFor: levelFor, progress: progress,
 
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
-    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
+    packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, heldWelcomeFits: heldWelcomeFits, welcomeStamp: welcomeStamp, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
     buildBackup: buildBackup, readBackup: readBackup, backupDiff: backupDiff,
     backupFilename: backupFilename, daysSince: daysSince, BACKUP_TYPE: BACKUP_TYPE,

@@ -475,7 +475,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.12.0';
+var BUILT_AGAINST = '2.13.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -660,6 +660,31 @@ function needsWelcome() {
   return !!(state && (state.clientToken || state.coachToken) && state.welcomeVersion !== BeastCore.WELCOME.version);
 }
 
+/* The welcome before the intake (first-client path, 4b). The consents are
+   recorded under the intake token, before anything is collected; there is
+   no plan yet to hold the sharing and reminder answers, so they wait here
+   until the plan arrives in this app (applySetup), and it skips the welcome.
+   The held answers belong to one person, the one the link was for, and are
+   used only for that link or that client's plan (BeastCore.heldWelcomeFits);
+   anyone else on this phone is asked. A plan opened in another browser asks
+   once more; the server keeps one row for the same answer given twice. */
+var WELCOME_KEY = 'bm2.welcome';
+// { stamp, at, intakeToken, clientId, sharing, nudges, consent }
+
+var welcomeHeld = null;   // this session's copy, for a phone with no storage
+function heldWelcome() {
+  if (welcomeHeld) return welcomeHeld;
+  try { return JSON.parse(localStorage.getItem(WELCOME_KEY) || 'null'); }
+  catch (e) { return null; }
+}
+
+// Asked on every intake link except the one it was answered for: a plan on
+// this phone may be someone else's, so it is no proof of anything here.
+function intakeNeedsWelcome() {
+  if (!intake || !intake.token || intake.sent || intake.intro || intake.routineOnly || intake.update) return false;
+  return !BeastCore.heldWelcomeFits(heldWelcome(), { intakeToken: intake.token });
+}
+
 var welcomeAnswers = { share: null, nudges: null, learn: null };
 var welcomeBusy = false, welcomeError = '';
 
@@ -705,7 +730,8 @@ async function finishWelcome() {
   if (!a.share || !a.nudges || !a.learn || welcomeBusy) return;
   welcomeBusy = true; welcomeError = '';
   render();
-  var token = state.clientToken || state.coachToken;
+  var viaIntake = intakeNeedsWelcome();
+  var token = viaIntake ? intake.token : state.clientToken || state.coachToken;
   var post = function (kind, answer) {
     return fetch(COACH_URL + '/consent', {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -722,6 +748,17 @@ async function finishWelcome() {
     welcomeError = r2.status === 0 ? 'No signal. Try again when you are back online.'
       : r2.open === false ? (r2.message || 'Not open yet.') + ' Your coach will let you know when to come back.'
       : (r2.error || 'Something went wrong. Try again.');
+    render();
+    return;
+  }
+  if (viaIntake) {
+    welcomeHeld = { stamp: BeastCore.welcomeStamp(), at: new Date().toISOString(),
+      intakeToken: intake.token, clientId: intake.clientId || '',
+      sharing: a.share === 'yes', nudges: a.nudges === 'yes', consent: r2.consent || null };
+    try { localStorage.setItem(WELCOME_KEY, JSON.stringify(welcomeHeld)); }
+    catch (e) { /* no storage: the plan asks again, and the server keeps one row */ }
+    // A plan already here takes the answers only if it is the same client's.
+    if (state && state.clientId && state.clientId === intake.clientId) takeHeldWelcome();
     render();
     return;
   }
@@ -898,9 +935,14 @@ async function openIntakeLink(token) {
   if (mine) {
     if (draft && Object.keys(draft.answers).length > Object.keys(mine.answers || {}).length) { mine.answers = draft.answers; mine.step = draft.step || mine.step; }
     mine.boss = data.boss || mine.boss;
+    mine.clientId = data.clientId || mine.clientId || '';
     saveIntake();
   } else {
     startIntake({ name: data.name || '', token: token, boss: data.boss || '' });
+    // Who the link is for, so the welcome answered here is kept for this
+    // client's plan and nobody else's.
+    intake.clientId = typeof data.clientId === 'string' ? data.clientId : '';
+    saveIntake();
     if (draft && Object.keys(draft.answers).length) {
       intake.answers = draft.answers;
       intake.step = Math.max(0, Math.min(Number(draft.step) || 0, intakeSections().length - 1));
@@ -1248,6 +1290,10 @@ function intakeScreen() {
       '<button class="btn sec" onclick="clearIntake()">Start over</button>' +
       '</div></div>';
   }
+  // The consents before anything is collected (first-client path, 4b).
+  // Below the texted code, which is the no-signal fallback: the welcome
+  // needs the server, and must never stand between a client and it.
+  if (intakeNeedsWelcome()) return welcomeScreen();
 
   var secs = intakeSections();
   var sec = secs[intake.step];
@@ -1355,9 +1401,34 @@ function applySetup(data) {
     seen: [],
     coachToken: data.coachToken || null,
     clientToken: data.clientToken || null,
+    // Whose plan this is, so answers held for one client are never given
+    // to another on a shared phone. Absent from links built before 2026-09-23.
+    clientId: typeof data.clientId === 'string' ? data.clientId : null,
     coachLog: []
   };
+  // The welcome answered before the intake, in this app: the plan takes the
+  // answers and skips the screen. Only with a token they can be sent under.
   save();
+  takeHeldWelcome();
+}
+
+// The welcome answered before the intake, taken by the plan when it is the
+// same client's (the plan carries the client id since 2026-09-23). A plan
+// without one, or someone else's, gets the welcome as before.
+function takeHeldWelcome() {
+  if (!state || !(state.clientToken || state.coachToken)) return;
+  var held = heldWelcome();
+  if (!BeastCore.heldWelcomeFits(held, { clientId: state.clientId })) return;
+  state.sharing = held.sharing === true;
+  state.nudges = held.nudges === true;
+  if (held.consent) state.coachConsent = held.consent;
+  state.welcomeVersion = BeastCore.WELCOME.version;
+  welcomeHeld = null;
+  try { localStorage.removeItem(WELCOME_KEY); } catch (e) {}
+  save();
+  // As finishWelcome does: a yes goes with the first status (save schedules
+  // it); a no is one write saying so, and nothing after it.
+  if (state.clientToken && !state.sharing) sendStatus(true);
 }
 
 /* A plan update keeps everything the client has done. Items already present
@@ -1386,6 +1457,7 @@ function applyPlanUpdate(data) {
   // A re-issued token replaces the old one; an absent one leaves it alone.
   if (data.coachToken) state.coachToken = data.coachToken;
   if (data.clientToken) state.clientToken = data.clientToken;
+  if (typeof data.clientId === 'string' && data.clientId) state.clientId = data.clientId;
 
   // A new plan block is the moment to ask about the routine again (loop
   // brief 5d): the checklist changed, not a note edit or a re-sent link.
