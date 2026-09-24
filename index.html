@@ -418,6 +418,43 @@ nav button.active svg { color: var(--acc-ink); }
 @media (min-width: 769px) { .daypick { display: none; } }
 @media (max-width: 768px) { .weekgrid { display: none; } }
 @media (prefers-reduced-motion: reduce) { .confetti { display: none; } * { transition: none !important; } }
+.introlist { margin: 12px 0 18px 18px; font-size: 15px; line-height: 1.5; color: var(--text); }
+.introlist li { margin-bottom: 6px; }
+.revsec { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+.revhead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.revhead h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); }
+.lnk { background: none; border: 0; color: var(--acc-ink, var(--acc)); font-weight: 600; font-size: 14px; padding: 4px 0; }
+.ans { display: flex; flex-direction: column; padding: 6px 0; border-top: 1px solid var(--line); }
+.ans span { font-size: 12px; color: var(--text2); }
+.ans b { font-weight: 500; font-size: 15px; white-space: pre-wrap; }
+.example { background: var(--surface2); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.field input::placeholder, .field textarea::placeholder { color: var(--text3); opacity: 1; font-weight: 400; }
+.example b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); margin-bottom: 2px; }
+/* The goals page's band (Chris, 2026-09-23): the one dark thing on the
+   page, the quote in the accent on it. The same near-black in both themes,
+   with an accent rule under it so it still reads as a band on a dark card. */
+.card.featured { border: 2px solid #0B0D10; }
+/* The end of the intake: the same band, a badge, and what comes next. */
+.card.done { text-align: center; border: 2px solid #0B0D10; }
+.card.done .big { display: grid; place-items: center; margin: 6px 0 10px; }
+.card.done .big .badge { width: 72px; height: 72px; }
+.card.done h2 { font-size: 24px; margin-bottom: 8px; }
+.card.done p { color: var(--text2); font-size: 15px; line-height: 1.5; }
+.card.done h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin: 18px 0 8px; }
+.card.done .next { text-align: left; margin: 0 0 18px; padding: 0; list-style: none; font-size: 14px; line-height: 1.45; color: var(--text2); }
+.card.done .next li { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+.card.done .next li svg { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px; color: var(--acc-ink); stroke-width: 2.2; }
+.card.done .next b { color: var(--text); font-weight: 600; }
+:root:not([data-theme="light"]) .card.done { border-color: var(--acc); }
+.card.done .lead, .card.featured .lead { margin: -16px -16px 14px; padding: 14px 16px; background: #0B0D10; color: var(--acc); text-align: center;
+  font: 700 19px/1.15 "Barlow Condensed", Inter, sans-serif; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; border-radius: 14px 14px 0 0;
+  border-bottom: 2px solid var(--acc); }
+:root:not([data-theme="light"]) .card.featured { border-color: var(--acc); }
+/* A section heading that is a sentence: the display font, one line, sized
+   to fit a phone. The text colour, so it is black on the light card. */
+.card h2.condensed { font: 700 18px/1.1 "Barlow Condensed", Inter, sans-serif; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); margin-bottom: 6px; }
+.revsec.featured { border: 2px solid var(--acc); }
+.revsec.featured h3 { color: var(--acc-ink); }
 </style>
 </head>
 <body>
@@ -437,7 +474,7 @@ nav button.active svg { color: var(--acc-ink); }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.11.0';
+var BUILT_AGAINST = '2.12.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -445,6 +482,8 @@ var KEY = 'bm2.client';
 // One line style for every icon, drawn in currentColor so they follow the theme.
 var ICONS = {
   today:   '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  // A dumbbell: two plates each end, a bar between. The bullet on the Got it screen.
+  dumbbell: '<path d="M2 10.5v3M5 8v8M8 6v12M16 6v12M19 8v8M22 10.5v3M8 12h8"/>',
   week:    '<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/>',
   coach:   '<path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12Z"/>',
   profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -735,6 +774,15 @@ async function setNudges(on) {
 
 /* ── import ────────────────────────────────────────────────────────────── */
 
+// An intake link (#intake=<token>) opens the questionnaire; the token is
+// spent when the answers reach the server, so the hash is cleared at once.
+function readIntakeHash() {
+  var m = /[#&]intake=([^&]+)/.exec(location.hash);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return decodeURIComponent(m[1]);
+}
+
 function readHash() {
   var m = /[#&]import=([^&]+)/.exec(location.hash);
   if (!m) return null;
@@ -750,7 +798,13 @@ function readHash() {
 /* ── intake questionnaire ──────────────────────────────────────────────── */
 
 var INTAKE_KEY = 'bm2.intake';
-var intake = null;   // { clientName, step, answers, code }
+// { clientName, token, step, answers, code, sent, routineOnly }
+// token: the intake link's, so the answers go straight to the server.
+// code: the texted fallback, made only when the server cannot be reached.
+// routineOnly: the short form asked again when a new plan block arrives,
+// sent under the client token (loop brief 5d).
+var intake = null;
+var INTAKE_AT_KEY = 'bm2.intakeAt';   // when the intake was sent, before a plan exists to hold it
 
 function loadIntake() {
   try { intake = JSON.parse(localStorage.getItem(INTAKE_KEY) || 'null'); }
@@ -765,11 +819,184 @@ function saveIntake() {
 
 function startIntake(data) {
   intake = { clientName: (data.profile && data.profile.name) || data.name || '',
-             step: 0, answers: {}, code: null };
+             token: data.token || null, step: 0, answers: {}, code: null,
+             // The first screen says what this is and how long it takes.
+             intro: !!data.token, boss: data.boss || '' };
   saveIntake();
 }
 
+// From Profile: the whole form again, starting from what they answered,
+// sent under the client token.
+function startIntakeUpdate() {
+  intake = { clientName: (state.profile && state.profile.name) || '', token: null, step: 0,
+             answers: JSON.parse(JSON.stringify(state.intakeAnswers || {})), code: null, update: true };
+  saveIntake();
+  render();
+}
+
+function beginIntake() {
+  intake.intro = false;
+  saveIntake();
+  window.scrollTo(0, 0);
+  render();
+}
+
+// The intake's own text link: Chris's number comes with the token (the
+// server knows it); with none, Messages opens and they pick him themselves.
+function intakeBossNumber() {
+  var n = intake && intake.boss || (state && state.coachBoss) || '';
+  return /^\+?[0-9]{7,15}$/.test(n) ? n : '';
+}
+
+// The intake link: ask the server who this is for, then open the form. A
+// used or expired link says so in The Brofessor's words, never a blank form.
+async function openIntakeLink(token) {
+  var root = document.getElementById('root');
+  root.innerHTML = '<div class="wrap"><div class="empty" style="padding-top:80px"><p>One second...</p></div></div>';
+  var data = null, failed = false;
+  try {
+    var res = await fetch(COACH_URL + '/intake/who', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: token })
+    });
+    data = await res.json().catch(function () { return {}; });
+    if (!res.ok) failed = data.error || 'That link did not work.';
+  } catch (e) { failed = 'I couldn\u2019t reach the server. Check your signal and tap the link again.'; }
+  if (failed) {
+    root.innerHTML = '<div class="wrap"><div class="empty" style="padding-top:80px"><div class="big">' + icon('link') + '</div>' +
+      '<h2>That link did not work</h2><p>' + esc(failed) + '</p>' +
+      '<button class="pbtn" style="margin-top:16px" onclick="render()">Back</button></div></div>';
+    return;
+  }
+  startIntake({ name: data.name || '', token: token, boss: data.boss || '' });
+  render();
+}
+
+// The routine, asked again after a new plan block (loop brief 5d): the
+// routine sections only, under the client token. Never more than once a
+// fortnight, and never without a way past it.
+function routineDue() {
+  if (!state || !state.clientToken || !state.routineDue) return false;
+  var since = BeastCore.daysSince(state.routineAnsweredAt);
+  if (since !== null && since < BeastCore.ROUTINE_AGAIN_DAYS) {
+    // Answered within the fortnight: this block skips the question rather
+    // than asking it days later, when "new block" would no longer be true.
+    state.routineDue = false;
+    save();
+    return false;
+  }
+  return true;
+}
+
+function answeredAnything() {
+  return Object.keys(intake.answers || {}).some(function (k) { return String(intake.answers[k] || '').trim() !== ''; });
+}
+
+// A form opened beside a plan (an intake link sent to a returning client)
+// can be put down: the plan is still there.
+function skipIntake() {
+  clearIntakeSilently();
+  render();
+}
+
+function startRoutineAgain() {
+  intake = { clientName: (state.profile && state.profile.name) || '', token: null, step: 0, answers: {}, code: null, routineOnly: true };
+  saveIntake();
+}
+
+function skipRoutine() {
+  state.routineDue = false;
+  save();
+  clearIntakeSilently();
+  render();
+}
+
+function intakeSections() {
+  var all = intake && intake.routineOnly ? BeastCore.routineSections() : BeastCore.INTAKE_SECTIONS;
+  return BeastCore.visibleSections ? BeastCore.visibleSections(intake ? intake.answers : {}, all) : all;
+}
+
+// Which step a section title is on now, for the review screen's Change.
+function reviewStep(title) {
+  var secs = intakeSections();
+  for (var i = 0; i < secs.length; i++) if (secs[i].title === title) return i;
+  return 0;
+}
+
+function editSection(title) {
+  intake.review = false;
+  intake.fromReview = true;   // the next tap goes back to the summary
+  intake.step = reviewStep(title);
+  saveIntake();
+  window.scrollTo(0, 0);
+  render();
+}
+
+function openReview() {
+  if (underAge()) { intake.blocked = true; saveIntake(); render(); return; }
+  intake.review = true;
+  intake.fromReview = false;
+  saveIntake();
+  window.scrollTo(0, 0);
+  render();
+}
+
+// What they told me, section by section, before it is sent (and what
+// Profile shows afterwards).
+function answersHtml(answers, sections, withChange) {
+  var a = answers || {};
+  return sections.map(function (sec) {
+    var shown = BeastCore.visibleFields ? BeastCore.visibleFields(sec, a) : sec.fields;
+    var lines = shown.filter(function (f) { return a[f.key] !== undefined && String(a[f.key]).trim() !== ''; })
+      .map(function (f) { return '<div class="ans"><span>' + esc(f.label) + '</span><b>' + esc(String(a[f.key]).trim()) + '</b></div>'; });
+    return '<div class="revsec' + (sec.featured ? ' featured' : '') + '"><div class="revhead"><h3>' + esc(sec.title) + '</h3>' +
+      (withChange ? '<button class="lnk" onclick="editSection(' + attr(jsq(sec.title)) + ')">Change</button>' : '') + '</div>' +
+      (lines.length ? lines.join('') : '<div class="imeta">Nothing here yet.</div>') + '</div>';
+  }).join('');
+}
+
+function intakeIntroScreen() {
+  var hey = 'Hey' + (intake.clientName ? ' ' + esc(intake.clientName) : '') + '.';
+  var sms = 'sms:' + intakeBossNumber() + '?&body=' + encodeURIComponent('Hey, can we do my Beast Mode intake as a call instead?');
+  return '<div class="wrap"><div class="card" style="margin-top:30px">' +
+    '<h2 style="font-size:22px;margin-bottom:8px">' + hey + '</h2>' +
+    // Chris's wording, 2026-09-23.
+    // Chris's wording, 2026-09-23. The Brofessor in the third person here is
+    // on purpose: the joke is the point. Never Chris by name; "your coach".
+    '<p class="imeta" style="font-size:15px;line-height:1.5;color:var(--text)">Before we build your plan we need some information about you. ' +
+      'It\u2019s not all fitness related. Beast Mode will help you create new routines throughout your day so you can actually achieve ' +
+      'your health (or any other) goals. Having as much accurate info as possible will make your plan much more effective. ' +
+      'So be honest, if you skip leg day The Brofessor wants to know.</p>' +
+    '<ul class="introlist">' +
+      '<li>About 15 minutes. ' + intakeSections().length + ' short screens.</li>' +
+      '<li>It saves as you go. Close it and come back any time.</li>' +
+      '<li>Skip anything that doesn\u2019t apply.</li>' +
+      '<li>Unsure of an answer? Just ask.</li>' +
+    '</ul>' +
+    '<button class="btn" onclick="beginIntake()">Let\u2019s go</button>' +
+    '<a class="btn sec" style="display:block;text-align:center;text-decoration:none" href="' + attr(sms) + '">Rather talk it through? Text your coach</a>' +
+    '</div></div>';
+}
+
+function intakeReviewScreen() {
+  var secs = intakeSections();
+  return '<div class="wrap">' +
+    '<div class="card" style="margin-top:22px"><h2 style="font-size:20px;margin-bottom:6px">Here\u2019s what you told me</h2>' +
+    '<p class="imeta">Check it over. Change anything, then send it.</p></div>' +
+    answersHtml(intake.answers, secs.filter(function (s) { return s.featured; }).concat(secs.filter(function (s) { return !s.featured; })), true) +
+    '<div class="card">' +
+      '<button class="btn" onclick="submitIntake()">' + (intake.update ? 'Send my updates' : 'Send it to me') + '</button>' +
+      (intake.update || state ? '<button class="btn sec" onclick="skipIntake()">Not now</button>' : '') +
+    '</div></div>';
+}
+
 function setAnswer(key, value) { intake.answers[key] = value; saveIntake(); }
+
+function pickAnswer(key, value) {
+  setAnswer(key, value);
+  var y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}
 
 // Adults only (learning plan D8). Checked on every Next and on Send, so an
 // under-18 answer stops the form before anything leaves the phone. Guarded
@@ -780,7 +1007,7 @@ function underAge() {
 
 function intakeStep(delta) {
   if (delta > 0 && underAge()) { intake.blocked = true; saveIntake(); render(); return; }
-  var total = BeastCore.INTAKE_SECTIONS.length;
+  var total = intakeSections().length;
   intake.step = Math.max(0, Math.min(total - 1, intake.step + delta));
   saveIntake();
   window.scrollTo(0, 0);
@@ -789,9 +1016,97 @@ function intakeStep(delta) {
 
 function submitIntake() {
   if (underAge()) { intake.blocked = true; saveIntake(); render(); return; }
+  // Nothing answered: a routine re-ask is Not now; an intake needs something.
+  if (!answeredAnything()) {
+    if (intake.routineOnly) { skipRoutine(); return; }
+    toast('Answer at least one question first');
+    return;
+  }
+  var token = intake.routineOnly || intake.update ? state.clientToken : intake.token;
+  if (token) { postIntake(token); return; }
+  makeIntakeCode();
+}
+
+// The texted code: the fallback for a client who cannot reach the server.
+function makeIntakeCode() {
   intake.code = BeastCore.encodePayload('intake', {
     name: intake.clientName, answers: intake.answers
   });
+  saveIntake();
+  render();
+}
+
+// Straight to the server (loop brief 5c). A refusal (an under-18 answer, a
+// used link) is shown in its own words; no signal falls back to the code.
+async function postIntake(token) {
+  intake.sending = true;
+  render();
+  var res, data;
+  try {
+    res = await fetch(COACH_URL + '/intake', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: token, answers: BeastCore.visibleAnswers(intake.answers), version: BeastCore.INTAKE_VERSION })
+    });
+    data = await res.json().catch(function () { return {}; });
+  } catch (e) { res = null; }
+  intake.sending = false;
+  if (res && res.ok) {
+    rememberAnswers(intake.answers);
+    if (intake.routineOnly || intake.update) {
+      // Read before the form is cleared: clearIntakeSilently() empties it.
+      var wasUpdate = !!intake.update;
+      state.routineDue = false;
+      state.routineAnsweredAt = new Date().toISOString();
+      save();
+      clearIntakeSilently();
+      toast(wasUpdate ? 'Got it. Your answers are updated.' : 'Got it. That\u2019s the picture I work from.');
+      if (wasUpdate) tab = 'profile';
+      render();
+      return;
+    }
+    // Remembered so the first plan update does not ask about the routine
+    // again a week after the intake (BeastCore.ROUTINE_AGAIN_DAYS).
+    var at = new Date().toISOString();
+    if (state) { state.routineAnsweredAt = at; save(); }
+    else { try { localStorage.setItem(INTAKE_AT_KEY, at); } catch (e) {} }
+    intake.sent = true;
+    setTimeout(confetti, 150);
+    saveIntake();
+    render();
+    return;
+  }
+  if (res) {
+    intake.refused = (data && data.error) || 'That did not go through.';
+    saveIntake();
+    render();
+    return;
+  }
+  // No signal: the answers stay on the phone. A routine re-ask offers a
+  // retry or Not now; an intake falls back to the texted code.
+  if (intake.routineOnly || intake.update) {
+    intake.refused = 'I couldn\u2019t reach the server. Check your signal and try again, or come back to this later.';
+    intake.retry = true;
+    saveIntake();
+    render();
+    return;
+  }
+  intake.postFailed = true;
+  makeIntakeCode();
+}
+
+// What they answered stays on the phone, so Profile can show it and an
+// update starts from it. Before a plan exists it waits in its own key.
+var ANSWERS_KEY = 'bm2.intakeAnswers';
+function rememberAnswers(answers) {
+  var merged = Object.assign({}, (state && state.intakeAnswers) || {}, answers || {});
+  Object.keys(merged).forEach(function (k) { if (String(merged[k] || '').trim() === '') delete merged[k]; });
+  if (state) { state.intakeAnswers = merged; save(); }
+  else { try { localStorage.setItem(ANSWERS_KEY, JSON.stringify(merged)); } catch (e) {} }
+}
+
+function retryIntake() {
+  intake.refused = null;
+  intake.retry = false;
   saveIntake();
   render();
 }
@@ -833,13 +1148,49 @@ function intakeScreen() {
       '<h2>Beast Mode is for adults</h2>' +
       '<p>You need to be ' + (BeastCore.MIN_AGE || 18) + ' or older to use Beast Mode, ' +
         'so I can’t build you a plan yet. Nothing you entered has been sent.</p>' +
-      '<button class="btn sec" style="max-width:320px" onclick="fixAge()">I entered my age wrong</button>' +
+      '<button class="btn sec" style="max-width:320px" onclick="fixAge()">I entered my date of birth wrong</button>' +
       '</div></div>';
+  }
+  if (intake.sent) {
+    // The last screen of the intake: they just gave up fifteen minutes, so
+    // it celebrates and says what comes next. Draft wording for Chris,
+    // 2026-09-23. The level-up for finishing is queued.
+    return '<div class="wrap"><div class="card done" style="margin-top:30px">' +
+      '<div class="lead">No one said change would be easy.</div>' +
+      '<div class="big">' + badge(2) + '</div>' +
+      '<h2>Got it' + (intake.clientName ? ', ' + esc(intake.clientName) : '') + '.</h2>' +
+      '<p>Most people never make it this far. You just handed the Beast Mode team the whole picture, ' +
+        'and that\u2019s what a real plan gets built on. Not just a workout program, the structure to actually follow it.</p>' +
+      '<h3>What happens next</h3>' +
+      '<ul class="next">' +
+        '<li>' + icon('dumbbell') + '<span><b>Your coach builds your plan.</b></span></li>' +
+        '<li>' + icon('dumbbell') + '<span><b>You get a text with the link.</b> Usually within a day or two.</span></li>' +
+        '<li>' + icon('dumbbell') + '<span><b>Paste the link in the app.</b></span></li>' +
+        '<li>' + icon('dumbbell') + '<span><b>Open it, review everything, and agree to your goals.</b></span></li>' +
+      '</ul>' +
+      '<p>A coach is available to answer questions and fine tune anything that doesn\u2019t make sense.</p>' +
+      '<button class="btn" onclick="clearIntake()">Let\u2019s GOOO</button>' +
+      '</div></div>';
+  }
+  if (intake.refused) {
+    return '<div class="wrap"><div class="empty" style="padding-top:80px"><div class="big">' + icon('link') + '</div>' +
+      '<h2>That did not go through</h2><p>' + esc(intake.refused) + '</p>' +
+      (intake.retry ? '<button class="btn" style="max-width:320px;margin-top:16px" onclick="retryIntake();submitIntake()">Try again</button>' : '') +
+      '<button class="btn sec" style="max-width:320px;margin-top:' + (intake.retry ? '8' : '16') + 'px" onclick="retryIntake()">Back</button>' +
+      (intake.routineOnly ? '<button class="btn sec" style="max-width:320px;margin-top:8px" onclick="skipRoutine()">Not now</button>' : '') +
+      '</div></div>';
+  }
+  if (intake.intro) return intakeIntroScreen();
+  if (intake.review) return intakeReviewScreen();
+  if (intake.sending) {
+    return '<div class="wrap"><div class="empty" style="padding-top:80px"><p>Sending...</p></div></div>';
   }
   if (intake.code) {
     return '<div class="wrap"><div class="card" style="margin-top:30px">' +
       '<h2 style="font-size:20px;margin-bottom:8px">Done. Send it to me.</h2>' +
-      '<p class="imeta">I use this to build your plan.</p>' +
+      (intake.postFailed
+        ? '<p class="imeta">I couldn\u2019t reach the server, so text me this code instead. It holds your answers.</p>'
+        : '<p class="imeta">I use this to build your plan.</p>') +
       '<button class="btn" onclick="copyIntake()">Copy the code</button>' +
       '<button class="btn sec" onclick="location.href=' +
         jsq('sms:?&body=' + encodeURIComponent(intakeMsg())) + '">Text it to me</button>' +
@@ -849,46 +1200,100 @@ function intakeScreen() {
       '</div></div>';
   }
 
-  var secs = BeastCore.INTAKE_SECTIONS;
+  var secs = intakeSections();
   var sec = secs[intake.step];
   var last = intake.step === secs.length - 1;
+  // The greeting, on the first screen only. The routine re-ask says why it
+  // is back; the intake says what it is for.
+  var opener = '';
+  if (intake.step === 0 && (intake.routineOnly || intake.update)) {
+    var hey = 'Hey' + (intake.clientName ? ' ' + esc(intake.clientName) : '') + '.';
+    opener = '<div class="card" style="margin-top:22px"><h2 style="font-size:20px;margin-bottom:6px">' + hey + '</h2>' +
+      (intake.routineOnly
+        ? '<p class="imeta">New plan, new block. Tell me how your days look now, so I can see what changed. ' +
+          'Three quick screens.</p>'
+        : '<p class="imeta">Your answers, as I have them. Change what\u2019s changed, then send.</p>') +
+      '</div>';
+  }
 
-  var fields = sec.fields.map(function (f) {
+  var shown = BeastCore.visibleFields ? BeastCore.visibleFields(sec, intake.answers) : sec.fields;
+  var fields = shown.map(function (f) {
     var v = intake.answers[f.key] == null ? '' : intake.answers[f.key];
     var on = 'onchange="setAnswer(\'' + attr(f.key) + '\',this.value)"';
     var input;
-    if (f.type === 'textarea') {
-      input = '<textarea rows="3" ' + on + '>' + esc(v) + '</textarea>';
+    if (f.type === 'yesno' || f.type === 'choice') {
+      // Buttons, like the welcome screen: yes and no, or a short list of
+      // options. Picking one may reveal the field that follows, so the
+      // screen is drawn again in place.
+      var opts = f.type === 'yesno' ? BeastCore.YESNO : f.options;
+      input = '<div class="pair" style="grid-template-columns:repeat(' + opts.length + ',1fr)">' + opts.map(function (o) {
+        var word = f.type === 'yesno' ? (o === 'yes' ? 'Yes' : 'No') : o.charAt(0).toUpperCase() + o.slice(1);
+        return '<button class="' + (v === o ? 'picked' : '') + '" onclick="pickAnswer(' + attr(jsq(f.key)) + ',' + attr(jsq(o)) + ')">' + esc(word) + '</button>';
+      }).join('') + '</div>';
+    }
+    // A typed field carries its example inside the box, in a lighter type,
+    // gone the moment they start typing (Chris, 2026-09-23). A pick list or
+    // a yes/no has no box to carry it, so its note sits underneath.
+    var ph = f.hint ? ' placeholder="' + attr(f.hint) + '"' : '';
+    var note = '';
+    // The rule (Chris, 2026-09-23): an example that would be cut off in a
+    // one-line box gets a taller box, so the whole example reads. About 36
+    // characters fit a line on a phone.
+    var LINE = 36;
+    var tall = f.type === 'text' && f.hint && f.hint.length > LINE;
+    if (f.type === 'yesno' || f.type === 'choice') {
+      note = f.hint || '';
+    } else if (f.type === 'date') {
+      // The phone's own date picker: it shows the date the way the phone
+      // does (month first in the US) and stores YYYY-MM-DD.
+      input = '<input type="date" max="' + attr(BeastCore.todayLocal()) + '" value="' + attr(v) + '" ' + on + '>';
+    } else if (f.type === 'textarea' || tall) {
+      input = '<textarea rows="' + (f.type === 'textarea' ? 3 : 2) + '"' + ph + ' ' + on + '>' + esc(v) + '</textarea>';
     } else if (f.type === 'select') {
       input = '<select ' + on + '><option value="">Pick one</option>' +
         f.options.map(function (o) {
           return '<option value="' + attr(o) + '"' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
         }).join('') + '</select>';
+      note = f.hint || '';
     } else {
       input = '<input type="' + (f.type === 'number' ? 'number' : 'text') + '"' +
         (f.type === 'number' ? ' inputmode="decimal"' : '') +
-        ' value="' + attr(v) + '" ' + on + '>';
+        ' value="' + attr(v) + '"' + ph + ' ' + on + '>';
     }
     return '<div class="field"><label>' + esc(f.label) + '</label>' + input +
-      (f.hint ? '<div class="imeta">' + esc(f.hint) + '</div>' : '') + '</div>';
+      (note ? '<div class="imeta">' + esc(note) + '</div>' : '') + '</div>';
   }).join('');
 
-  return '<div class="wrap">' +
+  return '<div class="wrap">' + opener +
     '<div style="margin:22px 0 4px"><div class="imeta">Step ' + (intake.step + 1) + ' of ' + secs.length + '</div>' +
       '<div class="bar" style="margin-top:8px"><i style="width:' +
         Math.round(((intake.step + 1) / secs.length) * 100) + '%"></i></div></div>' +
-    '<div class="card" style="margin-top:16px">' +
-      '<h2 style="font-size:20px;margin-bottom:4px">' + esc(sec.title) + '</h2>' +
+    '<div class="card' + (sec.featured ? ' featured' : '') + '" style="margin-top:16px">' +
+      (sec.lead ? '<div class="lead">' + esc(sec.lead) + '</div>' : '') +
+      (sec.heading
+        ? '<h2 class="condensed">' + esc(sec.heading) + '</h2>'
+        : '<h2 style="font-size:20px;margin-bottom:4px">' + esc(sec.title) + '</h2>') +
       (sec.hint ? '<p class="imeta" style="margin-bottom:12px">' + esc(sec.hint) + '</p>' : '<div style="height:10px"></div>') +
+      (sec.example ? '<div class="example"><b>For example</b>' + esc(sec.example) + '</div>' : '') +
       fields +
-      '<button class="btn" onclick="' + (last ? 'submitIntake()' : 'intakeStep(1)') + '">' +
-        (last ? 'Send it to me' : 'Next') + '</button>' +
+      '<button class="btn" onclick="' + (last ? (intake.routineOnly ? 'submitIntake()' : 'openReview()') : 'intakeStep(1)') + '">' +
+        (last ? (intake.routineOnly ? 'Send it to me' : 'Check it over') : 'Next') + '</button>' +
+      (intake.fromReview ? '<button class="btn sec" onclick="openReview()">Back to the summary</button>' : '') +
       (intake.step > 0 ? '<button class="btn sec" onclick="intakeStep(-1)">Back</button>' : '') +
+      (intake.routineOnly ? '<button class="btn sec" onclick="skipRoutine()">Not now</button>'
+        : state ? '<button class="btn sec" onclick="skipIntake()">Not now</button>' : '') +
     '</div></div>';
 }
 
 function applySetup(data) {
+  var intakeAt = null, answers = null;
+  try {
+    intakeAt = localStorage.getItem(INTAKE_AT_KEY); localStorage.removeItem(INTAKE_AT_KEY);
+    answers = JSON.parse(localStorage.getItem(ANSWERS_KEY) || 'null'); localStorage.removeItem(ANSWERS_KEY);
+  } catch (e) {}
   state = {
+    routineAnsweredAt: intakeAt || null,
+    intakeAnswers: answers && typeof answers === 'object' ? answers : {},
     v: BeastCore.PAYLOAD_VERSION,
     items: data.items || [],
     goals: data.goals || [],
@@ -912,6 +1317,7 @@ function applySetup(data) {
 function applyPlanUpdate(data) {
   var byId = {};
   state.items.forEach(function (it) { byId[it.id] = it; });
+  var before = state.items;
 
   state.items = (data.items || []).map(function (incoming) {
     var prev = byId[incoming.id];
@@ -931,6 +1337,11 @@ function applyPlanUpdate(data) {
   // A re-issued token replaces the old one; an absent one leaves it alone.
   if (data.coachToken) state.coachToken = data.coachToken;
   if (data.clientToken) state.clientToken = data.clientToken;
+
+  // A new plan block is the moment to ask about the routine again (loop
+  // brief 5d): the checklist changed, not a note edit or a re-sent link.
+  // routineDue() applies the fortnight rule when it is shown.
+  if (BeastCore.checklistChanged(before, state.items)) state.routineDue = true;
 
   // Fill blanks without overwriting anything the client set themselves.
   var incomingProfile = data.profile || {};
@@ -1732,6 +2143,23 @@ function setQuiet(which, value) {
   });
 }
 
+// What they told me at intake, and a way to change it. Only a phone with a
+// client token can send an update; an older link shows the answers alone.
+function intakeCard() {
+  var a = state.intakeAnswers || {};
+  var any = Object.keys(a).some(function (k) { return String(a[k] || '').trim() !== ''; });
+  if (!any && !state.clientToken) return '';
+  var open = !!state.intakeOpen;
+  return '<div class="card"><h3>Your answers</h3>' +
+    (any
+      ? '<p class="imeta" style="margin-bottom:10px">What you told me when we started. The plan is built into this, so keep it true.</p>' +
+        '<button class="btn sec" onclick="state.intakeOpen=!state.intakeOpen;save();render()">' + (open ? 'Hide my answers' : 'See my answers') + '</button>' +
+        (open ? '<div style="margin-top:10px">' + answersHtml(a, BeastCore.visibleSections(a), false) + '</div>' : '')
+      : '<p class="imeta" style="margin-bottom:10px">I don\u2019t have your intake on this phone.</p>') +
+    (state.clientToken ? '<button class="btn" onclick="startIntakeUpdate()">' + (any ? 'Update my answers' : 'Fill it in') + '</button>' : '') +
+    '</div>';
+}
+
 function remindersCard() {
   var slots = BeastCore.reminderSlots(state.items);
   if (!pushConfigured()) {
@@ -1745,7 +2173,7 @@ function remindersCard() {
   var q = (state.reminders && state.reminders.quiet) || { from: '22:00', to: '07:00' };
   return '<div class="card"><h3>Reminders</h3>' +
     '<p class="imeta">' + slots.map(function (s) { return BeastCore.formatDueBy(s); }).join(', ') +
-      '. Only what is still outstanding gets a nudge.</p>' +
+      '. Only what is still outstanding gets a reminder.</p>' +
     (isIOS() && !isStandalone()
       ? '<p class="imeta">On iPhone, add Beast Mode to your home screen first.</p>' : '') +
     (remindersOn()
@@ -1769,7 +2197,8 @@ function reminderNudge() {
   var times = slots.map(function (s) { return BeastCore.formatDueBy(s); });
   var list = times.length > 1 ? times.slice(0, -1).join(', ') + ' and ' + times[times.length - 1] : times[0];
   var ios = isIOS() && !isStandalone();
-  return '<div class="prompt">' + icon('bell') + '<div class="txt"><b>Want a nudge?</b>' +
+  // "Nudge" is a field name in the code and never on the screen (Chris).
+  return '<div class="prompt">' + icon('bell') + '<div class="txt"><b>Want a reminder?</b>' +
     'I’ll ping you at ' + esc(list) + ', only if something’s still open.' +
     (ios ? ' On iPhone, add Beast Mode to your home screen first.' : '') +
     '<div class="acts">' + (ios ? '' : '<button class="pbtn" onclick="enableReminders()">Turn on</button>') +
@@ -1865,8 +2294,9 @@ function render() {
     return;
   }
   // A questionnaire in progress outranks everything: the client has not been
-  // sent a plan yet, so there is nothing else for them to look at.
-  if (intake && !state) { root.innerHTML = intakeScreen(); return; }
+  // sent a plan yet, so there is nothing else for them to look at. A form
+  // opened from an intake link shows even beside a plan (a returning client).
+  if (intake && (!state || intake.token || intake.sent || intake.routineOnly || intake.update)) { root.innerHTML = intakeScreen(); return; }
   if (!state) { root.innerHTML = setupScreen(); return; }
   // iPhone, Safari, a plan just arrived and nothing answered yet: the
   // welcome waits until Beast Mode is on the home screen, so it is answered
@@ -1878,6 +2308,8 @@ function render() {
   })) { root.innerHTML = installFirstScreen(); askForBoss(); return; }
   if (needsWelcome()) { root.innerHTML = welcomeScreen(); return; }
   if (!state.goalsAgreedAt) { root.innerHTML = agreementScreen(); return; }
+  // A new plan block arrived: the routine, asked again (loop brief 5d).
+  if (routineDue()) { if (!intake) startRoutineAgain(); root.innerHTML = intakeScreen(); return; }
 
   root.innerHTML = header() + '<div class="wrap">' +
     (tab === 'today' ? todayTab() : tab === 'week' ? weekTab() :
@@ -2287,7 +2719,7 @@ function profileTab() {
     html += '<div class="card"><h3>Goals</h3>' + byTerm('short', 'Next 4 weeks') + byTerm('long', '6 to 12 months') + '</div>';
   }
 
-  html += remindersCard() + choicesCard();
+  html += remindersCard() + choicesCard() + intakeCard();
 
   html += '<div class="card"><h3>Appearance</h3>' +
     '<div class="field"><label>Theme</label><div class="seg">' + THEMES.map(function (t) {
@@ -2310,6 +2742,8 @@ function profileTab() {
 /* ── boot ──────────────────────────────────────────────────────────────── */
 
 function handleImport() {
+  var token = readIntakeHash();
+  if (token) { openIntakeLink(token); return true; }
   var imported = readHash();
   if (!imported) return false;
   return importCode(imported, imported.code);
@@ -2342,16 +2776,17 @@ function importCode(codeOrResult, rawCode) {
 // reloading, so boot never runs again. Without this the client taps Chris's
 // new link and nothing happens.
 window.addEventListener('hashchange', function () {
-  if (/[#&]import=/.test(location.hash)) handleImport();
+  if (/[#&](import|intake)=/.test(location.hash)) handleImport();
 });
 
 (function boot() {
   applyPrefs();
   load();
   loadIntake();
-  // A plan supersedes a questionnaire: once Chris has sent the plan, the form
-  // has done its job.
-  if (state && intake) clearIntakeSilently();
+  // A plan supersedes the texted-code questionnaire: once Chris has sent the
+  // plan, that form has done its job. A form from an intake link, or the
+  // routine asked again, carries on beside the plan.
+  if (state && intake && !intake.token && !intake.routineOnly && !intake.update && !intake.sent) clearIntakeSilently();
   if (!handleImport()) render();
   if (sharingOn()) sendStatus();
 })();

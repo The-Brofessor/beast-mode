@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.11.0';
+  var VERSION = '2.12.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1173,57 +1173,201 @@ var BeastCore = (function () {
     return fromBirthday !== null && fromBirthday < MIN_AGE;
   }
 
+  // The intake's own version (loop brief 5b). Version 1 asked "Your day" in
+  // three fields (wakeTime, workHours, bedTime). Version 2 asks for the
+  // client's real routine, a work day and a day off, so the plan places each
+  // new habit into the day they actually have. Everything that reads answers
+  // takes both shapes: existing clients answered version 1.
+  var INTAKE_VERSION = 2;
+
+  // Version 1's keys that are gone, kept so old answers still print (under
+  // the section named) and still make a baseline. Never asked again.
+  // (workHours kept its key.)
+  var INTAKE_LEGACY = {
+    wakeTime: { label: 'Usual wake time', section: 'Your work day', replaces: 'workWake' },
+    bedTime: { label: 'Usual bed time', section: 'Your work day', replaces: 'workBed' },
+    ancillaries: { label: 'Anything prescribed', section: 'Health' },
+    // Version 2's test-prep screen, folded into Goals as one question (Chris, 2026-09-23).
+    testEvents: { label: 'Test events', section: 'Goals' },
+    testDate: { label: 'Test date', section: 'Goals' },
+    testScores: { label: 'Current test scores', section: 'Goals' },
+    testVenue: { label: 'Where the test is', section: 'Goals' },
+    age: { label: 'Age', section: 'Personal Info' },
+    // Version 2's two goal lists, one list since 2026-09-23.
+    shortGoals: { label: 'Next 4 weeks', section: 'Goals' },
+    longGoals: { label: 'Next 6 to 12 months', section: 'Goals' },
+    bulkStyle: { label: 'If bulking: lean, or not fussy', section: 'Goals' },
+    // Asked as "Any side effects? If so, what?" now.
+    ancPrescriber: { label: 'Who prescribes it, and the next follow-up', section: 'Your prescription' }
+  };
+
+  // The routine questions asked for both a work day and a day off. `hint`
+  // doubles as the example the client sees. Each key is prefixed by the pass.
+  var ROUTINE_ASKS = [
+    { key: 'wake', label: 'Wake time, and the first thing you do', type: 'text', hint: '5:30, coffee and my phone' },
+    { key: 'meals', label: 'When you eat, roughly, and where', type: 'textarea', hint: '7 at home, 12 at my desk, 6:30 at home. Takeout twice a week' },
+    { key: 'train', label: 'When you could train, and a second choice', type: 'text', hint: '5:30 pm after work, or 6 am' },
+    { key: 'evening', label: 'The evening, hour by hour, in a few words', type: 'textarea', hint: '6 dinner, 7 kids, 8 TV and a couple of beers, 10 phone in bed' },
+    { key: 'bed', label: 'Bed time, and how long to fall asleep', type: 'text', hint: '10:30, about 20 minutes' }
+  ];
+
+  function routinePass(prefix) {
+    var out = [];
+    ROUTINE_ASKS.forEach(function (f, i) {
+      out.push({ key: prefix + f.key[0].toUpperCase() + f.key.slice(1), label: f.label, type: f.type, hint: f.hint, ask: f.key });
+      // The work day alone has fixed blocks to place around.
+      if (i === 0 && prefix === 'work') {
+        out.push({ key: 'workHours', label: 'Leave for work, work start and end, commute', type: 'text',
+                   hint: '7:15, 8 to 5, 30 minutes each way', ask: 'hours' });
+      }
+    });
+    return out;
+  }
+
   var INTAKE_SECTIONS = [
-    { title: 'You', fields: [
-      { key: 'age', label: 'Age', type: 'number' },
-      { key: 'sex', label: 'Sex', type: 'select', options: ['male', 'female'] },
-      { key: 'height', label: 'Height', type: 'text', hint: "5'11 or 180cm" },
-      { key: 'weight', label: 'Current weight', type: 'number' },
-      { key: 'goalWeight', label: 'Goal weight', type: 'number' },
-      { key: 'birthday', label: 'Birthday', type: 'text', hint: 'YYYY-MM-DD' }
+    // Chris's wording, 2026-09-23. Pounds and inches throughout; the date
+    // of birth is a date field (the phone's own picker, stored YYYY-MM-DD,
+    // which the adults-only check reads); sex is two buttons, not a list.
+    { title: 'Personal Info', hint: 'We base our calculations from this data so be as accurate as possible.', fields: [
+      { key: 'birthday', label: 'Date of birth', type: 'date' },
+      { key: 'sex', label: 'Sex', type: 'choice', options: ['male', 'female'] },
+      { key: 'height', label: 'Height (inches)', type: 'number', hint: '71' },
+      { key: 'weight', label: 'Current weight (lb)', type: 'number', hint: '196' },
+      { key: 'goalWeight', label: 'Goal weight (lb)', type: 'number', hint: '185' },
+      { key: 'waist', label: 'Waist (inches)', type: 'number', hint: '38, at the navel, relaxed' },
+      { key: 'bodyFat', label: 'Body fat %, if you know', type: 'number', hint: '22' },
+      { key: 'maxHr', label: 'Max heart rate, if you know', type: 'number', hint: '180' },
+      { key: 'household', label: 'Who’s at home?', type: 'select',
+        options: ['on my own', 'with a partner', 'partner and kids', 'kids', 'roommates or family'] }
     ] },
-    { title: 'Your day', fields: [
-      { key: 'job', label: 'What do you do all day?', type: 'text', hint: 'Desk job, on your feet, trades' },
-      { key: 'activity', label: 'How active is that?', type: 'select',
-        options: ['mostly sitting', 'up and down', 'on my feet all day', 'physical work'] },
-      { key: 'wakeTime', label: 'Usual wake time', type: 'text', hint: '05:30' },
-      { key: 'workHours', label: 'Work hours', type: 'text', hint: '8 to 5' },
-      { key: 'bedTime', label: 'Usual bed time', type: 'text', hint: '22:30' }
+    // The page that matters most (Chris, 2026-09-23): second, while attention
+    // is fresh, in its own look, and first on the summary. `lead` is The
+    // Brofessor's line above the questions; Chris's wording to come.
+    { title: 'Goals', featured: true,
+      // Chris's wording, 2026-09-23.
+      hint: 'What do you want to change? One goal per line. Big, small, and anything in between. ' +
+        'Put a time frame on any goal that has one. If it’s open ended that’s fine too, The Brofessor will turn even the biggest goals into manageable pieces.',
+      lead: 'A goal without a plan is just a wish.',
+      // The heading in full, one line, in the display font (Chris, 2026-09-23).
+      heading: 'Goals - Why we are here so make them good.',
+      fields: [
+      // One list (Chris, 2026-09-23); the plan sorts each goal by its own
+      // time frame (goalsFromIntake), and old shortGoals/longGoals still read.
+      { key: 'goals', label: 'Your goals', type: 'textarea',
+        hint: 'Lose 10 lb before vacation in 3 months\nWalk every morning\nDeadlift my body weight by spring' },
+      { key: 'whyNow', label: 'Why is now the right time?', type: 'textarea', hint: 'Turned 41; blood pressure is up; a wedding in June; tired of being tired' },
+      { key: 'obstacle', label: 'What has stopped you before?', type: 'textarea', hint: 'Travel weeks; lost interest after a month; late-night snacking; no plan' },
+      { key: 'dietsTried', label: 'Diets you’ve tried, and what happened', type: 'textarea', hint: 'Keto twice, lost 15 then it came back; never really tried one' },
+      // The keys keep their names: the coach and the dashboard read them as
+      // what the client likes most and least about their day.
+      { key: 'habitKeep', label: 'What do you like most about your day?', type: 'text', hint: 'The morning walk; dinner with the kids; the drive home with music up' },
+      { key: 'habitBreak', label: 'What do you like least about your day?', type: 'text', hint: 'The 3 pm slump; beers on the couch; phone in bed' },
+      { key: 'testComing', label: 'Any fitness tests coming up? Which, and when', type: 'text',
+        hint: 'Police academy, military PT test, a race. Write none if none' },
+      { key: 'otherGoals', label: 'Any goals that aren’t fitness related?', type: 'textarea',
+        hint: 'Sleep through the night; read more; less time on my phone; get the promotion' }
     ] },
-    { title: 'Training', fields: [
+    // The routine sections carry `routine: true`: they are the baseline, and
+    // the ones asked again when a new plan block arrives (brief 5d).
+    { title: 'Your work day', routine: true, pass: 'work',
+      hint: 'What does your normal work day look like? More info is better than less but we don’t need every minute accounted for.',
+      fields: [
+        { key: 'job', label: 'What do you do all day?', type: 'text', hint: 'Desk job, on your feet, trades' },
+        { key: 'activity', label: 'How active is that?', type: 'select',
+          options: ['mostly sitting', 'up and down', 'on my feet all day', 'physical work'] }
+      ].concat(routinePass('work'), [
+        { key: 'workCooks', label: 'Who cooks, and whose schedule runs your evening?', type: 'text',
+          hint: 'I do; my wife; we split it; the kids’ schedule runs it' }
+      ]) },
+    { title: 'Your day off', routine: true, pass: 'off',
+      hint: 'Same again for a day off. Weekends (or days off) are where most plans go sideways.',
+      fields: routinePass('off') },
+    { title: 'Typical Day', routine: true, pass: 'most',
+      hint: 'What do you consume and how active are you on an average day? If a work day and a day off are different, give both.',
+      fields: [
+        { key: 'steps', label: 'Steps on a normal day, if you know', type: 'text', hint: '8,000 on a work day, 4,000 on a day off' },
+        { key: 'water', label: 'Water on a normal day', type: 'text', hint: '3 glasses, or one big bottle' },
+        { key: 'alcohol', label: 'Alcohol in a normal week', type: 'text', hint: '3 beers Friday, 4 Saturday' },
+        { key: 'caffeine', label: 'Caffeine on a normal day', type: 'text', hint: '2 coffees, the last one around 2' },
+        { key: 'calories', label: 'Total calories on a normal day, if you know', type: 'text', hint: 'About 2,500. Skip it if you have no idea' },
+        { key: 'awayNights', label: 'Nights away from home in a normal month', type: 'text',
+          hint: '2 nights for work, or none' },
+        // A Brotocol in waiting (Chris, 2026-09-23).
+        { key: 'teeth', label: 'How often do you brush and floss?', type: 'text',
+          hint: 'Brush twice a day, floss when I remember' }
+      ] },
+    // Chris's wording, 2026-09-23.
+    { title: 'Training', hint: 'Where and when do you currently workout? What are you willing to add?', fields: [
       { key: 'experience', label: 'Training experience', type: 'select',
         options: ['never really trained', 'on and off', 'a year or two', 'years of it'] },
-      { key: 'daysPerWeek', label: 'Days a week you can train', type: 'number' },
-      { key: 'sessionLength', label: 'Minutes per session', type: 'number' },
-      { key: 'equipment', label: 'What do you have access to?', type: 'textarea',
-        hint: 'Full gym, home rack, dumbbells, bands' }
+      { key: 'currentTraining', label: 'What are you doing for exercise now, if anything?', type: 'textarea',
+        hint: 'Gym twice a week, mostly machines; walking the dog; nothing for a year' },
+      { key: 'gym', label: 'Which gym, and how far from home or work?', type: 'text', hint: 'Planet Fitness, 10 minutes from work; none' },
+      { key: 'daysPerWeek', label: 'Days a week you can train', type: 'number', hint: '4' },
+      { key: 'sessionLength', label: 'Minutes per session', type: 'number', hint: '45' },
+      { key: 'equipment', label: 'What equipment do you have access to?', type: 'textarea',
+        hint: 'Full gym, home rack, dumbbells, bands' },
+      { key: 'sports', label: 'Sports you play, and how often', type: 'text', hint: 'Pickup basketball on Tuesdays, golf most Saturdays' },
+      { key: 'hobbies', label: 'Hobbies that take up evenings or weekends', type: 'text', hint: 'Fishing, gaming, the kids’ games' }
     ] },
-    { title: 'Health', fields: [
-      { key: 'injuries', label: 'Injuries or anything that hurts', type: 'textarea', hint: 'Write none if none' },
-      { key: 'conditions', label: 'Medical conditions', type: 'textarea', hint: 'Write none if none' },
-      { key: 'foodsAvoided', label: 'Foods you will not eat', type: 'textarea' },
-      { key: 'supplements', label: 'Supplements you take now', type: 'textarea', hint: 'Name and dose' },
-      { key: 'ancillaries', label: 'Anything prescribed', type: 'textarea',
-        hint: 'GLP-1, TRT, thyroid, blood pressure. Dose and schedule. This stays between you and me.' }
+    // Chris's wording, 2026-09-23: Rule One, from the methods file.
+    { title: 'Health', hint: 'Rule #1 - Don’t get hurt. Rule #2 - See rule #1.', fields: [
+      { key: 'injuries', label: 'Injuries or anything that hurts', type: 'textarea', hint: 'Left knee, sore going downstairs; lower back after long drives; none' },
+      { key: 'conditions', label: 'Medical conditions', type: 'textarea', hint: 'High blood pressure, on medication; pre-diabetic; none' },
+      { key: 'allergies', label: 'Food allergies', type: 'text', hint: 'Shellfish; none' },
+      { key: 'foodsAvoided', label: 'Foods you will not eat', type: 'textarea', hint: 'Mushrooms, fish, anything spicy' },
+      { key: 'supplements', label: 'Supplements you take now', type: 'textarea', hint: 'Creatine 5 g daily, fish oil, a multivitamin' },
+      { key: 'supplementsOpen', label: 'Willing to add supplements if the plan calls for them?', type: 'yesno' },
+      { key: 'sleep', label: 'How do you sleep?', type: 'textarea',
+        hint: 'About 6 hours, up once or twice; solid 8; badly, and I wake up tired' },
+      { key: 'stress', label: 'How stressed are you, and what by?', type: 'textarea',
+        hint: 'Pretty high, work and the kids; low, life is good' },
+      { key: 'ancillariesYes', label: 'Are you on anything prescribed?', type: 'yesno',
+        hint: 'GLP-1, TRT, thyroid, blood pressure. This stays between you and me.' }
     ] },
-    { title: 'Goals', fields: [
-      { key: 'shortGoals', label: 'Next 4 weeks', type: 'textarea', hint: 'One per line, up to three' },
-      { key: 'longGoals', label: 'Next 6 to 12 months', type: 'textarea', hint: 'One per line, up to three' },
-      { key: 'whyNow', label: 'Why is now the right time?', type: 'textarea' },
-      { key: 'obstacle', label: 'What has stopped you before?', type: 'textarea' },
-      { key: 'habitKeep', label: 'One habit you want to keep', type: 'text' },
-      { key: 'habitBreak', label: 'One habit you want to break', type: 'text' }
+    // Shown only after a yes above: what the ancillary rules need (methods
+    // section 6b), so nothing has to be asked again by text.
+    { title: 'Your prescription', when: { key: 'ancillariesYes', is: 'yes' },
+      hint: 'We will never recommend changes to meds. We need to know so your plan works around it.',
+      fields: [
+        { key: 'ancName', label: 'What is it?', type: 'text', hint: 'Semaglutide, testosterone cypionate, levothyroxine' },
+        { key: 'ancDose', label: 'Dose', type: 'text' },
+        { key: 'ancSchedule', label: 'When you take it', type: 'text', hint: 'Sunday mornings; every day with breakfast' },
+        { key: 'ancSince', label: 'How long you’ve been on it', type: 'text' },
+        { key: 'ancSideEffectsYes', label: 'Any side effects?', type: 'yesno' },
+        { key: 'ancSideEffects', label: 'What are they?', type: 'textarea', when: { key: 'ancSideEffectsYes', is: 'yes' } }
+      ] },
+    // Everything The Brofessor puts in a client's hands (methods 4b, 4c, 6c).
+    // Each tool is a yes or no, and the detail appears only after a yes.
+    { title: 'Tools', hint: 'These are items we use. None of it is required to start.', fields: [
+      { key: 'foodAppYes', label: 'Do you use a food-tracking app?', type: 'yesno',
+        hint: 'MyFitnessPal is what I use with clients. Logging food is part of the process.' },
+      { key: 'foodApp', label: 'Which one?', type: 'select', options: ['MyFitnessPal', 'another app'], when: { key: 'foodAppYes', is: 'yes' } },
+      { key: 'scale', label: 'A scale at home?', type: 'yesno' },
+      { key: 'treadmillYes', label: 'Do you have a treadmill you can use?', type: 'yesno', hint: 'One at home is ideal for Zone 2.' },
+      { key: 'treadmill', label: 'Where?', type: 'select', options: ['at home', 'at the gym'], when: { key: 'treadmillYes', is: 'yes' } },
+      { key: 'hrMonitor', label: 'A heart-rate monitor?', type: 'yesno', hint: 'A watch or a chest strap.' },
+      { key: 'bandsYes', label: 'Exercise bands?', type: 'yesno', hint: 'The warm-up runs on them.' },
+      { key: 'bands', label: 'Which?', type: 'select', options: ['mini loop bands', 'a long band or tube with handles', 'both'],
+        when: { key: 'bandsYes', is: 'yes' } },
+      { key: 'bodyToolsYes', label: 'Any body work tools?', type: 'yesno', hint: 'The Stick, a Theragun or Hypervolt, a foam roller, a lacrosse ball' },
+      { key: 'bodyTools', label: 'Which ones?', type: 'textarea', when: { key: 'bodyToolsYes', is: 'yes' } },
+      { key: 'toolsOpen', label: 'Willing to buy tools if the plan calls for them?', type: 'yesno',
+        hint: 'Bands and a lacrosse ball are cheap. Nothing is required to start.' }
     ] },
-    { title: 'Music', fields: [
-      { key: 'musicService', label: 'Spotify or Apple Music?', type: 'select',
-        options: ['Spotify', 'Apple Music', 'something else', 'I train in silence'] },
-      { key: 'songs', label: 'Three songs you train to', type: 'textarea', hint: 'One per line' }
-    ] },
-    { title: 'Test prep', optional: true, hint: 'Only if you have a fitness test coming up.', fields: [
-      { key: 'testEvents', label: 'Events', type: 'textarea', hint: 'Push-ups, sit-ups, 1.5 mile run' },
-      { key: 'testDate', label: 'Test date', type: 'text', hint: 'YYYY-MM-DD' },
-      { key: 'testScores', label: 'Current scores', type: 'textarea' },
-      { key: 'testVenue', label: 'Where is it', type: 'text' }
+    { title: 'Music', hint: 'The Brofessor can make music suggestions for your sessions.', fields: [
+      // Chris's wording, 2026-09-23.
+      { key: 'musicService', label: 'What music service do you use?', type: 'select',
+        options: ['Spotify', 'Apple Music', 'Amazon Music', 'something else', 'I raw dog training'] },
+      // "I raw dog training" means no music: the rest of the page steps aside.
+      { key: 'musicType', label: 'What do you train to?', type: 'text', hint: 'Metal, hip hop, country, whatever gets you going',
+        unless: { key: 'musicService', is: 'I raw dog training' } },
+      { key: 'bandsMusic', label: 'Bands or artists', type: 'textarea', hint: 'Metallica, Pantera, Rage',
+        unless: { key: 'musicService', is: 'I raw dog training' } },
+      { key: 'songs', label: 'Songs', type: 'textarea', hint: 'Enter Sandman, Walk, Bulls on Parade',
+        unless: { key: 'musicService', is: 'I raw dog training' } },
+      { key: 'cleanOnly', label: 'Clean versions only?', type: 'yesno',
+        unless: { key: 'musicService', is: 'I raw dog training' } }
     ] }
   ];
 
@@ -1231,16 +1375,59 @@ var BeastCore = (function () {
     return INTAKE_SECTIONS.reduce(function (all, s) { return all.concat(s.fields); }, []);
   }
 
-  // Plain text block Chris pastes straight into the Claude Project.
+  // The routine sections alone: the short form asked again when a new plan
+  // block arrives, and the part of the intake the baseline is read from.
+  function routineSections() {
+    return INTAKE_SECTIONS.filter(function (s) { return s.routine; });
+  }
+
+  var blank = function (v) { return v === undefined || v === null || String(v).trim() === ''; };
+  var clean = function (v) { return blank(v) ? '' : String(v).trim().replace(/\s*\n+\s*/g, '; '); };
+
+  // Which version a set of answers was given to, when the record does not
+  // say: version 1 answers carry a legacy key and none of the new routine
+  // keys. Nothing answered at all is the current version.
+  function intakeVersionOf(answers) {
+    var a = answers || {};
+    var asked = function (keys) { return keys.some(function (k) { return !blank(a[k]); }); };
+    var newKeys = routineSections().reduce(function (all, s) {
+      return all.concat(s.fields.map(function (f) { return f.key; }));
+    }, []).filter(function (k) { return k !== 'job' && k !== 'activity' && k !== 'workHours'; });
+    if (asked(newKeys)) return INTAKE_VERSION;
+    return asked(['wakeTime', 'bedTime']) ? 1 : INTAKE_VERSION;
+  }
+
+  // Plain text block for the coach: what Chris pastes into the Claude
+  // Project, and the same words the app coach reads. Version 1 answers print
+  // their routine lines under the old heading, since the new sections would
+  // show them nothing.
   function formatIntakeForCoach(name, answers) {
+    var a = visibleAnswers(answers);
+    var v = intakeVersionOf(a);
     var out = ['INTAKE: ' + (name || 'new client'), ''];
-    INTAKE_SECTIONS.forEach(function (sec) {
-      var lines = sec.fields.filter(function (f) {
-        var v = answers[f.key];
-        return v !== undefined && String(v).trim() !== '';
-      }).map(function (f) {
-        var v = String(answers[f.key]).trim().replace(/\n+/g, '; ');
-        return f.label + ': ' + v;
+    visibleSections(a).forEach(function (sec) {
+      var fields = visibleFields(sec, a);
+      if (v === 1 && sec.routine) {
+        if (sec.pass !== 'work') return;
+        // The three old lines, plus job and activity, under the old title.
+        // workHours kept its key; only its label moved.
+        var legacy = [{ key: 'job', label: 'What do you do all day?' }, { key: 'activity', label: 'How active is that?' },
+          { key: 'wakeTime', label: INTAKE_LEGACY.wakeTime.label }, { key: 'workHours', label: 'Work hours' }, { key: 'bedTime', label: INTAKE_LEGACY.bedTime.label }];
+        var old = legacy.filter(function (f) { return !blank(a[f.key]); })
+          .map(function (f) { return f.label + ': ' + clean(a[f.key]); });
+        if (old.length) { out.push('YOUR DAY'); out = out.concat(old); out.push(''); }
+        return;
+      }
+      var lines = fields.filter(function (f) { return !blank(a[f.key]); })
+        .map(function (f) { return f.label + ': ' + clean(a[f.key]); });
+      // A gone key prints under its section: always for a section that no
+      // longer asks it, and for a routine section only where the new key
+      // it replaces was left blank (a version-1 bed time under a re-answer).
+      Object.keys(INTAKE_LEGACY).forEach(function (k) {
+        var L = INTAKE_LEGACY[k];
+        if (L.section !== sec.title || blank(a[k])) return;
+        if (sec.routine && !(L.replaces && blank(a[L.replaces]))) return;
+        lines.push(L.label + ': ' + clean(a[k]));
       });
       if (!lines.length) return;
       out.push(sec.title.toUpperCase());
@@ -1250,13 +1437,169 @@ var BeastCore = (function () {
     return out.join('\n').trim();
   }
 
+  // The answers that stand: anything under a section or field the client's
+  // other answers hide (a prescription after a No, songs after "I raw dog
+  // training") is dropped, so what is stored, printed and read by the coach
+  // is what the client saw on the summary. Typed text behind a flipped
+  // button is kept on the phone until they send.
+  function visibleAnswers(answers) {
+    var a = answers || {};
+    var keep = {};
+    Object.keys(INTAKE_LEGACY).forEach(function (k) { if (!blank(a[k])) keep[k] = a[k]; });
+    visibleSections(a).forEach(function (sec) {
+      visibleFields(sec, a).forEach(function (f) { if (!blank(a[f.key])) keep[f.key] = a[f.key]; });
+    });
+    return keep;
+  }
+
+  // The yes and no a two-button question stores. The app draws the buttons
+  // from this, and every `when` clause compares against it.
+  var YESNO = ['yes', 'no'];
+
+  // The sections a client sees, given their answers so far: a conditional
+  // section (`when`) appears only once its question is answered that way.
+  function visibleSections(answers, sections) {
+    var a = answers || {};
+    return (sections || INTAKE_SECTIONS).filter(function (s) { return !s.when || a[s.when.key] === s.when.is; });
+  }
+
+  // The fields of a section a client sees now: a `when` field appears only
+  // once its question is answered that way, and an `unless` field goes away
+  // when it is. A yes/no field's options are always yes and no.
+  function visibleFields(section, answers) {
+    var a = answers || {};
+    return section.fields.filter(function (f) {
+      if (f.when && a[f.when.key] !== f.when.is) return false;
+      if (f.unless && a[f.unless.key] === f.unless.is) return false;
+      return true;
+    });
+  }
+
+  /* The baseline: the client's routine as one object, from either version of
+     the answers. Every field is a trimmed string, '' when unanswered, so a
+     reader never checks for undefined. `empty` is true when nothing about the
+     routine was answered. Version 1 answers fill the work day's wake, hours
+     and bed and nothing else. */
+  function routineBaseline(answers) {
+    var a = visibleAnswers(answers);
+    var v = intakeVersionOf(a);
+    var pick = function (key, legacy) { return clean(!blank(a[key]) ? a[key] : (legacy ? a[legacy] : '')); };
+    var b = {
+      version: v,
+      job: pick('job'), activity: pick('activity'),
+      work: { wake: pick('workWake', 'wakeTime'), hours: pick('workHours'), meals: pick('workMeals'),
+              train: pick('workTrain'), evening: pick('workEvening'), bed: pick('workBed', 'bedTime') },
+      off: { wake: pick('offWake'), meals: pick('offMeals'), train: pick('offTrain'),
+             evening: pick('offEvening'), bed: pick('offBed') },
+      most: { steps: pick('steps'), water: pick('water'), alcohol: pick('alcohol'), caffeine: pick('caffeine') },
+      habitKeep: pick('habitKeep'), habitBreak: pick('habitBreak'), obstacle: pick('obstacle')
+    };
+    b.empty = ![b.work, b.off, b.most].some(function (g) {
+      return Object.keys(g).some(function (k) { return g[k] !== ''; });
+    });
+    return b;
+  }
+
+  // A baseline as one flat object keyed by the version 2 field keys.
+  function flatBaseline(b) {
+    var out = { job: b.job, activity: b.activity, steps: b.most.steps, water: b.most.water, alcohol: b.most.alcohol, caffeine: b.most.caffeine };
+    Object.keys(b.work).forEach(function (k) { out['work' + k[0].toUpperCase() + k.slice(1)] = b.work[k]; });
+    Object.keys(b.off).forEach(function (k) { out['off' + k[0].toUpperCase() + k.slice(1)] = b.off[k]; });
+    return out;
+  }
+
+  // The routine fields whose answers changed between two sets of answers:
+  // [{ key, label, from, to }]. The measure of routine change (brief 5d).
+  // Compared slot by slot through routineBaseline, so a first answer in the
+  // old shape (wakeTime, bedTime) against a new one (workWake, workBed) is
+  // not a change when the times are the same.
+  function routineChanges(before, after) {
+    var b = flatBaseline(routineBaseline(before)), a = flatBaseline(routineBaseline(after));
+    var out = [];
+    routineSections().forEach(function (sec) {
+      sec.fields.forEach(function (f) {
+        if (b[f.key] !== a[f.key]) out.push({ key: f.key, label: sec.title + ': ' + f.label, from: b[f.key], to: a[f.key] });
+      });
+    });
+    return out;
+  }
+
+  /* A clock time from the start of a free-text answer, as minutes from
+     midnight, or null when none can be read. Accepts '5:30', '5:30 am',
+     '6pm', '17:30', '6', 'about 6', '10.30pm'. A bare hour with no am or pm
+     is read the way people write it: `opts.pm` says the field is an evening
+     one (bed, evening), where '6' means 18:00 and '10' means 22:00; otherwise
+     '6' is 06:00. This places a block on the day strip and never changes
+     what the client wrote. */
+  function timeFromText(text, opts) {
+    var s = String(text || '');
+    if (/\bnoon\b/i.test(s)) return 720;
+    if (/\bmidnight\b/i.test(s)) return 0;
+    // The first number that can be a clock time. A bare number is a clock
+    // hour only when it could be one: "20 minutes" and "17" are skipped;
+    // "17:30" and "6pm" are read.
+    var re = /(?:^|[^\d.])(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?(?=\s|$|[,;.)])/gi;
+    var m, h = null, min = 0, ap = '';
+    while ((m = re.exec(s))) {
+      var hh = Number(m[1]), mm = m[2] ? Number(m[2]) : 0, aa = m[3] ? m[3].replace(/\./g, '').toLowerCase() : '';
+      if (!m[2] && !aa && (hh < 1 || hh > 12)) continue;
+      if (hh > 24 || mm > 59) continue;
+      h = hh; min = mm; ap = aa;
+      break;
+    }
+    if (h === null) return null;
+    if (ap === 'pm' && h < 12) h += 12;
+    else if (ap === 'am' && h === 12) h = 0;
+    else if (!ap && opts && opts.pm && h === 12) h = 0;   // "12" at bed time is midnight
+    else if (!ap && opts && opts.pm && h >= 1 && h < 12) h += 12;
+    if (h === 24) h = 0;
+    return h * 60 + min;
+  }
+
+  // Every submission's answers as one set, newest winning, so a routine
+  // answered again on its own keeps the goals, health and habits from the
+  // full intake underneath it. `rows` is newest first, each { answers }.
+  function mergeIntakeAnswers(rows) {
+    var out = {};
+    (rows || []).slice().reverse().forEach(function (r) {
+      var a = r && r.answers && typeof r.answers === 'object' ? r.answers : {};
+      Object.keys(a).forEach(function (k) { if (!blank(a[k])) out[k] = a[k]; });
+    });
+    return out;
+  }
+
+  // The routine is asked again when a new plan block arrives, and a block is
+  // a change to the checklist: an item added or removed, or a due-by time
+  // moved. A note edit or a re-sent link is not one. At most once a fortnight.
+  var ROUTINE_AGAIN_DAYS = 14;
+  function checklistChanged(before, after) {
+    var key = function (it) { return it.id + '|' + (it.dueBy || ''); };
+    var a = (before || []).map(key).sort().join(','), b = (after || []).map(key).sort().join(',');
+    return a !== b;
+  }
+
   // The goals a client typed become the structured goals the plan carries.
+  // One list since 2026-09-23: a goal with a long time frame in its own
+  // words (months beyond the first block, a year, a season, a month name)
+  // is a long-term goal; anything else is the next four weeks. Chris moves
+  // them on the dashboard if the guess is wrong. The old two lists still read.
+  // A season or a month name counts only after a time word ("by spring",
+  // "before May"), so "fall asleep faster" and "I may run a 5k" stay short.
+  var LONG_WORDS = /\b(by|in|before|until|till|this|next|for|through|come)\s+(the\s+)?(year|spring|summer|fall|autumn|winter|january|february|march|april|may|june|july|august|september|october|november|december)\b|\b(a|one|two|three|\d+)[\s-]*years?\b|\bnext year\b/i;
+  function goalTerm(text) {
+    var m = /(\d+)[\s-]*(month|months|mo)\b/i.exec(text);
+    if (m) return Number(m[1]) >= 2 ? 'long' : 'short';
+    var w = /(\d+)[\s-]*(week|weeks|wk|wks)\b/i.exec(text);
+    if (w) return Number(w[1]) >= 5 ? 'long' : 'short';
+    return LONG_WORDS.test(text) ? 'long' : 'short';
+  }
   function goalsFromIntake(answers) {
+    var a = answers || {};
     var mk = function (text, term) {
       return String(text || '').split('\n').map(function (s) { return s.trim(); })
-        .filter(Boolean).map(function (t) { return { text: t, term: term }; });
+        .filter(Boolean).map(function (t) { return { text: t, term: term || goalTerm(t) }; });
     };
-    return normalizeGoals(mk(answers.shortGoals, 'short').concat(mk(answers.longGoals, 'long')));
+    return normalizeGoals(mk(a.goals).concat(mk(a.shortGoals, 'short'), mk(a.longGoals, 'long')));
   }
 
   // The intake fields that belong on the client's profile from day one.
@@ -1516,7 +1859,10 @@ var BeastCore = (function () {
     reminderSlots: reminderSlots, dueAtSlot: dueAtSlot,
     reminderText: reminderText, inQuietHours: inQuietHours,
     buildReport: buildReport, reportSummary: reportSummary,
-    INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
+    INTAKE_VERSION: INTAKE_VERSION, INTAKE_LEGACY: INTAKE_LEGACY, INTAKE_SECTIONS: INTAKE_SECTIONS, intakeFields: intakeFields,
+    routineSections: routineSections, visibleSections: visibleSections, visibleFields: visibleFields, intakeVersionOf: intakeVersionOf, routineBaseline: routineBaseline,
+    routineChanges: routineChanges, timeFromText: timeFromText, mergeIntakeAnswers: mergeIntakeAnswers,
+    ROUTINE_AGAIN_DAYS: ROUTINE_AGAIN_DAYS, checklistChanged: checklistChanged, visibleAnswers: visibleAnswers, YESNO: YESNO,
     formatIntakeForCoach: formatIntakeForCoach,
     goalsFromIntake: goalsFromIntake, profileFromIntake: profileFromIntake,
     CONSENTS: CONSENTS, consentStands: consentStands, WELCOME: WELCOME, COACH_OPENER: COACH_OPENER
