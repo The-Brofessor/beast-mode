@@ -645,6 +645,26 @@ test('songs: a "Song:" line is found, and searched in the client\'s own service'
   assert.strictEqual(C.appleSongLink(null), '');
 });
 
+test('a re-sent form starts with the earlier answers that fit today\'s form (Chris, 2026-09-24)', () => {
+  // Chris's two intakes, merged newest winning: the typed first one under the tapped second one.
+  const merged = C.mergeIntakeAnswers([
+    { answers: { birthday: '1976-11-03', sex: 'male', height: '74', maxHr: '202', maxHrHow: 'a hard all-out effort', bodyFat: 'don’t know',
+      goals: 'lose fat\nbuild muscle', workWake: '5am', workMealCount: '5', workMeal1: '7am', rxMetOften: 'twice a day', musicFavs: 'Snoop, E-40', firstName: 'Chris', lastName: 'Linkhorn' } },
+    { answers: { job: 'Desk job on cpu', steps: '15,000', workWake: '5am laundry', goals: 'Gain 15lbs by March', injuries: 'Knees are sore', waist: '35', caffeine: '600mg' } }
+  ]);
+  const fit = C.answersThatFit(merged);
+  for (const k of ['birthday', 'sex', 'height', 'maxHr', 'maxHrHow', 'bodyFat', 'goals', 'workWake', 'workMealCount', 'workMeal1', 'rxMetOften', 'musicFavs', 'waist']) {
+    assert.ok(k in fit, k + ' fits');
+  }
+  for (const k of ['job', 'steps', 'injuries', 'caffeine', 'firstName', 'lastName']) {
+    assert.ok(!(k in fit), k + ' does not: typed, a gone question, or the name');
+  }
+  assert.ok(!('workWake' in C.answersThatFit({ workWake: '5am laundry' })), 'a typed time is not a wheel time');
+  assert.ok(!('goals' in C.answersThatFit({ goals: 'build muscle\nget huge' })), 'one chip that is not an option keeps the whole answer out');
+  assert.deepStrictEqual(C.answersThatFit({}), {});
+  assert.deepStrictEqual(C.answersThatFit(null), {});
+});
+
 test('the date of birth is required on the form, and missingRequired finds it blank', () => {
   const personal = C.INTAKE_SECTIONS[0];
   const dob = personal.fields.find(f => f.key === 'birthday');

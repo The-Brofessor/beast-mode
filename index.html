@@ -1191,6 +1191,14 @@ async function openIntakeLink(token) {
       intake.intro = false;
       saveIntake();
       toast('Picked up where you left off');
+    } else if (data.prior && typeof data.prior === 'object' && !Array.isArray(data.prior)) {
+      // A returning client: the answers they gave before that still fit
+      // today's form, under the name from the link (Chris, 2026-09-24).
+      var prior = {};
+      Object.keys(data.prior).forEach(function (k) { if (typeof data.prior[k] === 'string') prior[k] = data.prior[k]; });
+      intake.answers = Object.assign(prior, intake.answers);
+      intake.prefilled = true;
+      saveIntake();
     }
   }
   render();
@@ -1303,6 +1311,8 @@ function intakeIntroScreen() {
       'Having as much accurate info as possible will make your plan much more effective. ' +
       'So be honest, if you skip leg day The Brofessor wants to know.</p>' +
     '<ul class="introlist">' +
+      // Draft wording (Chris, 2026-09-24): a returning client's form starts filled in.
+      (intake.prefilled ? '<li>Your answers from last time are filled in. Change anything that’s changed.</li>' : '') +
       '<li>About 15 minutes. ' + intakeSections().length + ' short screens.</li>' +
       '<li>It saves as you go. Close it and come back any time.</li>' +
       '<li>Skip anything that doesn\u2019t apply.</li>' +

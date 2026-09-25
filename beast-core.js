@@ -1278,6 +1278,32 @@ var BeastCore = (function () {
     return /^https:\/\/music\.apple\.com\/[^\s"'<>]+$/.test(url) ? url : '';
   }
 
+  /* A returning client's earlier answers that the form today can show as
+     they were given (Chris, 2026-09-24): a re-sent form starts with them.
+     A tap question keeps an answer only if it is one of today's options; a
+     time only if it is a time in words from the wheel ('5:30pm'); a date,
+     number or height only in its own shape. Typed answers to questions that
+     are now taps (version 2) stay out, so no chip is shown picked that the
+     client never tapped. The name comes from the link, not from here. */
+  function answersThatFit(answers) {
+    var a = answers || {}, out = {};
+    var DUNNO = 'don’t know';
+    intakeFields().forEach(function (f) {
+      var v = a[f.key];
+      if (blank(v) || f.key === 'firstName' || f.key === 'lastName') return;
+      var s = String(v).trim(), ok;
+      if (f.type === 'choice') ok = f.options.indexOf(s) >= 0;
+      else if (f.type === 'yesno') ok = YESNO.indexOf(s) >= 0;
+      else if (f.type === 'multi') ok = picksOf(s).length > 0 && picksOf(s).every(function (p) { return f.options.indexOf(p) >= 0; });
+      else if (f.type === 'time') ok = /^(\d{1,2}(:\d{2})?(am|pm)|noon|midnight)$/.test(s);
+      else if (f.type === 'date') ok = /^\d{4}-\d{2}-\d{2}$/.test(s);
+      else if (f.type === 'number' || f.type === 'height') ok = /^\d+(\.\d+)?$/.test(s) || (f.dunno && s === DUNNO);
+      else ok = true;   // a typed box: the client's own words still fit
+      if (ok) out[f.key] = s;
+    });
+    return out;
+  }
+
   // A name as typed on the dashboard, split for the form's two boxes:
   // the first word, and the rest ("Mary Ann Smith" -> "Mary", "Ann Smith").
   function nameParts(name) {
@@ -2317,7 +2343,7 @@ var BeastCore = (function () {
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
     TIMING_LABELS: TIMING_LABELS, timingLabel: timingLabel,
     WEIGHT_UNIT: WEIGHT_UNIT, itemSummary: itemSummary,
-    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge, ageUnknown: ageUnknown, missingRequired: missingRequired, picksOf: picksOf, clockWords: clockWords, hhmm: hhmm, songOf: songOf, songSearchUrl: songSearchUrl, appleSongLookupUrl: appleSongLookupUrl, appleSongLink: appleSongLink, nameParts: nameParts, inchesOf: inchesOf, feetInchesOf: feetInchesOf, heightWords: heightWords,
+    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge, ageUnknown: ageUnknown, missingRequired: missingRequired, picksOf: picksOf, clockWords: clockWords, hhmm: hhmm, songOf: songOf, songSearchUrl: songSearchUrl, appleSongLookupUrl: appleSongLookupUrl, appleSongLink: appleSongLink, answersThatFit: answersThatFit, nameParts: nameParts, inchesOf: inchesOf, feetInchesOf: feetInchesOf, heightWords: heightWords,
     detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,
