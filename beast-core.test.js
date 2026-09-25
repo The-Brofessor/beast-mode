@@ -635,6 +635,14 @@ test('songs: a "Song:" line is found, and searched in the client\'s own service'
   // Every service the intake offers has a search, or falls back to one.
   const music = C.INTAKE_SECTIONS.find(s => s.title === 'Music').fields.find(f => f.key === 'musicService');
   for (const s of music.options) assert.match(C.songSearchUrl(s, 'x'), /^https:\/\//);
+  // Apple Music: the song's own page, from Apple's public search (Chris, 2026-09-24).
+  assert.strictEqual(C.appleSongLookupUrl('Lil Wayne - A Milli'), 'https://itunes.apple.com/search?entity=song&limit=1&country=us&term=Lil%20Wayne%20A%20Milli');
+  const page = 'https://music.apple.com/us/album/a-milli/1440738372?i=1440738491&uo=4';
+  assert.strictEqual(C.appleSongLink({ resultCount: 1, results: [{ trackViewUrl: page }] }), page);
+  assert.strictEqual(C.appleSongLink({ resultCount: 0, results: [] }), '', 'no match keeps the search');
+  assert.strictEqual(C.appleSongLink({ results: [{ trackViewUrl: 'https://evil.example/x' }] }), '', 'only an Apple Music address');
+  assert.strictEqual(C.appleSongLink({ results: [{ trackViewUrl: 'https://music.apple.com/x" onclick="y' }] }), '');
+  assert.strictEqual(C.appleSongLink(null), '');
 });
 
 test('the date of birth is required on the form, and missingRequired finds it blank', () => {

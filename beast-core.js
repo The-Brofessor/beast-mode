@@ -1264,6 +1264,20 @@ var BeastCore = (function () {
     return base + encodeURIComponent(String(song || '').replace(/\s+-\s+/, ' '));
   }
 
+  // Apple Music opens a search link on its Search tab with the words gone
+  // (Chris, on his phone, 2026-09-24), so for Apple Music the app asks
+  // Apple's public song search for the song's own page first. The answer is
+  // trusted only when it is a music.apple.com address.
+  function appleSongLookupUrl(song) {
+    return 'https://itunes.apple.com/search?entity=song&limit=1&country=us&term=' +
+      encodeURIComponent(String(song || '').replace(/\s+-\s+/, ' '));
+  }
+  function appleSongLink(result) {
+    var r = result && result.results && result.results[0];
+    var url = r && typeof r.trackViewUrl === 'string' ? r.trackViewUrl : '';
+    return /^https:\/\/music\.apple\.com\/[^\s"'<>]+$/.test(url) ? url : '';
+  }
+
   // A name as typed on the dashboard, split for the form's two boxes:
   // the first word, and the rest ("Mary Ann Smith" -> "Mary", "Ann Smith").
   function nameParts(name) {
@@ -2303,7 +2317,7 @@ var BeastCore = (function () {
     KINDS: KINDS, FREQS: FREQS, METRICS: METRICS, TIMINGS: TIMINGS, DAYS: DAYS,
     TIMING_LABELS: TIMING_LABELS, timingLabel: timingLabel,
     WEIGHT_UNIT: WEIGHT_UNIT, itemSummary: itemSummary,
-    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge, ageUnknown: ageUnknown, missingRequired: missingRequired, picksOf: picksOf, clockWords: clockWords, hhmm: hhmm, songOf: songOf, songSearchUrl: songSearchUrl, nameParts: nameParts, inchesOf: inchesOf, feetInchesOf: feetInchesOf, heightWords: heightWords,
+    MIN_AGE: MIN_AGE, ageOn: ageOn, isUnderAge: isUnderAge, ageUnknown: ageUnknown, missingRequired: missingRequired, picksOf: picksOf, clockWords: clockWords, hhmm: hhmm, songOf: songOf, songSearchUrl: songSearchUrl, appleSongLookupUrl: appleSongLookupUrl, appleSongLink: appleSongLink, nameParts: nameParts, inchesOf: inchesOf, feetInchesOf: feetInchesOf, heightWords: heightWords,
     detailLine: detailLine, detailFields: detailFields, usesMetric: usesMetric,
     TARGET_FIELDS: TARGET_FIELDS, metricLabel: metricLabel,
     targetFields: targetFields, formatTarget: formatTarget,

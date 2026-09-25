@@ -2670,9 +2670,44 @@ function coachText(text) {
     var song = BeastCore.songOf(line);
     if (!song) return esc(line);
     // The "Song:" marker is for the app, not the client (Chris, 2026-09-24).
-    return esc(song.replace(/\s+-\s+/, ' – ')) + ' <a class="songbtn" target="_blank" rel="noopener" href="' +
-      attr(BeastCore.songSearchUrl(service, song)) + '">Play</a>';
+    // An Apple Music song found already goes straight to it; otherwise the
+    // search, until resolveSongLinks finds it.
+    var found = service === 'Apple Music' ? songCache()[song] : '';
+    return esc(song.replace(/\s+-\s+/, ' – ')) + ' <a class="songbtn" target="_blank" rel="noopener" data-song="' + attr(song) + '" href="' +
+      attr(found || BeastCore.songSearchUrl(service, song)) + '">Play</a>';
   }).join('\n');
+}
+
+/* Apple Music drops the words from a search link (Chris, on his phone,
+   2026-09-24), so for an Apple Music client each song is looked up once in
+   Apple's public song search and its Play button points at the song's own
+   page. Found links are kept on the phone. Only the song's name leaves the
+   phone. No answer, or an answer that is not an Apple Music address: the
+   button keeps the search. */
+var SONGS_KEY = 'bm2.songs';
+var songLinks = null, songAsking = {};
+function songCache() {
+  if (!songLinks) { try { songLinks = JSON.parse(localStorage.getItem(SONGS_KEY) || '{}') || {}; } catch (e) { songLinks = {}; } }
+  return songLinks;
+}
+function resolveSongLinks(root) {
+  if (!BeastCore.appleSongLookupUrl || !state || !state.intakeAnswers || state.intakeAnswers.musicService !== 'Apple Music') return;
+  var cache = songCache();
+  Array.prototype.forEach.call(root.querySelectorAll('a.songbtn[data-song]'), function (a) {
+    var song = a.getAttribute('data-song');
+    if (cache[song]) { a.href = cache[song]; return; }
+    if (songAsking[song]) return;
+    songAsking[song] = true;
+    fetch(BeastCore.appleSongLookupUrl(song)).then(function (r) { return r.json(); }).then(function (j) {
+      var url = BeastCore.appleSongLink(j);
+      if (!url) return;
+      cache[song] = url;
+      try { localStorage.setItem(SONGS_KEY, JSON.stringify(cache)); } catch (e) {}
+      Array.prototype.forEach.call(document.querySelectorAll('a.songbtn[data-song]'), function (b) {
+        if (b.getAttribute('data-song') === song) b.href = url;
+      });
+    }).catch(function () { songAsking[song] = false; });
+  });
 }
 
 function coachNotice(paragraphs) {
@@ -3104,6 +3139,9 @@ function measureNav(root) {
   // font and the phone's bottom inset, so it is measured rather than assumed.
   var nav = root.querySelector('nav');
   if (nav) document.documentElement.style.setProperty('--nav-h', nav.offsetHeight + 'px');
+  // Every screen with the bar has been drawn: point the Play buttons at
+  // their songs (Apple Music).
+  if (tab === 'coach') resolveSongLinks(root);
 }
 
 /* The plan link, kept so the install screen can hand it back on the
