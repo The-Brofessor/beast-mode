@@ -587,6 +587,64 @@ header .hname { font: 700 30px/1 var(--display); text-transform: uppercase; lett
 .agoals { list-style: none; padding: 0; margin: 0; text-align: left; display: grid; gap: 8px; }
 .agoals li { display: flex; gap: 10px; align-items: flex-start; background: var(--surface2); border-radius: 12px; padding: 12px; font-weight: 600; font-size: 15px; }
 .agoals li svg { width: 20px; height: 20px; color: var(--acc-ink); flex: 0 0 auto; margin-top: 1px; stroke-width: 3; }
+
+/* ── The first look (goals brief 4c, 4i; screens reviewed with Chris
+   2026-09-24 and 25 in _gallery-goals.html and _gallery-time.html) ────── */
+.look > div { text-align: left; }
+.look h2 { text-align: center; }
+.look .amark { display: grid; place-items: center; margin-bottom: 8px; }
+.look .amark .gmark { width: 88px; height: 88px; border-radius: 22px; }
+.gk { font: 700 13px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--text3); margin: 18px 0 8px; text-align: left; }
+.gk .gkn { text-transform: none; letter-spacing: .02em; }
+.why { background: var(--surface2); border-left: 4px solid var(--acc-line); border-radius: 10px; padding: 12px 14px; font-size: 15px; font-style: italic; color: var(--text); }
+.gstep { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; background: var(--surface2); border-radius: 12px; padding: 12px 14px; }
+.gstep b { font: 700 22px/1.1 var(--display); color: var(--text); }
+.gstep span { font-size: 13px; color: var(--text2); text-align: right; }
+.pts { display: block; font: 700 15px/1.2 var(--display); font-style: normal; color: var(--acc-ink); margin-top: 2px; }
+.gpath { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.gpath span { font: 700 16px/1 var(--display); color: var(--text2); padding: 7px 9px; border-radius: 8px; background: var(--surface2); }
+.gpath span.on { background: var(--acc); color: var(--on-acc); }
+.gpath i { font-style: normal; color: var(--text3); font-weight: 700; }
+.dayitems { display: flex; flex-wrap: wrap; gap: 6px; }
+.dayitems span { padding: 7px 11px; border-radius: 999px; background: var(--surface2); font-size: 13px; font-weight: 600; color: var(--text); }
+.dots { display: flex; justify-content: center; gap: 6px; margin-top: 14px; }
+.dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--acc-line); }
+.howlead { display: flex; justify-content: space-between; align-items: center; text-align: left; }
+.howlead button { background: none; border: 0; padding: 4px 0 4px 12px; color: var(--acc); font: 600 15px/1 Inter, sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.hownum { width: 56px; height: 56px; margin: 18px auto 12px; border-radius: 16px; background: var(--acc); color: var(--on-acc); font: 700 34px/56px var(--display); text-align: center; }
+.look h2.howt { font-size: 32px; line-height: 1.05; margin-bottom: 14px; }
+.howp { font-size: 16px; line-height: 1.45; color: var(--text2); margin: 0 0 12px; }
+.howlist { list-style: none; padding: 0; margin: 8px 0 0; counter-reset: h; }
+.howlist li { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px; font-size: 16px; color: var(--text2); line-height: 1.4; }
+.howlist li::before { counter-increment: h; content: counter(h); flex: 0 0 34px; height: 34px; border-radius: 10px; background: var(--acc); color: var(--on-acc); font: 700 22px/34px var(--display); text-align: center; }
+.howlist b { color: var(--text); }
+.changed { display: inline-block; font: 700 11px/1 Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; background: var(--acc); color: var(--on-acc); padding: 4px 7px; border-radius: 6px; }
+.budget { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.budget div { background: var(--surface2); border-radius: 12px; padding: 10px 8px; text-align: center; }
+.budget b { display: block; font: 700 26px/1 var(--display); color: var(--text); }
+.budget span { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text2); }
+.budget .ok b { color: var(--acc-ink); }
+.from { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+.tl { list-style: none; padding: 0; margin: 8px 0 0; }
+.tl li { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.tl li:first-child { border-top: 0; }
+.tl .t { font: 700 17px/1.2 var(--display); color: var(--text2); white-space: nowrap; }
+.tl .w { font-weight: 600; color: var(--text); font-size: 15px; }
+.tl .was { font-size: 13px; color: var(--text3); }
+.tl .gain { font-size: 13px; color: var(--acc-ink); font-weight: 600; }
+.tl .fixed .w { color: var(--text2); font-weight: 500; }
+.tl .lock { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-left: 6px; }
+.fixedline { font-size: 13px; color: var(--text2); margin-top: 10px; }
+.fixedline b { color: var(--text); text-transform: uppercase; font-size: 11px; letter-spacing: .06em; margin-right: 6px; }
+.wk { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); align-items: start; }
+.wk:first-of-type { border-top: 0; }
+.wk > b { font: 700 16px/1.2 var(--display); color: var(--acc-ink); text-transform: uppercase; }
+.wk > b small { display: block; font: 600 12px/1.3 Inter, sans-serif; color: var(--text3); text-transform: none; margin-top: 3px; }
+.wk .keep { font-size: 14px; font-weight: 600; color: var(--text2); margin-bottom: 2px; }
+.wk .w { font-weight: 600; color: var(--text); }
+.wk .was { font-size: 13px; color: var(--text2); }
+.lookback { margin: 14px 0 0; }
 .coachhead b { font: 700 22px/1 var(--display); text-transform: uppercase; letter-spacing: .02em; display: block; margin-bottom: 3px; }
 .bubble { font-size: 15px; }
 
@@ -625,7 +683,7 @@ nav button.active svg { color: var(--acc-ink); stroke-width: 2.6; }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.19.0';
+var BUILT_AGAINST = '2.20.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -780,6 +838,7 @@ function load() {
     state.seen = state.seen || [];
     state.coachLog = state.coachLog || [];
     if (!state.perfectWeek) state.perfectWeek = BeastCore.perfectWeek(state.items);
+    state.budget = cleanBudget(state.budget);
   }
 }
 
@@ -1877,6 +1936,9 @@ function applySetup(data) {
     v: BeastCore.PAYLOAD_VERSION,
     items: data.items || [],
     goals: data.goals || [],
+    // Finding the time (goals brief 4i): the plan's time budget and block.
+    budget: cleanBudget(data.budget),
+    block: data.block || 1,
     profile: data.profile || {},
     log: {},
     perfectWeek: BeastCore.perfectWeek(data.items || []),
@@ -1975,10 +2037,32 @@ function applyPlanUpdate(data) {
   // Goals are matched by key, then by their words, so a goal keeps its id,
   // its completion and its step history (4k.4). Old plans had no keys and
   // match by id as before.
+  // A new block, or goals the coach changed, are agreed again (goals brief
+  // 4f): every card at a new block, only the changed and new ones mid-block.
+  // The block only ever goes up: a mid-block fix sent without a block is
+  // not a step back to block 1 (CTO, step 4).
+  var newBlock = (data.block || 1) > (state.block || 1);
+  if (data.block && data.block > (state.block || 1)) state.block = data.block;
+  if (Array.isArray(data.budget)) state.budget = cleanBudget(data.budget);
   if (data.goals && data.goals.length) {
     var hasKeys = data.goals.some(function (g) { return g && g.key; });
     if (hasKeys) {
-      state.goals = BeastCore.mergeGoals(state.goals, data.goals, before).goals;
+      var hadIds = {};
+      state.goals.forEach(function (g) { hadIds[g.id] = true; });
+      var merged = BeastCore.mergeGoals(state.goals, data.goals, before);
+      state.goals = merged.goals;
+      if (state.goalsAgreedAt) {
+        var ask = newBlock ? state.goals.map(function (g) { return g.id; })
+          : state.goals.filter(function (g) { return !hadIds[g.id] || merged.changed.indexOf(g.id) !== -1; }).map(function (g) { return g.id; });
+        // A second update while cards are still to agree adds to them; it
+        // never drops a card still owed, or a new block's day screen.
+        var was = state.recommit || { ids: [], newBlock: false, changed: [] };
+        var union = function (a, b) { return a.concat(b.filter(function (x) { return a.indexOf(x) === -1; })); };
+        if (ask.length || was.ids.length) {
+          state.recommit = { ids: union(was.ids, ask), newBlock: was.newBlock || newBlock,
+            changed: union(was.changed || [], newBlock ? [] : merged.changed) };
+        }
+      }
     } else {
       var completed = {};
       state.goals.forEach(function (g) { completed[g.id] = g.completed; });
@@ -1987,6 +2071,15 @@ function applyPlanUpdate(data) {
       });
     }
   }
+  // Cards for goals that are gone are dropped, and any look under way starts
+  // again from its first screen, so no card is skipped (CTO, step 4).
+  if (state.recommit) {
+    var live = {};
+    state.goals.forEach(function (g) { live[g.id] = true; });
+    state.recommit.ids = state.recommit.ids.filter(function (id) { return live[id]; });
+    if (!state.recommit.ids.length) state.recommit = null;
+  }
+  if (!state.goalsAgreedAt || state.recommit) state.look = null;
 
   // A re-issued token replaces the old one; an absent one leaves it alone.
   if (data.coachToken) state.coachToken = data.coachToken;
@@ -2430,7 +2523,37 @@ function coachState() {
     goals: state.goals.filter(function (g) { return !g.completed; }).map(function (g) { return g.text; }),
     doneToday: done, openToday: open, missedWeek: missed,
     // Where day-one points come from, so the coach never guesses (step 5).
-    startPoints: BeastCore.startPoints(state.starts, state.perfectWeek || BeastCore.perfectWeek(state.items))
+    startPoints: BeastCore.startPoints(state.starts, state.perfectWeek || BeastCore.perfectWeek(state.items)),
+    // The new day, so the coach can talk it through (Chris, 2026-09-25).
+    plan: planForCoach()
+  };
+}
+
+// The plan as the client sees it on Your day, rebuilt, in plain lines: both
+// days, the changes by week, the pace and the time budget, and whether they
+// are still deciding. Only for a plan that finds time or has goals with steps.
+function planForCoach() {
+  if (!lookHasDay() && !(state.goals || []).some(function (g) { return g.measure; })) return null;
+  var pace = BeastCore.paceOf(state.pace);
+  var line = function (r) {
+    return minsWords(r.m) + ' ' + r.name + (r.locked ? ' (does not move)' : '') + (r.was ? ' (' + r.was + ')' : '') + (r.gain ? ' (' + r.gain + ')' : '');
+  };
+  var stage = !state.goalsAgreedAt ? 'first' : state.recommit ? 'recommit' : '';
+  // The whole day only while the client is deciding; after that the coach
+  // has the checklist and the routine, and the changes are enough (CTO,
+  // step 4: about 700 tokens a turn saved).
+  return {
+    stage: stage,
+    pace: pace,
+    work: stage ? dayRows('work', lookDayIndex('work')).map(line) : [],
+    off: stage ? dayRows('off', lookDayIndex('off')).map(line) : [],
+    changes: swapUnits().map(function (u) {
+      var w = BeastCore.startWeekFor(u.n, pace);
+      return (w > 4 ? 'Next block' : 'Week ' + w) + ': ' + u.text + (u.was ? ' (' + (u.step ? u.was : 'replaces ' + u.was) + ')' : '');
+    }),
+    budget: (state.budget || []).map(function (b) {
+      return (b.day === 'work' ? 'Work day' : 'Day off') + ': needs ' + b.need + ' min, found ' + b.found + ' min' + (b.from ? ' (' + b.from + ')' : '');
+    })
   };
 }
 
@@ -3166,9 +3289,34 @@ function render() {
     measureNav(root);
     return;
   }
-  if (!state.goalsAgreedAt) { root.innerHTML = agreementScreen(); return; }
+  // Running a goal by The Brofessor from its card: the chat, and a way back.
+  if (lookChat) {
+    tab = 'coach';
+    // Before the plan starts there is no day count and no rank to show; the
+    // bar where the tab bar would be keeps clear of the home indicator
+    // (CTO, step 4).
+    var top = state.goalsAgreedAt ? header()
+      : '<header><div class="wrap"><div class="hrow">' + mark('sm', '') + '<div class="hwho"><div class="hname">' +
+        esc(state.profile.name || 'Beast Mode') + '</div></div></div></div></header>';
+    root.innerHTML = top + '<div class="wrap"><button class="btn sec lookback" onclick="backToGoals()">' +
+      (lookChat.day ? 'Back to your new day' : 'Back to your goals') + '</button>' + coachTab() + '</div>';
+    document.documentElement.style.setProperty('--nav-h', 'env(safe-area-inset-bottom, 0px)');
+    resolveSongLinks(root);
+    var ask = document.getElementById('coach-input');
+    if (ask && lookChat.fresh) {
+      ask.value = lookChat.day ? 'About my new day: ' : 'About my goal “' + lookChat.text + '”: ';
+      lookChat.fresh = false;
+    }
+    return;
+  }
+  // The first look, and the recommit at a new block (goals brief 4c, 4f).
+  // A recommit whose goals are all gone has nothing to ask (CTO, step 4).
+  if (state.recommit && !lookGoals().length) { state.recommit = null; state.look = null; save(); }
+  if (!state.goalsAgreedAt || state.recommit) { root.innerHTML = firstLookScreen(); return; }
   // A new plan block arrived: the routine, asked again (loop brief 5d).
   if (routineDue()) { if (!intake) startRoutineAgain(); root.innerHTML = intakeScreen(); return; }
+  // How your plan works, opened from Profile.
+  if (howView !== null) { root.innerHTML = howScreen(); return; }
 
   root.innerHTML = header() + '<div class="wrap">' +
     (tab === 'today' ? todayTab() : tab === 'week' ? weekTab() :
@@ -3362,23 +3510,470 @@ async function askForBoss() {
   if (data && 'boss' in data && data.boss) { state.coachBoss = data.boss; save(); render(); }
 }
 
-function agreementScreen() {
-  // The last screen before the plan (design pass, Chris 2026-09-24): a band,
-  // the logo centred, the goals as a ticked list. Chris's wording.
-  var byTerm = function (term) {
-    var gs = state.goals.filter(function (g) { return g.term === term; });
-    if (!gs.length) return '';
-    return '<div class="term">' + (term === 'short' ? 'Next 4 weeks' : '6 to 12 months') + '</div><ul class="agoals">' +
-      gs.map(function (g) { return '<li>' + icon('check') + '<span>' + esc(g.text) + '</span></li>'; }).join('') + '</ul>';
-  };
-  return '<div class="modal center agree"><div>' +
-    '<div class="lead">This is where it starts.</div>' +
-    '<div class="amark">' + mark() + '</div>' +
-    '<h2>Your goals</h2><p class="asub">Agreeing starts the clock. Day one is today.</p>' +
-    byTerm('short') + byTerm('long') +
-    (state.goals.length ? '' : '<p style="margin-top:14px">Your coach hasn’t set your goals yet. You can start anyway.</p>') +
-    '<button class="btn" style="margin-top:20px" onclick="agreeToGoals()">I’m in. Let’s go.</button>' +
+/* ── the first look (goals brief 4c, 4f, 4i) ────────────────────────────
+   At first plan open, after the welcome: How Beast Mode works, then Your
+   day, rebuilt with One change at a time, then one card per goal, each
+   agreed with GOT IT. The last GOT IT starts the plan. At a new block
+   (every card) or when the coach changed a goal mid-block (only those
+   cards), the cards come back: the recommit, which never moves the plan's
+   start (4l.8 of the CTO review). Every line here is Chris's wording from
+   the reviewed screens, except where marked as a placeholder. */
+
+var lookChat = null;      // { text, fresh }: a goal being run by The Brofessor mid-look
+var lookDay = 'work';     // Your day, rebuilt: 'work' or 'off'
+
+// Chris's overview of the app. Kept for the first-link welcome (queued
+// 2026-09-25); the plan's arrival uses HOW_SLIDES below.
+var HOW_LINES = [
+  ['Your plan is your new day.', 'Your workouts and meals are done for you. We also help you create new habits based on what you told us so you actually follow them.'],
+  ['Every goal is broken into steps.', 'Monthly, Weekly, Daily. The steps adjust as you progress.'],
+  ['Tick your checklist every day.', 'Wake up, workout, hit your macros, screens off, bedtime. Whatever is on the list that day check it off. Bonus points for getting it done on time!'],
+  ['The Brofessor is your guru.', 'He can answer any question about your plan, explain an exercise, suggest a different meal, or even make a playlist for you.']
+];
+// What to expect once the plan arrives, for someone who has no idea what
+// the app does (Chris, 2026-09-25): four slides before the goal cards, again
+// at every new block with Skip, and from Profile any time. Draft wording.
+// Slide 1 has three versions: a first plan, a new block, and Profile.
+var HOW_SLIDES = [
+  { title: { first: 'Your plan is here.', block: 'Your next block is here.', profile: 'How your plan works.' },
+    lines: { first: ['Your coach built it from your answers: your schedule, your training, your goals.',
+                     'Next: read your goals, then your new day. If something won’t work, tell The Brofessor before you start. When it looks right, tap GOT IT and your plan starts.'],
+             block: ['Your coach built it from your last 4 weeks and your answers.',
+                     'Next: read your goals, then your new day. If something won’t work, tell The Brofessor. When it looks right, tap GOT IT and the new block starts.'],
+             profile: ['Your coach built it from your answers: your schedule, your training, your goals.',
+                       'If something isn’t working, tell The Brofessor. Only your coach changes the plan.'] } },
+  { title: 'Every day: open it, tick it off.',
+    lines: ['Your checklist is your day: wake up, workout, meals, supplements, screens off, bed.',
+            'Tick each one when you do it. Ticking it on time earns bonus points. Reminders come when something is due.'] },
+  { title: 'One change at a time.',
+    lines: ['You won’t change your whole life on day one. Your plan adds one new habit at a time, at the pace you pick: slower, standard or faster.',
+            'Keep last week’s habits going as each new one starts. Every 4 weeks your coach builds your next block.'] },
+  { title: 'How you’ll know it’s working.',
+    lines: ['Each goal has a target for the month, the week and the day. Once a week is Measure day: weight, and waist, body fat and how your clothes fit if you have them. Hit your steps to earn points and move up the ranks.',
+            'Miss one and your coach helps you adjust. The Brofessor answers questions any time. Only your coach changes the plan.'] }
+];
+var howView = null;       // the slide open from Profile, or null
+var PACE_WORDS = { slower: 'Slower', standard: 'Standard', faster: 'Faster' };
+var PACE_NOTES = { slower: 'One change every two weeks.', standard: 'One change a week.', faster: 'Two changes a week.' };
+
+function lookState() { if (!state.look) state.look = { step: 0, card: 0 }; return state.look; }
+
+// A plan link can be forwarded or made by hand, so the budget in it is
+// checked here, whatever the dashboard checked (CTO, step 4): two known
+// kinds of day, whole minutes, text as text.
+function cleanBudget(list) {
+  if (!Array.isArray(list)) return [];
+  var mins = function (v) { var n = Math.floor(Number(v)); return isFinite(n) && n >= 0 && n < 1440 ? n : 0; };
+  return list.filter(function (b) { return b && typeof b === 'object' && (b.day === 'work' || b.day === 'off'); })
+    .slice(0, 2).map(function (b) {
+      return { day: b.day, need: mins(b.need), found: mins(b.found), from: String(b.from == null ? '' : b.from).slice(0, 300) };
+    });
+}
+// '13:00' -> '1:00 pm': minutes always, and a space before am or pm, as the
+// screens were approved.
+function lookTime(hhmm) {
+  var m = BeastCore.minutesOfDay(hhmm);
+  if (m === null) return '';
+  var h = Math.floor(m / 60), mm = m % 60;
+  return (h % 12 || 12) + ':' + (mm < 10 ? '0' : '') + mm + (h < 12 ? ' am' : ' pm');
+}
+function lookDate(ymd) { return BeastCore.localToDate(ymd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+
+function lookGoals() {
+  var ids = state.recommit ? state.recommit.ids : null;
+  return (state.goals || []).filter(function (g) { return !ids || ids.indexOf(g.id) !== -1; });
+}
+
+function lookHasDay() {
+  return !!((state.budget && state.budget.length) ||
+    state.items.some(function (it) { return it.swap || (it.steps && it.steps.length); }));
+}
+
+// Goals first, then the day built to reach them, and the day is the last
+// thing agreed (Chris, 2026-09-25): the why, then the how.
+function lookSteps() {
+  var s = [];
+  if (!state.recommit || state.recommit.newBlock) s.push('how');
+  s.push('goals');
+  if (lookHasDay() && (!state.recommit || state.recommit.newBlock)) s.push('day');
+  return s;
+}
+
+// The plan's start as the look sees it: today for a first plan, the real
+// start once the plan is running.
+function lookStart() { return state.goalsAgreedAt ? (state.profile.startDate || BeastCore.todayLocal()) : BeastCore.todayLocal(); }
+function lookBlockStart() { return BeastCore.blockStartOf(lookStart(), state.block || 1); }
+
+function firstLookScreen() {
+  var L = lookState(), steps = lookSteps();
+  var step = steps[Math.min(L.step, steps.length - 1)];
+  if (step === 'how') return howScreen();
+  if (step === 'day') return dayScreen();
+  return goalCardScreen();
+}
+
+function lookNext() {
+  var L = lookState();
+  L.step++; L.card = 0;
+  save(); window.scrollTo(0, 0); render();
+}
+
+// One slide of HOW_SLIDES. In the look, Skip goes straight to the goals; from
+// Profile the last button closes.
+function howScreen() {
+  var inProfile = howView !== null;
+  var mode = inProfile ? 'profile' : state.recommit ? 'block' : 'first';
+  var i = inProfile ? howView : (lookState().slide || 0);
+  i = Math.max(0, Math.min(HOW_SLIDES.length - 1, i));
+  var s = HOW_SLIDES[i], last = i === HOW_SLIDES.length - 1;
+  var title = typeof s.title === 'string' ? s.title : s.title[mode];
+  var lines = Array.isArray(s.lines) ? s.lines : s.lines[mode];
+  var go = inProfile ? (last ? 'howClose()' : 'howGo(1)') : (last ? 'lookNext()' : 'howGo(1)');
+  var label = last ? (inProfile ? 'Done' : 'Show me my goals') : 'Next';
+  return '<div class="modal center agree look"><div>' +
+    '<div class="lead howlead"><span>How your plan works</span>' +
+      '<button onclick="' + (inProfile ? 'howClose()' : 'lookNext()') + '">' + (inProfile ? 'Close' : 'Skip') + '</button></div>' +
+    '<div class="hownum">' + (i + 1) + '</div><h2 class="howt">' + esc(title) + '</h2>' +
+    lines.map(function (l) { return '<p class="howp">' + esc(l) + '</p>'; }).join('') +
+    '<div class="dots">' + HOW_SLIDES.map(function (x, k) { return '<i' + (k === i ? ' class="on"' : '') + '></i>'; }).join('') + '</div>' +
+    '<button class="btn" style="margin-top:16px" onclick="' + go + '">' + label + '</button>' +
+    (i > 0 ? '<button class="btn sec" style="margin-top:8px" onclick="howGo(-1)">Back</button>' : '') +
     '</div></div>';
+}
+
+function howGo(d) {
+  if (howView !== null) { howView = Math.max(0, Math.min(HOW_SLIDES.length - 1, howView + d)); render(); return; }
+  var L = lookState();
+  L.slide = Math.max(0, Math.min(HOW_SLIDES.length - 1, (L.slide || 0) + d));
+  save(); render();
+}
+function howOpen() { howView = 0; window.scrollTo(0, 0); render(); }
+function howClose() { howView = null; tab = 'profile'; render(); }
+
+// "30 min of TV. Half an hour more sleep." -> what it was, and what it gains.
+function splitReplaces(s) {
+  var t = String(s || '').trim();
+  var i = t.indexOf('. ');
+  return i === -1 ? { was: t.replace(/\.$/, ''), gain: '' } : { was: t.slice(0, i), gain: t.slice(i + 2) };
+}
+
+// The two kinds of day: the first work day the client tapped, and the first
+// day they did not (the weekend when they gave none).
+function lookDayIndex(kind) {
+  var picks = BeastCore.picksOf((state.intakeAnswers || {}).workDays).map(function (d) { return BeastCore.DAYS.indexOf(d); })
+    .filter(function (i) { return i >= 0; });
+  if (kind === 'work') return picks.length ? picks[0] : 0;
+  var off = [5, 6, 0, 1, 2, 3, 4].filter(function (i) { return picks.indexOf(i) === -1; })[0];
+  return off === undefined ? 5 : off;
+}
+
+// When a swap starts at the client's pace: the weeks added to the block's
+// start first, then never before today, in the same order as the core
+// (BeastCore.scheduleSwaps), so the screen and the stored date agree. A
+// change already under way shows the date it started (CTO, step 4).
+function swapStartDate(n, stored) {
+  var t = BeastCore.todayLocal();
+  if (state.goalsAgreedAt && stored && stored <= t) return stored;
+  var d = BeastCore.addDays(lookBlockStart(), 7 * (BeastCore.startWeekFor(n, state.pace) - 1));
+  return d > t ? d : t;
+}
+
+// The week of the block under way, 1 to 4, for a card shown mid-block.
+function lookWeekNow() {
+  if (!state.goalsAgreedAt) return 1;
+  var n = Math.floor(BeastCore.daysBetween(lookBlockStart(), BeastCore.todayLocal()) / 7) + 1;
+  return Math.max(1, Math.min(4, n));
+}
+
+// Minutes from midnight in the look's words: 540 -> '9:00 am'.
+function minsWords(m) {
+  var h = Math.floor(m / 60) % 24, mm = m % 60;
+  return (h % 12 || 12) + ':' + (mm < 10 ? '0' : '') + mm + (h < 12 ? ' am' : ' pm');
+}
+
+// The whole day (Chris, 2026-09-25): what the client told us about their day,
+// merged with the plan's items, in time order. The intake gives work hours,
+// meals, the training slot and, when the plan has none, wake and bed; the
+// plan gives every item with a time, its change and what it gains.
+function dayRows(kind, idx) {
+  var p = kind === 'work' ? 'work' : 'off';
+  var a = state.intakeAnswers || {};
+  var at = function (key, pm) { return BeastCore.timeFromText(a[key], pm ? { pm: true } : undefined); };
+  var rows = [];
+  var planItems = state.items.filter(function (it) {
+    return it.dueBy && (it.freq === 'daily' || (it.freq === 'weekly' && it.days.indexOf(idx) !== -1));
+  });
+  var hasWake = planItems.some(function (it) { return /^wake[\s-]?up\b/i.test(it.name); });
+  var hasBed = planItems.some(function (it) { return /^(lights out|bed)\b/i.test(it.name); });
+  planItems.forEach(function (it) {
+    var r = splitReplaces(it.replaces);
+    var sd = it.swap ? swapStartDate(it.swap, it.addedAt) : '';
+    var starts = sd && sd > BeastCore.todayLocal() ? 'Starts ' + lookDate(sd) : '';
+    var wake = /^wake[\s-]?up\b/i.test(it.name);
+    rows.push({ m: BeastCore.minutesOfDay(it.dueBy), order: wake ? 0 : 2, name: wake ? 'Wake up' : it.name,
+      was: r.was ? 'Was: ' + r.was : '',
+      gain: [r.gain, starts, wake && kind === 'off' ? 'Sleep in, up to an hour' : '']
+        .filter(Boolean).map(function (x) { return x.replace(/\.$/, ''); }).join('. ') });
+  });
+  var wakeAt = at(p + 'Wake');
+  if (!hasWake && wakeAt !== null) rows.push({ m: wakeAt, order: 0, name: 'Wake up' });
+  if (kind === 'work') {
+    var s = at('workStart'), e = at('workEnd');
+    if (s !== null) rows.push({ m: s, order: 1, name: 'Work' + (e !== null ? ' until ' + minsWords(e) : '') });
+  }
+  var count = parseFloat(a[p + 'MealCount']);
+  var fixed = BeastCore.picksOf(a.fixedTime);
+  var meals = [];
+  for (var i = 1; !isNaN(count) && i <= count && i <= 6; i++) {
+    var mt = at(p + 'Meal' + i);
+    if (mt === null) continue;
+    var where = a[p + 'Meal' + i + 'Where'];
+    meals.push({ m: mt, order: 1, name: 'Meal ' + i + (where ? (where === 'out' ? ', out' : ', at ' + where) : ''), home: where === 'home' });
+  }
+  // Family dinner never moves: the last meal at home from 5 pm, when they
+  // said family dinner is fixed.
+  if (fixed.indexOf('family dinner') !== -1) {
+    var dinner = meals.filter(function (x) { return x.home && x.m >= 17 * 60; }).pop();
+    if (dinner) { dinner.locked = true; dinner.name = 'Family dinner'; }
+  }
+  rows = rows.concat(meals);
+  var tr = at(p + 'Train');
+  if (tr !== null) {
+    var tr2 = at(p + 'Train2');
+    rows.push({ m: tr, order: 1, name: 'Training, your first choice', gain: tr2 !== null ? 'Fallback ' + minsWords(tr2) : '' });
+  }
+  var bed = at(p + 'Bed', true);
+  if (!hasBed && bed !== null) rows.push({ m: bed, order: 1, name: 'Bed' });
+  // A time after midnight belongs at the end of the day, not the start.
+  rows.forEach(function (r) { if (r.m < 4 * 60 && /^(lights out|bed)\b/i.test(r.name)) r.m += 24 * 60; });
+  return rows.sort(function (x, y) { return x.m - y.m || x.order - y.order; });
+}
+
+function dayScreen() {
+  var kind = lookDay, idx = lookDayIndex(kind);
+  var b = (state.budget || []).filter(function (x) { return x.day === kind; })[0];
+  var rows = dayRows(kind, idx).map(function (r) {
+    return '<li class="' + (r.locked ? 'fixed' : '') + '"><span class="t">' + esc(minsWords(r.m)) + '</span><span>' +
+      '<div class="w">' + esc(r.name) + (r.locked ? '<span class="lock">doesn’t move</span>' : '') + '</div>' +
+      (r.was ? '<div class="was">' + esc(r.was) + '</div>' : '') +
+      (r.gain ? '<div class="gain">' + esc(r.gain) + '</div>' : '') +
+      '</span></li>';
+  }).join('');
+  var ans = state.intakeAnswers || {};
+  var fixed = BeastCore.picksOf(ans.fixedTime).filter(function (p) { return p !== 'none'; });
+  if (ans.fixedMore && String(ans.fixedMore).trim()) fixed.push(String(ans.fixedMore).trim());
+  var hasOff = (state.budget || []).some(function (x) { return x.day === 'off'; });
+  var seg = hasOff ? '<div class="seg" style="margin-bottom:14px">' +
+      '<button class="' + (kind === 'work' ? 'on' : '') + '" onclick="setLookDay(\'work\')">Training day</button>' +
+      '<button class="' + (kind === 'off' ? 'on' : '') + '" onclick="setLookDay(\'off\')">Day off</button></div>' : '';
+  var budget = b ? '<div class="budget"><div><b>' + esc(String(b.need)) + ' min</b><span>The plan needs</span></div>' +
+      '<div class="ok"><b>' + esc(String(b.found)) + ' min</b><span>We found</span></div>' +
+      '<div><b>' + esc(String(Math.max(0, b.found - b.need))) + ' min</b><span>To spare</span></div></div>' +
+      (b.from ? '<div class="from">Found: ' + esc(b.from) + '</div>' : '') : '';
+  // What the day is for: the goals they just agreed to (Chris, 2026-09-25).
+  var aims = lookGoals().map(function (g) { return g.text; });
+  var aim = aims.length ? '<p class="from" style="font-size:15px;color:var(--text);margin:-4px 0 12px">Built to get you to ' +
+    esc(aims.length > 1 ? aims.slice(0, -1).join(', ') + ' and ' + aims[aims.length - 1] : aims[0]) + '.</p>' : '';
+  return '<div class="wrap" style="padding-top:18px"><div class="card band">' +
+    '<div class="lead">Your day, rebuilt.</div>' + aim + seg + budget +
+    (rows ? '<ul class="tl">' + rows + '</ul>' : '') +
+    (fixed.length ? '<div class="fixedline"><b>Doesn’t move</b>' + esc(fixed.join(', ')) + '</div>' : '') +
+    '</div>' + changesCard() + '</div>';
+}
+
+function setLookDay(k) { lookDay = k; render(); }
+
+// One change at a time: the swaps in the order they start at the client's
+// pace. Above each, the weeks it builds on; a moving target shows its old
+// time and no "+" (Chris's layout, 2026-09-25).
+function swapUnits() {
+  var u = [];
+  state.items.forEach(function (it) {
+    if (it.swap) u.push({ n: it.swap, at: it.addedAt, text: it.name + (it.dueBy ? ' by ' + lookTime(it.dueBy) : ''), was: splitReplaces(it.replaces).was, step: false });
+    (it.steps || []).forEach(function (s, j) {
+      var prev = j ? it.steps[j - 1].dueBy : it.dueBy;
+      u.push({ n: s.swap, at: s.at, text: s.label || (it.name + ' by ' + lookTime(s.dueBy)), was: 'Was ' + lookTime(prev), step: true });
+    });
+  });
+  return u.sort(function (a, b) { return a.n - b.n; });
+}
+
+function changesCard() {
+  var units = swapUnits();
+  var pace = BeastCore.paceOf(state.pace);
+  var list = units.map(function (u) {
+    var week = BeastCore.startWeekFor(u.n, pace);
+    var upTo = Math.min(week, 5) - 1;
+    var carry = upTo < 1 ? '' : upTo === 1 ? 'Week 1 goals' : upTo === 2 ? 'Week 1 + 2 goals' : 'Week 1 to ' + upTo + ' goals';
+    return '<div class="wk"><b>' + (week > 4 ? 'Next block' : 'Week ' + week) +
+      (week <= 4 ? '<small>' + esc(lookDate(swapStartDate(u.n, u.at))) + '</small>' : '') + '</b><span>' +
+      (carry ? '<div class="keep">' + carry + '</div>' : '') +
+      '<div class="w">' + (carry && !u.step ? '+ ' : '') + esc(u.text) + '</div>' +
+      (u.was ? '<div class="was">' + esc(u.step ? u.was : 'Replaces ' + u.was.charAt(0).toLowerCase() + u.was.slice(1)) + '</div>' : '') +
+      '</span></div>';
+  }).join('');
+  return '<div class="card" style="margin-top:14px">' +
+    (units.length
+      ? '<div class="sectitle">One change at a time</div>' +
+        '<p style="color:var(--text2);margin-bottom:12px">Not everything at once, easiest first. Each change adds to the ones before it, so keep doing those too. Pick your pace. You can change it later.</p>' +
+        '<div class="seg">' + BeastCore.PACES.map(function (p) {
+          return '<button class="' + (p === pace ? 'on' : '') + '" onclick="setLookPace(\'' + p + '\')">' + PACE_WORDS[p] + '</button>';
+        }).join('') + '</div>' +
+        '<p class="imeta" style="margin:8px 0 6px">' + PACE_NOTES[pace] + '</p>' + list
+      : '') +
+    // The day is agreed too (Chris, 2026-09-25): talk it through first if
+    // something will not work, then the last GOT IT starts the plan.
+    (coachAvailable() ? '<button class="btn sec" style="margin-top:14px" onclick="lookAskDay()">Run it by The Brofessor</button>' : '') +
+    '<button class="btn" style="margin-top:' + (coachAvailable() ? '8' : '14') + 'px" onclick="finishLook()">GOT IT. Let’s go.</button></div>';
+}
+
+function lookAskDay() {
+  lookChat = { text: 'my new day', fresh: true, day: true };
+  tab = 'coach';
+  render();
+}
+
+// The client's pace. While the look is open, only the choice is kept and
+// the screen shows its weeks; the dates move once, at the last GOT IT
+// (finishLook), so trying the options never pins a change to today (CTO,
+// step 4).
+function setLookPace(p) {
+  state.pace = BeastCore.paceOf(p);
+  state.paceAt = new Date().toISOString();
+  save(); render();
+}
+
+// Dates the changes at the client's pace. A change that started before
+// today keeps its date for good; one dated today by the plan update that
+// brought it has not been seen yet, so it moves with the pace (4l.1).
+function reschedulePace() {
+  var today = BeastCore.todayLocal();
+  var prev = state.items.map(function (it) {
+    return { id: it.id, addedAt: it.addedAt < today ? it.addedAt : '9999-12-31',
+      steps: (it.steps || []).map(function (s) { return { swap: s.swap, at: s.at && s.at < today ? s.at : '' }; }) };
+  });
+  state.items = BeastCore.scheduleSwaps(state.items, { planStart: state.profile.startDate || today, pace: state.pace, today: today, prev: prev });
+}
+
+function unitOf(g) {
+  var k = g.measure && g.measure.kind;
+  return k === 'weight' ? ' lbs' : k === 'waist' ? ' inches' : k === 'bodyfat' ? '%' : '';
+}
+function stepWords(g, s) {
+  if (!s) return '';
+  if (s.text) return s.text;
+  if (s.target === null || s.target === undefined || s.target === '') return '';
+  if (g.measure.kind === 'habit') return s.target + ' days that week';
+  return typeof s.target === 'number' ? s.target + unitOf(g) : String(s.target);
+}
+
+function goalCardScreen() {
+  var goals = lookGoals(), L = lookState();
+  if (!goals.length) {
+    return '<div class="modal center agree look"><div><div class="lead">This is where it starts.</div>' +
+      '<div class="amark">' + mark() + '</div><h2>Your goals</h2>' +
+      '<p style="margin-top:6px;text-align:center">Your coach hasn’t set your goals yet. You can start anyway.</p>' +
+      '<button class="btn" style="margin-top:20px" onclick="finishLook()">GOT IT</button></div></div>';
+  }
+  var i = Math.min(L.card, goals.length - 1), g = goals[i];
+  var pw = BeastCore.perfectWeek(state.items);
+  var pts = function (kind) { var v = BeastCore.stepValue(kind, pw); return v ? '<em class="pts">+' + v.toLocaleString() + ' pts</em>' : ''; };
+  var changed = state.recommit && (state.recommit.changed || []).indexOf(g.id) !== -1;
+  var body = '<h2>' + esc(g.text) + '</h2>' +
+    (changed ? '<p style="text-align:center;margin:4px 0 0"><span class="changed">Your coach changed this</span></p>' : '') +
+    (g.why ? '<div class="gk">Why this goal?</div><div class="why">“' + esc(g.why) + '”</div>' : '');
+  if (g.measure) {
+    var block = state.block || 1;
+    var months = g.months || [];
+    var month = months.filter(function (s) { return s.n === block; })[0] || months[0];
+    var mi = months.indexOf(month);
+    if (months.length) {
+      body += '<div class="gk">The path · ' + months.length + (months.length === 1 ? ' step' : ' steps') + '</div><div class="gpath">' +
+        months.map(function (s, k) {
+          var t = s.target === null || s.target === undefined || s.target === '' ? (s.text || '') : String(s.target);
+          return '<span' + (k === mi ? ' class="on"' : '') + '>' + esc(t) + '</span>';
+        }).join('<i>›</i>') + '</div>';
+    }
+    if (month) {
+      body += '<div class="gk">Goal this month</div><div class="gstep"><b>' + esc(stepWords(g, month)) + '</b><span>by ' +
+        esc(lookDate(BeastCore.addDays(lookStart(), BeastCore.BLOCK_DAYS * month.n - 1))) + pts('m') + '</span></div>';
+    }
+    var week = null, weekWhen = '';
+    // The step under way, not always the first (CTO, step 4; brief 4k.2):
+    // a habit goal's latest change that has started, else its first; an
+    // outcome goal's week of the block today falls in.
+    if (g.measure.kind === 'habit') {
+      var byStart = (g.weeks || []).slice().sort(function (a, b) { return a.swap - b.swap; }).map(function (s) {
+        var it = state.items.filter(function (x) { return x.swap === s.swap || (x.steps || []).some(function (y) { return y.swap === s.swap; }); })[0];
+        var stored = it ? (it.swap === s.swap ? it.addedAt : ((it.steps || []).filter(function (y) { return y.swap === s.swap; })[0] || {}).at) : '';
+        return { s: s, from: swapStartDate(s.swap, stored) };
+      });
+      var today = BeastCore.todayLocal();
+      var started = byStart.filter(function (x) { return x.from <= today; });
+      var pick = started.length ? started[started.length - 1] : byStart[0];
+      if (pick) { week = pick.s; weekWhen = pick.from <= today ? 'this week' : 'from ' + lookDate(pick.from); }
+    } else {
+      var now = lookWeekNow();
+      week = (g.weeks || []).filter(function (s) { return s.n === now; })[0] || (g.weeks || [])[0];
+      if (week) weekWhen = 'this week';
+    }
+    if (week) body += '<div class="gk">Goal this week</div><div class="gstep"><b>' + esc(stepWords(g, week)) + '</b><span>' + esc(weekWhen) + pts('w') + '</span></div>';
+    var link = BeastCore.goalLink(g);
+    var mine = state.items.filter(function (it) { return it.goalId && (it.goalId === link || it.goalId === g.id); });
+    if (mine.length) {
+      body += '<div class="gk">Every day <span class="gkn">(check these off)</span></div><div class="dayitems">' +
+        mine.map(function (it) { return '<span>' + esc(it.name) + '</span>'; }).join('') + '</div>';
+    }
+  }
+  var dots = goals.length > 1 ? '<div class="dots">' + goals.map(function (x, k) { return '<i' + (k === i ? ' class="on"' : '') + '></i>'; }).join('') + '</div>' : '';
+  return '<div class="modal center agree look"><div>' +
+    '<div class="lead">Goal ' + (i + 1) + ' of ' + goals.length + '</div>' + body +
+    (coachAvailable() ? '<button class="btn sec" style="margin-top:18px" onclick="lookAsk(' + i + ')">Run it by The Brofessor</button>' : '') +
+    '<button class="btn"' + (coachAvailable() ? '' : ' style="margin-top:18px"') + ' onclick="lookGotIt()">GOT IT</button>' + dots +
+    '</div></div>';
+}
+
+// GOT IT on a card: the next card, then the day when there is one, else
+// the plan starts.
+function lookGotIt() {
+  var L = lookState();
+  L.card++;
+  if (L.card >= lookGoals().length) {
+    var steps = lookSteps();
+    if (steps.indexOf('goals') < steps.length - 1) { lookNext(); return; }
+    finishLook(); return;
+  }
+  save(); window.scrollTo(0, 0); render();
+}
+
+function lookAsk(i) {
+  var g = lookGoals()[i];
+  if (!g) return;
+  lookChat = { text: g.text, fresh: true };
+  tab = 'coach';
+  render();
+}
+
+function backToGoals() { lookChat = null; tab = 'today'; render(); }
+
+// The last GOT IT. A first plan starts here; a recommit records the cards
+// and a new ladder, and moves nothing else.
+function finishLook() {
+  var now = new Date().toISOString();
+  var ids = lookGoals().map(function (g) { return g.id; });
+  state.goals.forEach(function (g) { if (ids.indexOf(g.id) !== -1) g.agreedAt = now; });
+  state.look = null;
+  if (!state.goalsAgreedAt) {
+    agreeToGoals();
+    state.ladder = BeastCore.ladderSnapshot(BeastCore.ladderWeek(state.items, state.goals, state.perfectWeek), null, 1);
+    save();
+    return;
+  }
+  if (state.recommit && state.recommit.newBlock) reschedulePace();
+  state.ladder = BeastCore.ladderSnapshot(BeastCore.ladderWeek(state.items, state.goals, state.perfectWeek), state.ladder, state.earnedLevel);
+  state.recommit = null;
+  save(); render();
+  toast('Locked in');
 }
 
 function header() {
@@ -3631,6 +4226,9 @@ function profileTab() {
   // The level-up's badges, kept for good (step 5).
   var stRow = startsRow(currentStarts());
   var html = (stRow ? '<div class="card"><h3>' + esc(BeastCore.STARTS_WORDING.heading) + '</h3>' + stRow.replace('class="starts"', 'class="starts" style="justify-content:flex-start"') + '</div>' : '') +
+    '<div class="card"><h3>How your plan works</h3>' +
+      '<p class="imeta" style="margin-bottom:10px">What to do each day, how your plan changes, and how you’ll know it’s working.</p>' +
+      '<button class="btn sec" onclick="howOpen()">Show me</button></div>' +
     '<div class="card"><h3>You</h3>' +
     '<div class="field"><label>Name</label><input value="' + attr(p.name || '') + '" disabled></div>' +
     '<div class="field"><label>Current weight (lb)</label>' +

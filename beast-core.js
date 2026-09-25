@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.19.0';
+  var VERSION = '2.20.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -2808,7 +2808,7 @@ var BeastCore = (function () {
     });
 
     var stepErrors = validateDraftSteps(parsed, opts);
-    errors = errors.concat(stepErrors);
+    errors = errors.concat(stepErrors).concat(validateWake(parsed));
 
     if (errors.length) return { ok: false, errors: errors, items: [], goals: [] };
     var block = posInt(parsed.block) || 1;
@@ -2829,6 +2829,39 @@ var BeastCore = (function () {
       budget: normalizeBudget(parsed.budget),
       profile: parsed.profile || {}
     };
+  }
+
+  // A plan written under Finding the time (anything with swaps, a budget or
+  // a goal with steps) wakes the client at the same time on work days, and
+  // no more than an hour later on days off (Chris, 2026-09-25: realistic,
+  // people sleep in). Drafts from before carry none of it and pass as ever.
+  var WAKE_NAME = /^wake[\s-]?up\b/i, WAKE_SLACK = 60;
+  function isStepsDraft(parsed) {
+    var items = parsed.items || [];
+    return !!(Array.isArray(parsed.budget) && parsed.budget.length) ||
+      items.some(function (it) { return it && (it.swap || it.steps || it.goal); }) ||
+      (parsed.goals || []).some(function (g) { return g && g.measure; });
+  }
+  function validateWake(parsed) {
+    if (!isStepsDraft(parsed)) return [];
+    var wakes = (parsed.items || []).filter(function (it) { return it && WAKE_NAME.test(String(it.name || '').trim()); });
+    var errs = [];
+    if (!wakes.length) errs.push('Every plan needs a "Wake up" item: core, on work days, with dueBy set to the wake time (methods, Finding the time).');
+    wakes.forEach(function (it) {
+      if (minutesOfDay(it.dueBy) === null) errs.push('"' + it.name + '" needs its wake time in dueBy.');
+    });
+    // By the times, not the names (CTO, step 4): every wake item is within
+    // an hour of the earliest, whatever it is called.
+    var timed = wakes.filter(function (it) { return minutesOfDay(it.dueBy) !== null; });
+    if (timed.length > 1) {
+      var first = timed.reduce(function (a, b) { return minutesOfDay(b.dueBy) < minutesOfDay(a.dueBy) ? b : a; });
+      timed.forEach(function (it) {
+        if (minutesOfDay(it.dueBy) - minutesOfDay(first.dueBy) > WAKE_SLACK) {
+          errs.push('"' + it.name + '" is more than an hour after "' + first.name + '". Days off wake within an hour of work days.');
+        }
+      });
+    }
+    return errs;
   }
 
   var BUDGET_DAYS = ['work', 'off'];

@@ -380,7 +380,9 @@ function goodDraft() {
       { name: 'Zone 2', kind: 'habit', swap: 1, replaces: 'Coffee and phone on the couch.' },
       { name: 'Last coffee', kind: 'habit', dueBy: '13:00', swap: 2, replaces: 'The afternoon coffees.' },
       { name: 'Lights out', kind: 'habit', dueBy: '22:30', swap: 3, goal: 'sleep', replaces: '30 min of TV.',
-        steps: [{ swap: 4, dueBy: '21:30', label: 'Lights out 9:30 pm' }] }
+        steps: [{ swap: 4, dueBy: '21:30', label: 'Lights out 9:30 pm' }] },
+      { name: 'Wake up', kind: 'habit', freq: 'weekly', days: [0, 1, 2, 3, 4], dueBy: '05:00' },
+      { name: 'Wake up, days off', kind: 'habit', freq: 'weekly', days: [5, 6], dueBy: '06:00' }
     ],
     goals: [
       weightGoal(),
@@ -483,7 +485,7 @@ test('an item that is no longer a swap starts today, not at its old future date'
 
 test('the loss limits come from the methods table, and a stated reason lets a faster plan through', () => {
   const draft = (start, target, by, reason) => ({
-    items: [{ name: 'Weigh-in', goal: 'weight' }],
+    items: [{ name: 'Wake up', dueBy: '05:00' }, { name: 'Weigh-in', goal: 'weight' }],
     goals: [{ key: 'weight', text: target + ' lbs', why: 'Because.', measure: { kind: 'weight', start, target, by, rateReason: reason },
       months: [{ n: 1, target }], weeks: [1, 2, 3, 4].map(n => ({ n, target: start })) }]
   });
@@ -517,7 +519,7 @@ test('a step with no usable target is closed as skipped, never left open', () =>
 
 test('the Aggressive or Slow answer moves the loss limit one row of the deficit table', () => {
   const draft = (start, target, by) => ({
-    items: [{ name: 'Weigh-in', goal: 'weight' }],
+    items: [{ name: 'Wake up', dueBy: '05:00' }, { name: 'Weigh-in', goal: 'weight' }],
     goals: [{ key: 'weight', text: target + ' lbs', why: 'Because.', measure: { kind: 'weight', start, target, by },
       months: [{ n: 1, target }], weeks: [1, 2, 3, 4].map(n => ({ n, target: start })) }]
   });
@@ -574,4 +576,24 @@ test('a "none" or "nothing" tap gives way to words typed in the box below it', (
   assert.strictEqual(plain.most.trade, 'nothing', 'a real nothing stays a nothing');
   const most = C.routineSections()[2];
   assert.deepStrictEqual(most.fields.filter(f => f.moreOf).map(f => [f.key, f.moreOf]), [['fixedMore', 'fixedTime'], ['tradeMore', 'trade']]);
+});
+
+test('every new-style plan wakes the client at a set time, and days off within an hour (Chris, 2026-09-25)', () => {
+  const errs = mut => { const d = goodDraft(); mut(d); return C.validateDraft(d, { planStart: P }).errors.join('\n'); };
+  assert.strictEqual(errs(() => {}), '');
+  assert.match(errs(d => { d.items = d.items.filter(i => !/^Wake up/.test(i.name)); }), /needs a "Wake up" item/);
+  assert.match(errs(d => { d.items.find(i => i.name === 'Wake up').dueBy = undefined; }), /needs its wake time/);
+  assert.match(errs(d => { d.items.find(i => i.name === 'Wake up, days off').dueBy = '06:30'; }), /more than an hour after/);
+  assert.strictEqual(errs(d => { d.items = d.items.filter(i => i.name !== 'Wake up, days off'); }), '', 'one wake for every day is fine');
+  // A draft from before Finding the time carries no wake item and still passes.
+  assert.strictEqual(C.validateDraft({ items: [{ name: 'Zone 2' }], goals: [{ text: 'Hold 185' }] }).ok, true);
+});
+
+test('the wake check reads the times, not the names (CTO, step 4)', () => {
+  const draft = wakes => ({ budget: [{ day: 'work', need: 20, found: 30 }], items: wakes.concat([{ name: 'Zone 2', swap: 1 }]) });
+  const err = w => C.validateDraft(draft(w), { planStart: P }).errors.join('\n');
+  assert.match(err([{ name: 'Wake up (work days)', dueBy: '05:00' }, { name: 'Wake up (weekends)', dueBy: '08:00' }]), /more than an hour after/);
+  assert.match(err([{ name: 'Wake up', dueBy: '05:00' }, { name: 'Wake up, off days', dueBy: '06:30' }]), /more than an hour after/);
+  assert.strictEqual(err([{ name: 'Wake-up', dueBy: '05:30' }]), '', 'a single daily wake, hyphenated');
+  assert.strictEqual(err([{ name: 'Wake up', dueBy: '05:00' }, { name: 'Wake up, weekends', dueBy: '06:00' }]), '');
 });
