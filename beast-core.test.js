@@ -1584,7 +1584,10 @@ function statusState(over) {
 test('statusPayload carries the numbers on the client screen and nothing else', () => {
   const st = statusState();
   const p = C.statusPayload(st, { today: '2026-09-21', tz: 'America/Los_Angeles', pushId: 'rem1' });
-  assert.strictEqual(p.v, C.STATUS_VERSION);
+  // Version 1 without the steps block, so a server from before it reads it
+  // as ever; version 2 only when steps travel (goals brief 4l.4).
+  assert.strictEqual(p.v, 1);
+  assert.strictEqual(p.steps, undefined);
   assert.strictEqual(p.date, '2026-09-21');
   assert.strictEqual(p.tz, 'America/Los_Angeles');
   assert.strictEqual(p.streak, 3, 'closed days before today');

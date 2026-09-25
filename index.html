@@ -620,7 +620,7 @@ nav button.active svg { color: var(--acc-ink); stroke-width: 2.6; }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.17.1';
+var BUILT_AGAINST = '2.18.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -1949,13 +1949,28 @@ function applyPlanUpdate(data) {
       Object.assign({}, incoming, { addedAt: prev ? prev.addedAt : BeastCore.todayLocal() })
     );
   });
+  // Habit changes are dated here, on the phone, from the client's pace:
+  // never before today, and never moving one already started (goals brief
+  // 4k.1, 4l.1, 4l.9). Before the goals are agreed, agreeing dates them.
+  if (state.goalsAgreedAt) {
+    state.items = BeastCore.scheduleSwaps(state.items, { planStart: state.profile.startDate || BeastCore.todayLocal(),
+      pace: state.pace, today: BeastCore.todayLocal(), prev: before });
+  }
 
+  // Goals are matched by key, then by their words, so a goal keeps its id,
+  // its completion and its step history (4k.4). Old plans had no keys and
+  // match by id as before.
   if (data.goals && data.goals.length) {
-    var completed = {};
-    state.goals.forEach(function (g) { completed[g.id] = g.completed; });
-    state.goals = data.goals.map(function (g) {
-      return Object.assign({}, g, { completed: !!completed[g.id] });
-    });
+    var hasKeys = data.goals.some(function (g) { return g && g.key; });
+    if (hasKeys) {
+      state.goals = BeastCore.mergeGoals(state.goals, data.goals, before).goals;
+    } else {
+      var completed = {};
+      state.goals.forEach(function (g) { completed[g.id] = g.completed; });
+      state.goals = data.goals.map(function (g) {
+        return Object.assign({}, g, { completed: !!completed[g.id] });
+      });
+    }
   }
 
   // A re-issued token replaces the old one; an absent one leaves it alone.
@@ -1989,6 +2004,9 @@ function agreeToGoals() {
   state.items = state.items.map(function (it) {
     return Object.assign({}, it, { addedAt: today });
   });
+  // Habit changes after the first start in their own week at the client's
+  // pace (goals brief 4k.1). Nothing is dated before today.
+  state.items = BeastCore.scheduleSwaps(state.items, { planStart: today, pace: state.pace, today: today });
   state.perfectWeek = BeastCore.perfectWeek(state.items);
   save();
   render();
@@ -3499,11 +3517,13 @@ function itemCard(it, date) {
     right = BeastCore.isOnTime(it, e, date)
       ? '<span class="iright stamp">' + esc(clockOf(e.completedAt)) + '</span>'
       : '<span class="iright late">Late</span>';
-  } else if (it.dueBy) {
+  } else if (BeastCore.dueByOn(it, date)) {
+    // The time in force that day: a moving target's step once it has started.
+    var dueOn = BeastCore.dueByOn(it, date);
     var now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
-    var dueM = BeastCore.minutesOfDay(it.dueBy);
+    var dueM = BeastCore.minutesOfDay(dueOn);
     var soon = date === BeastCore.todayLocal() && dueM - mins <= 60;
-    right = '<span class="iright num' + (soon ? ' soon' : '') + '">' + esc(BeastCore.formatDueBy(it.dueBy)) + '</span>';
+    right = '<span class="iright num' + (soon ? ' soon' : '') + '">' + esc(BeastCore.formatDueBy(dueOn)) + '</span>';
   }
 
   var values = '';

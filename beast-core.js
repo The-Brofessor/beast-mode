@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.17.1';
+  var VERSION = '2.18.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -400,8 +400,38 @@ var BeastCore = (function () {
       // an added item makes every earlier day retroactively incomplete and the
       // streak evaluates to zero on the first backward step.
       addedAt: it.addedAt || opts.addedAt || todayLocal(),
-      detail: detail
+      detail: detail,
+      // Finding the time (goals brief 4i, 4k, 4l). `swap` is the item's place
+      // in its block's order of habit changes (0: starts with the plan); the
+      // client's pace turns it into a start date, set only on the phone
+      // (scheduleSwaps). `steps` are a moving target's later times, each with
+      // its own swap number and, once scheduled, its frozen start date `at`.
+      swap: posInt(it.swap),
+      block: posInt(it.block) || 1,
+      replaces: it.replaces == null ? '' : String(it.replaces).trim().slice(0, MAX_REPLACES),
+      steps: normalizeSteps(it.steps)
     };
+  }
+
+  var MAX_REPLACES = 300;
+
+  function posInt(v) {
+    var n = Number(v);
+    return isFinite(n) && n >= 1 ? Math.floor(n) : 0;
+  }
+
+  function normalizeSteps(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (s) {
+      return s && typeof s === 'object' && posInt(s.swap) && minutesOfDay(s.dueBy) !== null;
+    }).map(function (s) {
+      return {
+        swap: posInt(s.swap),
+        dueBy: String(s.dueBy).trim(),
+        label: s.label == null ? '' : String(s.label),
+        at: /^\d{4}-\d\d-\d\d$/.test(String(s.at || '')) ? s.at : ''
+      };
+    }).sort(function (a, b) { return a.swap - b.swap; });
   }
 
   function normalizeItems(list, opts) {
@@ -419,13 +449,145 @@ var BeastCore = (function () {
     if (!Array.isArray(goals)) return [];
     return goals.map(function (g) {
       if (typeof g === 'string') return { id: newId(), text: g, term: 'short', completed: false };
-      return {
+      var out = {
         id: isValidId(g && g.id) ? g.id : newId(),
         text: g && g.text != null ? String(g.text) : '',
         term: g && g.term === 'long' ? 'long' : 'short',
         completed: !!(g && g.completed)
       };
+      // Goals with steps (goals brief 4a, 4k.4). A goal without a measure
+      // keeps exactly the shape it always had.
+      if (!g || typeof g !== 'object') return out;
+      var key = goalKeyOf(g.key);
+      if (key) out.key = key;
+      if (g.why != null && String(g.why).trim()) out.why = String(g.why).trim();
+      var m = normalizeMeasure(g.measure);
+      if (m) {
+        out.measure = m;
+        out.block = posInt(g.block) || 1;
+        out.months = normalizeGoalSteps(g.months, m.kind, 'n');
+        out.weeks = normalizeGoalSteps(g.weeks, m.kind, m.kind === 'habit' ? 'swap' : 'n');
+        // Earlier blocks' weekly steps, kept until they are judged: a new
+        // block's draft can land before the last week of the old one ends
+        // (CTO, step 1 review). A habit step carries the window it was placed
+        // in, since the new block renumbers its swaps.
+        if (Array.isArray(g.past)) {
+          out.past = g.past.filter(function (p) { return p && posInt(p.block); }).map(function (p) {
+            return {
+              block: posInt(p.block),
+              weeks: normalizeGoalSteps(p.weeks, m.kind, m.kind === 'habit' ? 'swap' : 'n').map(function (s, i) {
+                var raw = (p.weeks || []).filter(function (x) { return x && posInt(x[m.kind === 'habit' ? 'swap' : 'n']); })
+                  .sort(function (a, b) { var k = m.kind === 'habit' ? 'swap' : 'n'; return a[k] - b[k]; })[i] || {};
+                if (m.kind === 'habit' && /^\d{4}-\d\d-\d\d$/.test(String(raw.from || '')) && isValidId(raw.item)) {
+                  s.from = raw.from; s.item = raw.item;
+                }
+                return s;
+              })
+            };
+          });
+        }
+      }
+      if (typeof g.agreedAt === 'string' && g.agreedAt) out.agreedAt = g.agreedAt;
+      return out;
     }).filter(function (g) { return g.text.trim() !== ''; });
+  }
+
+  // A goal's key is the short name the Brofessor gives it in a draft
+  // ("weight", "sleep"). Items point at it, and imports match on it, so a
+  // goal keeps its id and its step history from one block to the next.
+  function goalKeyOf(k) {
+    var s = String(k == null ? '' : k).trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9-]{0,23}$/.test(s) ? s : '';
+  }
+
+  var MEASURES = ['weight', 'waist', 'bodyfat', 'fit', 'habit', 'report'];
+  var NUMERIC_MEASURES = ['weight', 'waist', 'bodyfat'];
+  // How clothes fit, least to most progress.
+  var FIT_SCALE = ['tighter', 'same', 'looser'];
+
+  function numOrNull(v) {
+    if (v === '' || v == null) return null;
+    var n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+
+  function normalizeMeasure(m) {
+    if (!m || typeof m !== 'object' || MEASURES.indexOf(m.kind) === -1) return null;
+    var out = { kind: m.kind, by: /^\d{4}-\d\d-\d\d$/.test(String(m.by || '')) ? m.by : '' };
+    if (NUMERIC_MEASURES.indexOf(m.kind) !== -1) {
+      out.start = numOrNull(m.start);
+      out.target = numOrNull(m.target);
+      if (m.rateReason != null && String(m.rateReason).trim()) out.rateReason = String(m.rateReason).trim();
+    } else if (m.kind === 'fit') {
+      out.item = m.item == null ? '' : String(m.item).trim();
+      out.target = FIT_SCALE.indexOf(m.target) !== -1 ? m.target : 'looser';
+    } else {
+      out.target = m.target == null ? '' : String(m.target);
+    }
+    return out;
+  }
+
+  // A goal's steps: months are numbered from the plan's start; weeks from the
+  // block's start, or, for a habit goal, by the swap they belong to (4k.2).
+  function normalizeGoalSteps(list, kind, by) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (s) { return s && typeof s === 'object' && posInt(s[by]); }).map(function (s) {
+      var out = {};
+      out[by] = posInt(s[by]);
+      out.target = NUMERIC_MEASURES.indexOf(kind) !== -1 ? numOrNull(s.target)
+        : kind === 'habit' ? (posInt(s.target) || null)
+        : kind === 'fit' ? (FIT_SCALE.indexOf(s.target) !== -1 ? s.target : null)
+        : (s.target == null ? '' : String(s.target));
+      out.text = s.text == null ? '' : String(s.text);
+      return out;
+    }).sort(function (a, b) { return a[by] - b[by]; });
+  }
+
+  // The id or key an item's goalId may name.
+  function goalLink(g) { return (g && (g.key || g.id)) || ''; }
+
+  // A plan update's goals, matched to the ones the client already has: by
+  // key first, then by the words for a goal without one. A matched goal keeps
+  // its id, whether it is completed, and when it was agreed; its steps and
+  // measure come from the update. `changed` names the goals whose card must
+  // be agreed again (goals brief 4f).
+  function mergeGoals(existing, incoming, prevItems) {
+    var byKey = {}, byText = {};
+    (existing || []).forEach(function (g) {
+      if (g.key) byKey[g.key] = g;
+      byText[matchKey(g.text)] = g;
+    });
+    var used = {}, added = [], changed = [];
+    var goals = normalizeGoals(incoming || []).map(function (g) {
+      var prev = (g.key && byKey[g.key]) || (!g.key && byText[matchKey(g.text)]) || null;
+      if (!prev || used[prev.id]) { added.push(g.text); return g; }
+      used[prev.id] = true;
+      var out = Object.assign({}, g, { id: prev.id, completed: !!prev.completed });
+      if (prev.agreedAt) out.agreedAt = prev.agreedAt;
+      // A new block: the old block's weekly steps move to `past`, to be judged
+      // when their weeks end. Only the last two blocks are kept; anything
+      // older has long since been judged.
+      if (g.measure && prev.measure && (g.block || 1) !== (prev.block || 1)) {
+        var moved = { block: prev.block || 1, weeks: (prev.weeks || []).map(function (s) {
+          var c = Object.assign({}, s);
+          if (prev.measure.kind === 'habit') {
+            var w = habitWindow(prevItems || [], prev, s.swap, prev.block || 1);
+            if (w) { c.from = w.from; c.item = w.item.id; }
+          }
+          return c;
+        }) };
+        out.past = (prev.past || []).concat([moved]).filter(function (p) { return p.block >= (g.block || 1) - 2; });
+        out = normalizeGoals([out])[0];
+      } else if (prev.past) {
+        out.past = prev.past;
+      }
+      var shape = function (x) { return JSON.stringify([x.text, x.why || '', x.measure || null, x.months || [], x.weeks || [], x.block || 1]); };
+      if (shape(out) !== shape(prev)) { changed.push(out.id); delete out.agreedAt; }
+      if (out.completed !== !!prev.completed) out.completed = !!prev.completed;
+      return out;
+    });
+    var removed = (existing || []).filter(function (g) { return !used[g.id]; }).map(function (g) { return g.text; });
+    return { goals: goals, added: added, changed: changed, removed: removed };
   }
 
   // ── Scheduling ────────────────────────────────────────────────────────────
@@ -476,9 +638,21 @@ var BeastCore = (function () {
     return !!(entry && entry.done && localDateOf(entry.completedAt) === ymd);
   }
 
+  // The due time in force on a date. A moving target's later steps take over
+  // on their own start dates, so a past day is always judged against the time
+  // it had then and a point once earned is never taken back (goals brief 4k.3).
+  function dueByOn(item, ymd) {
+    var best = null;
+    ((item && item.steps) || []).forEach(function (s) {
+      if (!s.at || s.at > ymd) return;
+      if (!best || s.at > best.at || (s.at === best.at && s.swap > best.swap)) best = s;
+    });
+    return best ? best.dueBy : ((item && item.dueBy) || '');
+  }
+
   function isOnTime(item, entry, ymd) {
     if (!isSameDay(entry, ymd)) return false;
-    var due = minutesOfDay(item.dueBy);
+    var due = minutesOfDay(dueByOn(item, ymd));
     if (due === null) return true;          // no dueBy means it can never be late
     var d = new Date(entry.completedAt);
     return (d.getHours() * 60 + d.getMinutes()) <= due;
@@ -606,16 +780,25 @@ var BeastCore = (function () {
 
   function roundTo50(n) { return Math.round(n / 50) * 50; }
 
-  function levelThresholds(pw) {
+  // `fixed` holds the thresholds a client has already reached, which never
+  // move again (goals brief 4l.5); the tiers above them rescale with the
+  // ladder. A rescaled tier is never below the one beneath it.
+  function levelThresholds(pw, fixed) {
+    var prev = -1;
     return LEVELS.map(function (l) {
-      return { level: l.level, rank: l.rank, points: roundTo50(l.multiple * pw) };
+      var f = fixed && fixed[l.level];
+      var pts = typeof f === 'number' ? f : roundTo50(l.multiple * pw);
+      if (pts < prev) pts = prev;
+      prev = pts;
+      return { level: l.level, rank: l.rank, points: pts };
     });
   }
 
   // `pw` is the perfectWeek snapshotted at goal agreement, so a later plan
   // update cannot move the ladder under a client who has not lost a point.
-  function levelFor(points, pw, earnedLevel) {
-    var tiers = levelThresholds(pw);
+  // With goals that have steps it is the ladder's week (ladderWeek).
+  function levelFor(points, pw, earnedLevel, fixed) {
+    var tiers = levelThresholds(pw, fixed);
     var reached = tiers[0];
     tiers.forEach(function (t) { if (points >= t.points) reached = t; });
     // Ratchet: a rank once earned is never lost.
@@ -651,19 +834,324 @@ var BeastCore = (function () {
     return STARTS.filter(function (k) { return typeof starts[k] === 'string' && starts[k]; }).length * each;
   }
 
+  // `opts.stepLog` adds the points of steps already judged, each stored with
+  // its value when it was written (4l.6). `opts.ladder` ({ week, fixed }) is
+  // the ladder snapshotted at agreement and each recommit; without one the
+  // ladder is the perfect week, as before goals had steps.
   function progress(items, log, opts) {
     opts = opts || {};
     var today = opts.today || todayLocal();
     var pw = opts.perfectWeek || perfectWeek(items);
     // A plan with nothing in it has no perfect week and no points to give.
-    var pts = totalPoints(items, log, today) + startPoints(opts.starts, perfectWeek(items) ? pw : 0);
+    var pts = totalPoints(items, log, today) + startPoints(opts.starts, perfectWeek(items) ? pw : 0) +
+      stepPoints(opts.stepLog);
+    var ladder = opts.ladder && opts.ladder.week > 0 ? opts.ladder : null;
+    var lw = ladder ? ladder.week : pw;
     return {
       points: pts,
       perfectWeek: pw,
+      ladderWeek: lw,
       streak: currentStreak(items, log, today),
       bestStreak: bestStreak(items, log, today),
-      level: levelFor(pts, pw, opts.earnedLevel)
+      level: levelFor(pts, lw, opts.earnedLevel, ladder && ladder.fixed)
     };
+  }
+
+  // ── Goals with steps and finding the time ─────────────────────────────────
+  // (goals brief, draft 3, sections 4a, 4i, 4k and 4l)
+
+  // How fast a client's habit changes arrive. The client picks it; the plan
+  // sets the changes and their order.
+  var PACES = ['slower', 'standard', 'faster'];
+  var DEFAULT_PACE = 'standard';
+  var BLOCK_DAYS = 28;              // a block is four weeks, and so is a month
+  var WEIGHT_MARGIN = 0.3;          // lb: the scale moves this much with water (Chris)
+  var STATUS_MAX_STEPS = 6;         // step results in one status (4l.4)
+
+  function paceOf(p) { return PACES.indexOf(p) !== -1 ? p : DEFAULT_PACE; }
+
+  // The week of its block a swap starts in, from its number and the pace.
+  function startWeekFor(swap, pace) {
+    var n = posInt(swap) || 1;
+    var p = paceOf(pace);
+    if (p === 'slower') return 1 + 2 * (n - 1);
+    if (p === 'faster') return 1 + Math.floor((n - 1) / 2);
+    return n;
+  }
+
+  function blockStartOf(planStart, block) {
+    return addDays(planStart, BLOCK_DAYS * ((posInt(block) || 1) - 1));
+  }
+
+  // A swap's start date, never before today (4l.1): a late draft or a faster
+  // pace can never reopen a day that has closed.
+  function swapDate(swap, o) {
+    var d = addDays(blockStartOf(o.planStart, o.block), 7 * (startWeekFor(swap, o.pace) - 1));
+    return d > o.today ? d : o.today;
+  }
+
+  // Dates every swap item and every moving-target step. Anything already
+  // started (a date on or before today, found in `o.prev` by id) keeps its
+  // date for good, so a pace change moves only what is still to come (4l.1,
+  // 4l.2). The phone is the only caller: a date on the wire is ignored (4l.9).
+  function scheduleSwaps(items, o) {
+    o = o || {};
+    var today = o.today || todayLocal();
+    var planStart = o.planStart || today;
+    var pace = paceOf(o.pace);
+    var prevById = {};
+    (o.prev || []).forEach(function (p) { if (p && p.id) prevById[p.id] = p; });
+    return (items || []).map(function (it) {
+      var prev = prevById[it.id];
+      var ctx = { planStart: planStart, block: it.block || 1, pace: pace, today: today };
+      var out = Object.assign({}, it);
+      if (it.swap) {
+        out.addedAt = prev && prev.addedAt && prev.addedAt <= today ? prev.addedAt : swapDate(it.swap, ctx);
+      } else if (prev && prev.addedAt > today) {
+        // No longer a swap (renumbered into a started change, or made a plain
+        // item): it starts today rather than staying hidden (CTO, step 1).
+        out.addedAt = today;
+      }
+      if (it.steps && it.steps.length) {
+        var prevSteps = {};
+        ((prev && prev.steps) || []).forEach(function (s) { prevSteps[s.swap] = s; });
+        out.steps = it.steps.map(function (s) {
+          var ps = prevSteps[s.swap];
+          var at = ps && ps.at && ps.at <= today ? ps.at : swapDate(s.swap, ctx);
+          return Object.assign({}, s, { at: at });
+        });
+      }
+      return out;
+    });
+  }
+
+  // Points for a step, from the perfect week snapshotted at first agreement:
+  // a weekly step is one perfect day, a monthly step one perfect week.
+  function stepValue(kind, pw) {
+    if (!(pw > 0)) return 0;
+    return kind === 'm' ? Math.round(pw / 10) * 10 : Math.round(pw / 7 / 10) * 10;
+  }
+
+  function stepPoints(stepLog) {
+    if (!stepLog || typeof stepLog !== 'object') return 0;
+    return Object.keys(stepLog).reduce(function (sum, k) {
+      var r = stepLog[k];
+      return sum + (r && r.result === 'hit' && r.points > 0 ? r.points : 0);
+    }, 0);
+  }
+
+  // The ladder's week: the whole block's perfect week plus what its goals'
+  // steps could pay in a week, so a client with three goals needs more points
+  // for each rank than one with one goal, and all climb at about the same
+  // rate (Chris, 2026-09-25: harder ranks; 4k.6, 4l.10).
+  function ladderWeek(items, goals, pw) {
+    var steps = (goals || []).reduce(function (sum, g) {
+      if (!g.measure) return sum;
+      var w = (g.weeks && g.weeks.length) ? stepValue('w', pw) : 0;
+      var m = (g.months && g.months.length) ? stepValue('m', pw) / 4 : 0;
+      return sum + w + m;
+    }, 0);
+    return Math.round(perfectWeek(items || []) + steps);
+  }
+
+  // A new ladder at agreement or recommit. The thresholds of every rank the
+  // client has already reached stay where they were (4l.5).
+  function ladderSnapshot(week, prev, earnedLevel) {
+    var fixed = {};
+    if (prev && prev.week > 0) {
+      var old = levelThresholds(prev.week, prev.fixed);
+      old.forEach(function (t) { if (t.level <= (earnedLevel || 1)) fixed[t.level] = t.points; });
+    }
+    return { week: Math.round(week), fixed: fixed };
+  }
+
+  // What the rank bar shows: the rank, the next one, how far, as 0 to 100.
+  function rankProgress(points, ladderWk, earnedLevel, fixed) {
+    var tiers = levelThresholds(ladderWk, fixed);
+    var level = levelFor(points, ladderWk, earnedLevel, fixed);
+    var next = tiers.filter(function (t) { return t.level > level.level; })[0] || null;
+    if (!next) return { level: level, next: null, toNext: 0, pct: 100 };
+    var floor = level.points;
+    var span = next.points - floor;
+    var pct = span > 0 ? Math.round(((points - floor) / span) * 100) : 100;
+    return { level: level, next: next, toNext: Math.max(0, next.points - points), pct: Math.max(0, Math.min(100, pct)) };
+  }
+
+  // ── Judging steps ─────────────────────────────────────────────────────────
+  // The phone is the one place a step is judged (4k.5). Each result is
+  // written once into state.stepLog with its points and never worked out
+  // again. Keys (4l.8): goalId|block|w|n for a week, goalId|0|m|n for a
+  // month (months run from the plan's start), goalId|block|s|swap for a
+  // habit step, which the pace does not move.
+
+  function stepKey(goalId, block, kind, n) { return goalId + '|' + block + '|' + kind + '|' + n; }
+
+  function average(list) {
+    if (!list.length) return null;
+    var s = list.reduce(function (a, b) { return a + b; }, 0) / list.length;
+    return Math.round(s * 100) / 100;
+  }
+
+  // The reading a step is judged on, or null when there is none.
+  function readingFor(kind, from, to, st) {
+    var days = datesBetween(from, to);
+    if (kind === 'weight') {
+      var wl = st.weightLog || {};
+      return average(days.map(function (d) { return Number(wl[d]); }).filter(function (n) { return isFinite(n) && n > 0; }));
+    }
+    var ml = st.measureLog || {};
+    var found = null;
+    days.forEach(function (d) {
+      var r = ml[d];
+      if (r && r[kind] !== undefined && r[kind] !== null && r[kind] !== '') found = r[kind];
+    });
+    return found;
+  }
+
+  function goalRises(g) {
+    var m = g.measure || {};
+    if (typeof m.start === 'number' && typeof m.target === 'number') return m.target > m.start;
+    return true;
+  }
+
+  function hitFor(kind, value, target, rises) {
+    if (kind === 'fit') return FIT_SCALE.indexOf(value) >= FIT_SCALE.indexOf(target);
+    var margin = kind === 'weight' ? WEIGHT_MARGIN : 0;
+    return rises ? value >= target - margin : value <= target + margin;
+  }
+
+  // Every step that has ended and has no result yet, judged in date order.
+  // Catches up after days the app was not opened (4k.9). `st` is the app's
+  // state: items, log, goals, weightLog, measureLog, stepLog, stepAnswers,
+  // perfectWeek and profile.startDate. Returns new records; writes nothing.
+  function judgeSteps(st, today) {
+    today = today || todayLocal();
+    st = st || {};
+    var planStart = st.profile && st.profile.startDate;
+    if (!planStart || !st.goalsAgreedAt) return [];
+    var done = st.stepLog || {};
+    var answers = st.stepAnswers || {};
+    var pw = st.perfectWeek || 0;
+    var out = [];
+    var add = function (key, rec) { if (!done[key]) out.push(Object.assign({ key: key, sent: false }, rec)); };
+
+    (st.goals || []).forEach(function (g) {
+      var m = g.measure;
+      if (!m) return;
+      // This block's weekly steps, and any earlier block's still to judge.
+      var blocks = [{ block: g.block || 1, weeks: g.weeks || [], current: true }].concat(g.past || []);
+      blocks.forEach(function (b) {
+        var block = b.block;
+        var bStart = blockStartOf(planStart, block);
+        if (m.kind === 'habit') {
+          (b.weeks || []).forEach(function (s) {
+            // The current block finds its change by swap number; a past
+            // block's step kept the window it was placed in.
+            var found = b.current ? habitWindow(st.items || [], g, s.swap, block)
+              : (s.from && s.item ? { from: s.from, item: itemById(st.items, s.item) || { id: s.item, past: true } } : null);
+            if (!found) return;                      // its change has not been placed yet
+            var end = addDays(found.from, 6);
+            if (!(today > end)) return;
+            var count = datesBetween(found.from, end).filter(function (d) {
+              return (found.item.past || isAvailable(found.item, d)) && isDone(st.log || {}, found.item.id, d);
+            }).length;
+            var target = s.target || 1;
+            var hit = count >= target;
+            add(stepKey(g.id, block, 's', s.swap), { goal: g.id, kind: 's', n: s.swap, block: block, end: end,
+              result: hit ? 'hit' : 'missed', value: count, target: target, points: hit ? stepValue('w', pw) : 0 });
+          });
+        } else {
+          (b.weeks || []).forEach(function (s) {
+            var from = addDays(bStart, 7 * (s.n - 1)), end = addDays(from, 6);
+            var rec = judgeOne(g, m.kind, s, from, end, stepKey(g.id, block, 'w', s.n), today, st, answers);
+            if (rec) add(rec.key, Object.assign(rec.body, { goal: g.id, kind: 'w', n: s.n, block: block, end: end,
+              points: rec.body.result === 'hit' ? stepValue('w', pw) : 0 }));
+          });
+        }
+      });
+      (g.months || []).forEach(function (s) {
+        var end = addDays(planStart, BLOCK_DAYS * s.n - 1);
+        // A month's weight is the average of its last week; a measurement is
+        // the latest in the month.
+        var from = m.kind === 'weight' || m.kind === 'habit' ? addDays(end, -6) : addDays(end, -(BLOCK_DAYS - 1));
+        var rec = m.kind === 'habit'
+          ? judgeHabitMonth(g, s, from, end, stepKey(g.id, 0, 'm', s.n), today, st)
+          : judgeOne(g, m.kind, s, from, end, stepKey(g.id, 0, 'm', s.n), today, st, answers);
+        if (rec) add(rec.key, Object.assign(rec.body, { goal: g.id, kind: 'm', n: s.n, block: 0, end: end,
+          points: rec.body.result === 'hit' ? stepValue('m', pw) : 0 }));
+      });
+    });
+    return out.sort(function (a, b) { return a.end < b.end ? -1 : a.end > b.end ? 1 : 0; });
+  }
+
+  function itemById(items, id) {
+    for (var i = 0; i < (items || []).length; i++) if (items[i].id === id) return items[i];
+    return null;
+  }
+
+  // The item a habit step counts, and the week it runs: the change with that
+  // swap number in the goal's block, or a moving target's step of that number.
+  function habitWindow(items, g, swap, block) {
+    var link = goalLink(g);
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.goalId !== link && it.goalId !== g.id) continue;
+      if ((it.block || 1) !== block) continue;
+      if (it.swap === swap) return { item: it, from: it.addedAt };
+      for (var j = 0; j < (it.steps || []).length; j++) {
+        var s = it.steps[j];
+        if (s.swap === swap && s.at) return { item: it, from: s.at };
+      }
+    }
+    return null;
+  }
+
+  // One outcome step. Weight with no weigh-ins is a miss; a tape, a scale or
+  // a pair of jeans that was not checked that week is skipped, not missed
+  // (Measure day is every 14 days). A "Did you hit it?" step waits one more
+  // day for its answer.
+  function judgeOne(g, kind, s, from, end, key, today, st, answers) {
+    if (kind === 'report') {
+      var a = answers[key];
+      if (a !== true && a !== false) {
+        if (!(today > addDays(end, 1))) return null;
+        return { key: key, body: { result: 'missed', value: null, target: s.target } };
+      }
+      if (!(today > end) && a !== true) return null;
+      return { key: key, body: { result: a ? 'hit' : 'missed', value: a, target: s.target } };
+    }
+    if (!(today > end)) return null;
+    // A step with no usable target is closed as skipped, never left open.
+    if (s.target === null || s.target === undefined || s.target === '') {
+      return { key: key, body: { result: 'skipped', value: null, target: null } };
+    }
+    var value = readingFor(kind, from, end, st);
+    if (value === null || value === undefined) {
+      return { key: key, body: { result: kind === 'weight' ? 'missed' : 'skipped', value: null, target: s.target } };
+    }
+    return { key: key, body: { result: hitFor(kind, value, s.target, goalRises(g)) ? 'hit' : 'missed', value: value, target: s.target } };
+  }
+
+  // A habit goal's month, judged on its last week: the days on which every
+  // one of the goal's items that was due got done.
+  function judgeHabitMonth(g, s, from, end, key, today, st) {
+    if (!(today > end) || !s.target) return null;
+    var link = goalLink(g);
+    var mine = (st.items || []).filter(function (it) { return it.goalId === link || it.goalId === g.id; });
+    var count = datesBetween(from, end).filter(function (d) {
+      var due = mine.filter(function (it) { return isScheduled(it, d); });
+      return due.length > 0 && due.every(function (it) { return isDone(st.log || {}, it.id, d); });
+    }).length;
+    return { key: key, body: { result: count >= s.target ? 'hit' : 'missed', value: count, target: s.target } };
+  }
+
+  // The results still to reach the server, oldest first, at most six a status.
+  function unsentSteps(stepLog) {
+    var log = stepLog || {};
+    return Object.keys(log).map(function (k) { return log[k]; })
+      .filter(function (r) { return r && !r.sent; })
+      .sort(function (a, b) { return a.end < b.end ? -1 : a.end > b.end ? 1 : 0; })
+      .slice(0, STATUS_MAX_STEPS);
   }
 
   // ── Daily status ──────────────────────────────────────────────────────────
@@ -672,7 +1160,9 @@ var BeastCore = (function () {
   // so the app and the worker share one vocabulary; checked here so the
   // worker refuses anything that is not this shape.
 
-  var STATUS_VERSION = 1;
+  // Version 2 adds the steps block (goals brief 4k.5, 4l.4). A status without
+  // it still goes as version 1, so a server that predates it reads it as ever.
+  var STATUS_VERSION = 2;
   var STATUS_FIELDS = ['streak', 'bestStreak', 'points', 'dayPoints', 'level', 'scheduled', 'done', 'scheduledCore', 'doneCore', 'day'];
 
   function statusPayload(state, opts) {
@@ -680,7 +1170,8 @@ var BeastCore = (function () {
     var items = (state && state.items) || [];
     var log = (state && state.log) || {};
     var today = opts.today || todayLocal();
-    var p = progress(items, log, { today: today, perfectWeek: state && state.perfectWeek, earnedLevel: state && state.earnedLevel, starts: state && state.starts });
+    var p = progress(items, log, { today: today, perfectWeek: state && state.perfectWeek, earnedLevel: state && state.earnedLevel,
+      starts: state && state.starts, stepLog: state && state.stepLog, ladder: state && state.ladder });
     var due = scheduledOn(items, today);
     var core = scheduledCoreOn(items, today);
     var doneOf = function (list) { return list.filter(function (it) { return isDone(log, it.id, today); }).length; };
@@ -688,8 +1179,8 @@ var BeastCore = (function () {
     var yr = dayResult(items, log, y);
     var tr = dayResult(items, log, today);
     var start = programStart(items);
-    return {
-      v: STATUS_VERSION,
+    var out = {
+      v: 1,
       date: today,
       tz: opts.tz || '',
       streak: p.streak,
@@ -716,6 +1207,50 @@ var BeastCore = (function () {
       sharing: opts.sharing !== false,
       nudges: opts.nudges === true ? true : opts.nudges === false ? false : null
     };
+    // Step results and the pace, only when the app asks for them: the server
+    // stores them from build step 6, and a result is marked sent only after
+    // the server has said yes (4l.4).
+    if (opts.steps) {
+      out.v = 2;
+      out.steps = {
+        pace: paceOf(state && state.pace),
+        outcomes: unsentSteps(state && state.stepLog).map(function (r) {
+          return { key: r.key, goal: r.goal, kind: r.kind, n: r.n, block: r.block, end: r.end,
+            result: r.result, value: r.value === undefined ? null : r.value, target: r.target === undefined ? null : r.target, points: r.points || 0 };
+        })
+      };
+    }
+    return out;
+  }
+
+  var STEP_KINDS = ['w', 'm', 's'];
+  var STEP_RESULTS = ['hit', 'missed', 'skipped'];
+
+  // A steps block from the phone, checked field by field. Anything off the
+  // shape refuses the whole status, as the rest of validateStatus does.
+  function validateSteps(raw) {
+    if (!raw || typeof raw !== 'object') return { error: 'Bad steps.' };
+    if (PACES.indexOf(raw.pace) === -1) return { error: 'Bad pace.' };
+    if (!Array.isArray(raw.outcomes) || raw.outcomes.length > STATUS_MAX_STEPS) return { error: 'Bad step outcomes.' };
+    var small = function (v) {
+      return v === null || typeof v === 'boolean' || (typeof v === 'number' && isFinite(v) && Math.abs(v) < 100000) ||
+        (typeof v === 'string' && v.length <= 40);
+    };
+    var outcomes = [];
+    for (var i = 0; i < raw.outcomes.length; i++) {
+      var o = raw.outcomes[i];
+      if (!o || typeof o !== 'object' || !isValidId(o.goal) || o.goal.length > 64) return { error: 'Bad step goal.' };
+      if (STEP_KINDS.indexOf(o.kind) === -1 || STEP_RESULTS.indexOf(o.result) === -1) return { error: 'Bad step result.' };
+      if (!posInt(o.n) || o.n !== posInt(o.n) || o.n > 999) return { error: 'Bad step number.' };
+      if (typeof o.block !== 'number' || o.block !== Math.floor(o.block) || o.block < 0 || o.block > 99) return { error: 'Bad step block.' };
+      if (!/^\d{4}-\d\d-\d\d$/.test(String(o.end || ''))) return { error: 'Bad step date.' };
+      if (o.key !== stepKey(o.goal, o.block, o.kind, o.n)) return { error: 'Bad step key.' };
+      if (!small(o.value) || !small(o.target)) return { error: 'Bad step value.' };
+      if (typeof o.points !== 'number' || o.points < 0 || o.points !== Math.floor(o.points) || o.points > STATUS_MAX_POINTS) return { error: 'Bad step points.' };
+      outcomes.push({ key: o.key, goal: o.goal, kind: o.kind, n: o.n, block: o.block, end: o.end,
+        result: o.result, value: o.value, target: o.target, points: o.points });
+    }
+    return { ok: true, steps: { pace: raw.pace, outcomes: outcomes } };
   }
 
   // The local calendar date now in a zone, or null if the zone is unknown.
@@ -790,6 +1325,11 @@ var BeastCore = (function () {
     out.standalone = raw.standalone === true ? true : raw.standalone === false ? false : null;
     out.sharing = raw.sharing !== false;
     out.nudges = raw.nudges === true ? true : raw.nudges === false ? false : null;
+    if (raw.steps !== undefined && raw.steps !== null) {
+      var sv = validateSteps(raw.steps);
+      if (sv.error) return { error: sv.error };
+      out.steps = sv.steps;
+    }
     return { ok: true, status: out };
   }
 
@@ -916,7 +1456,23 @@ var BeastCore = (function () {
     if (it.notes) o.o = it.notes;
     if (it.trainerNotes) o.r = it.trainerNotes;
     if (it.detail && Object.keys(it.detail).length) o.x = it.detail;
+    if (it.swap) o.w = it.swap;
+    if (it.block && it.block !== 1) o.b = it.block;
+    if (it.replaces) o.p = it.replaces;
+    if (it.steps && it.steps.length) o.s = it.steps.map(function (s) { return [s.swap, s.dueBy, s.label || '', s.at || '']; });
     return o;
+  }
+
+  // A plan that uses swaps, moving targets or goals with steps goes out as
+  // version 3, which an app from before them refuses with its readable
+  // message instead of putting every change on day one (goals brief 4k.7).
+  // Anything else still goes as version 2.
+  var PAYLOAD_STEPS = 3;
+  function needsStepsVersion(data) {
+    var items = Array.isArray(data.items) ? data.items : [];
+    var goals = Array.isArray(data.goals) ? data.goals : [];
+    return items.some(function (it) { return it && (it.swap || (it.steps && it.steps.length) || it.w || it.s); }) ||
+      goals.some(function (g) { return g && g.measure; });
   }
 
   function unpackItem(o) {
@@ -936,7 +1492,13 @@ var BeastCore = (function () {
       goalId: o.G || '',
       notes: o.o || '',
       trainerNotes: o.r || '',
-      detail: o.x || {}
+      detail: o.x || {},
+      swap: o.w || 0,
+      block: o.b || 1,
+      replaces: o.p || '',
+      steps: Array.isArray(o.s) ? o.s.map(function (s) {
+        return Array.isArray(s) ? { swap: s[0], dueBy: s[1], label: s[2] || '', at: s[3] || '' } : s;
+      }) : []
     };
   }
 
@@ -959,7 +1521,7 @@ var BeastCore = (function () {
   function encodePayload(kind, data) {
     var prefix = PREFIXES[kind];
     if (!prefix) throw new Error('Unknown payload kind: ' + kind);
-    var wire = Object.assign({ v: PAYLOAD_VERSION }, data);
+    var wire = Object.assign({}, data, { v: needsStepsVersion(data) ? PAYLOAD_STEPS : PAYLOAD_VERSION });
     if (Array.isArray(wire.items)) wire.items = wire.items.map(packItem);
     var body = JSON.stringify(wire);
     var L = lz();
@@ -1011,7 +1573,7 @@ var BeastCore = (function () {
       try { data = JSON.parse(json); }
       catch (e) { return { ok: false, error: 'That link is damaged. Ask for a new one.' }; }
 
-      if (Number(data.v) > PAYLOAD_VERSION) {
+      if (Number(data.v) > PAYLOAD_STEPS) {
         return { ok: false, error: 'That link needs a newer version of Beast Mode. Reload the app and try again.' };
       }
       if (Array.isArray(data.items)) {
@@ -1104,10 +1666,14 @@ var BeastCore = (function () {
   // arrives, so no plan data has to leave it.
 
   // Distinct dueBy times across a plan, earliest first.
+  // A moving target's later times are slots from the start, so a step that
+  // begins weeks later still has its reminder; dueAtSlot picks the one in
+  // force on the day (goals brief 4l.3).
   function reminderSlots(items) {
     var seen = {};
     (items || []).forEach(function (it) {
       if (it.dueBy && minutesOfDay(it.dueBy) !== null) seen[it.dueBy] = true;
+      (it.steps || []).forEach(function (s) { if (minutesOfDay(s.dueBy) !== null) seen[s.dueBy] = true; });
     });
     return Object.keys(seen).sort();
   }
@@ -1116,7 +1682,7 @@ var BeastCore = (function () {
   // done is left out, so a client who finished early is not nagged.
   function dueAtSlot(items, log, ymd, slot) {
     return (items || []).filter(function (it) {
-      if (it.dueBy !== slot) return false;
+      if (dueByOn(it, ymd) !== slot) return false;
       if (!isAvailable(it, ymd)) return false;
       return !isDone(log, it.id, ymd);
     });
@@ -2059,8 +2625,10 @@ var BeastCore = (function () {
   // a change to the checklist: an item added or removed, or a due-by time
   // moved. A note edit or a re-sent link is not one. At most once a fortnight.
   var ROUTINE_AGAIN_DAYS = 14;
-  function checklistChanged(before, after) {
-    var key = function (it) { return it.id + '|' + (it.dueBy || ''); };
+  function checklistChanged(before, after, today) {
+    var day = today || todayLocal();
+    // The time in force today: a step starting later is not a change yet.
+    var key = function (it) { return it.id + '|' + dueByOn(it, day); };
     var a = (before || []).map(key).sort().join(','), b = (after || []).map(key).sort().join(',');
     return a !== b;
   }
@@ -2118,7 +2686,8 @@ var BeastCore = (function () {
     return n ? '"' + n + '"' : 'item ' + (i + 1);
   }
 
-  function validateDraft(raw) {
+  // `opts.planStart`: the client's plan start, when the caller knows it.
+  function validateDraft(raw, opts) {
     var errors = [];
     var parsed = raw;
 
@@ -2163,15 +2732,201 @@ var BeastCore = (function () {
       if (it.kind === 'ancillary' && d.followUp && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.followUp))) {
         errors.push(who + ': followUp "' + d.followUp + '" is not a YYYY-MM-DD date.');
       }
+      if (it.swap !== undefined && !(posInt(it.swap) && posInt(it.swap) === it.swap)) {
+        errors.push(who + ': swap "' + it.swap + '" is not a whole number from 1.');
+      }
+      if (it.replaces !== undefined && (typeof it.replaces !== 'string' || it.replaces.length > MAX_REPLACES)) {
+        errors.push(who + ': replaces must be text under ' + MAX_REPLACES + ' characters.');
+      }
+      if (it.steps !== undefined) {
+        if (!Array.isArray(it.steps) || !it.steps.length) errors.push(who + ': steps must be a list.');
+        else {
+          if (minutesOfDay(it.dueBy) === null) errors.push(who + ': a moving target needs its first time in dueBy.');
+          it.steps.forEach(function (s, j) {
+            if (!s || !posInt(s.swap) || posInt(s.swap) !== s.swap) errors.push(who + ': step ' + (j + 1) + ' needs a swap number from 1.');
+            if (!s || minutesOfDay(s.dueBy) === null) errors.push(who + ': step ' + (j + 1) + ' needs a 24-hour HH:MM dueBy.');
+          });
+        }
+      }
     });
 
+    var stepErrors = validateDraftSteps(parsed, opts);
+    errors = errors.concat(stepErrors);
+
     if (errors.length) return { ok: false, errors: errors, items: [], goals: [] };
+    var block = posInt(parsed.block) || 1;
+    var goals = normalizeGoals((parsed.goals || []).map(function (g) {
+      return g && typeof g === 'object' && g.measure ? Object.assign({}, g, { block: block }) : g;
+    }));
     return {
       ok: true, errors: [],
-      items: normalizeItems(parsed.items),
-      goals: normalizeGoals(parsed.goals || []),
+      // An item names its goal by key; the key is its goalId (goals brief 4k.4).
+      items: normalizeItems(parsed.items.map(function (it) {
+        var o = Object.assign({}, it, { block: block });
+        if (it.goal !== undefined) o.goalId = goalKeyOf(it.goal);
+        delete o.goal;
+        return o;
+      })),
+      goals: goals,
+      block: block,
+      budget: normalizeBudget(parsed.budget),
       profile: parsed.profile || {}
     };
+  }
+
+  var BUDGET_DAYS = ['work', 'off'];
+  // The most a week may move the scale, from the methods file (section 2):
+  // a loss by how much there is to lose (over 50 lb, 2 lb a week; 20 to 50,
+  // about 1; under 20, 0.5, up to 0.75 in the test-prep rate check), a gain
+  // of half a percent of body weight. A goal whose measure gives a
+  // `rateReason` (a GLP-1, a test date) is let through: the Brofessor has said
+  // why, and Chris reads it.
+  var MAX_GAIN_PER_WEEK = 0.005;
+  function maxLossPerWeek(toLose) { return toLose > 50 ? 2 : toLose >= 20 ? 1 : 0.75; }
+
+  // How often an item can be ticked in a week.
+  function timesAWeek(it) {
+    if (!it) return 0;
+    if (it.freq === 'weekly') return Array.isArray(it.days) ? it.days.length : 0;
+    if (it.freq === 'flexible') return posInt(it.timesPerWeek) || 1;
+    if (it.freq === 'monthly') return 1;
+    return 7;
+  }
+
+  function normalizeBudget(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (b) { return b && BUDGET_DAYS.indexOf(b.day) !== -1; }).map(function (b) {
+      return { day: b.day, need: posInt(b.need), found: posInt(b.found),
+        from: b.from == null ? '' : String(b.from), cut: b.cut == null ? '' : String(b.cut) };
+    });
+  }
+
+  // The checks for goals with steps and for swaps (goals brief 4b, 4i).
+  // Drafts written before them carry none of these fields and pass as before.
+  function validateDraftSteps(parsed, opts) {
+    opts = opts || {};
+    var errors = [];
+    var items = parsed.items || [];
+    var goals = Array.isArray(parsed.goals) ? parsed.goals : [];
+    // The plan's start: given by the caller, or, for a first block, about
+    // now. A later block without one skips the checks that need it.
+    var planStart = opts.planStart || ((posInt(parsed.block) || 1) === 1 ? (opts.today || todayLocal()) : null);
+    if (parsed.block !== undefined && !(posInt(parsed.block) && posInt(parsed.block) === parsed.block)) {
+      errors.push('block "' + parsed.block + '" is not a whole number from 1.');
+    }
+
+    // Swaps number from 1 with no gaps and no repeats, across items and the
+    // steps of moving targets.
+    var nums = [];
+    items.forEach(function (it) {
+      if (it && posInt(it.swap)) nums.push(posInt(it.swap));
+      if (it && Array.isArray(it.steps)) it.steps.forEach(function (s) { if (s && posInt(s.swap)) nums.push(posInt(s.swap)); });
+    });
+    var sorted = nums.slice().sort(function (a, b) { return a - b; });
+    sorted.forEach(function (n, i) {
+      if (n !== i + 1) errors.push('Swaps must be numbered 1 to ' + sorted.length + ' with no gaps or repeats; found ' + sorted.join(', ') + '.');
+    });
+    if (errors.length > 1) errors = errors.filter(function (e, i, a) { return a.indexOf(e) === i; });
+
+    // The time budget: needed when there are swaps, and it must add up.
+    if (nums.length) {
+      if (!Array.isArray(parsed.budget) || !parsed.budget.length) errors.push('A draft with swaps needs a "budget": the minutes the plan needs and found, for a work day and a day off.');
+      else parsed.budget.forEach(function (b, i) {
+        var who = 'budget ' + (i + 1);
+        if (!b || BUDGET_DAYS.indexOf(b.day) === -1) { errors.push(who + ': day must be "work" or "off".'); return; }
+        if (!posInt(b.need) || posInt(b.found) !== Number(b.found)) errors.push(who + ' (' + b.day + '): need and found are minutes, whole numbers.');
+        else if (posInt(b.found) < posInt(b.need) && !String(b.cut || '').trim()) {
+          errors.push(who + ' (' + b.day + '): found ' + b.found + ' min is less than the ' + b.need + ' min needed. Shrink the program and say what was cut in "cut".');
+        }
+      });
+    }
+
+    // Goals with a measure.
+    var keys = {};
+    goals.forEach(function (g) {
+      if (!g || typeof g !== 'object' || !g.measure) return;
+      var name = '"' + (g.text || 'a goal') + '"';
+      var key = goalKeyOf(g.key);
+      if (!key) { errors.push('Goal ' + name + ' needs a key: a short name in lower case, like "weight" or "sleep".'); return; }
+      if (keys[key]) errors.push('Two goals share the key "' + key + '".');
+      keys[key] = g;
+      var m = g.measure;
+      if (MEASURES.indexOf(m.kind) === -1) { errors.push('Goal ' + name + ': measure kind "' + m.kind + '" is not one of ' + MEASURES.join(', ') + '.'); return; }
+      if (!g.why || !String(g.why).trim()) errors.push('Goal ' + name + ' needs a "why", in the client’s own words.');
+      if (!/^\d{4}-\d\d-\d\d$/.test(String(m.by || ''))) errors.push('Goal ' + name + ' needs a date in measure.by (YYYY-MM-DD).');
+      var months = Array.isArray(g.months) ? g.months : [];
+      var weeks = Array.isArray(g.weeks) ? g.weeks : [];
+      if (!months.length) errors.push('Goal ' + name + ' needs its monthly steps.');
+
+      if (NUMERIC_MEASURES.indexOf(m.kind) !== -1) {
+        var start = numOrNull(m.start), target = numOrNull(m.target);
+        if (start === null || target === null) { errors.push('Goal ' + name + ' needs a start and a target number.'); return; }
+        var rises = target > start, prev = start;
+        months.forEach(function (s) {
+          var t = numOrNull(s && s.target);
+          if (t === null) { errors.push('Goal ' + name + ': month ' + (s && s.n) + ' needs a target number.'); return; }
+          if (rises ? t < prev : t > prev) errors.push('Goal ' + name + ': month ' + s.n + ' (' + t + ') goes the wrong way.');
+          prev = t;
+        });
+        if (months.length && Math.abs(numOrNull(months[months.length - 1].target) - target) > 0.01) {
+          errors.push('Goal ' + name + ': the last month must reach the target, ' + target + '.');
+        }
+        if (m.kind === 'weight') {
+          if (weeks.length !== 4 || weeks.some(function (s, i) { return !s || s.n !== i + 1 || numOrNull(s.target) === null; })) {
+            errors.push('Goal ' + name + ' needs four weekly steps, weeks 1 to 4, each with a target.');
+          }
+          // The pace over the weeks to the goal's date when the plan's start
+          // is known, else over the months given.
+          var span = planStart && /^\d{4}-\d\d-\d\d$/.test(String(m.by || '')) ? daysBetween(planStart, m.by) / 7 : months.length * 4;
+          var perWeek = span > 0 ? Math.abs(target - start) / span : Infinity;
+          var limit = rises ? start * MAX_GAIN_PER_WEEK : maxLossPerWeek(start - target);
+          if (perWeek > limit + 0.005 && !String(m.rateReason || '').trim()) {
+            errors.push('Goal ' + name + ': ' + (isFinite(perWeek) ? Math.round(perWeek * 100) / 100 : 'no time') + ' lb a week is faster than the methods file allows (' +
+              (Math.round(limit * 100) / 100) + ' lb a week). Give it more time or a smaller target, or say why in measure.rateReason.');
+          }
+        }
+      }
+      // The months reach the goal's date: the last one ends within four weeks
+      // of it. Checked when the plan's start is known (block 1 starts about now).
+      if (planStart && months.length && /^\d{4}-\d\d-\d\d$/.test(String(m.by || ''))) {
+        var lastEnd = addDays(planStart, BLOCK_DAYS * months.length - 1);
+        if (Math.abs(daysBetween(lastEnd, m.by)) >= BLOCK_DAYS) {
+          errors.push('Goal ' + name + ': ' + months.length + ' monthly steps end on ' + lastEnd + ', not near its date, ' + m.by + '. One step every four weeks to the date.');
+        }
+      }
+      if (m.kind === 'habit') {
+        if (!weeks.length) errors.push('Goal ' + name + ' needs its weekly steps, each naming a swap.');
+        weeks.forEach(function (s) {
+          if (!s || nums.indexOf(posInt(s.swap)) === -1) { errors.push('Goal ' + name + ': a weekly step names swap ' + (s && s.swap) + ', which is not in this draft.'); return; }
+          var its = items.filter(function (it) {
+            return it && (posInt(it.swap) === s.swap || (Array.isArray(it.steps) && it.steps.some(function (x) { return x && posInt(x.swap) === s.swap; })));
+          });
+          var most = its.reduce(function (mx, it) { return Math.max(mx, timesAWeek(normalizeItem(it))); }, 0);
+          if (!posInt(s.target) || s.target > most) {
+            errors.push('Goal ' + name + ': swap ' + s.swap + '’s target must be 1 to ' + most + ' days, as often as its item can be ticked.');
+          }
+        });
+      }
+      if (m.kind === 'fit') {
+        if (FIT_SCALE.indexOf(m.target) === -1) errors.push('Goal ' + name + ': a clothes goal’s target is one of ' + FIT_SCALE.join(', ') + '.');
+        months.concat(weeks).forEach(function (s) {
+          if (!s || FIT_SCALE.indexOf(s.target) === -1) errors.push('Goal ' + name + ': each step’s target is one of ' + FIT_SCALE.join(', ') + '.');
+        });
+      }
+    });
+
+    // Items point at real goals, and every goal with a measure has items.
+    items.forEach(function (it, i) {
+      if (it && it.goal !== undefined && !keys[goalKeyOf(it.goal)]) {
+        errors.push(draftLabel(it, i) + ': goal "' + it.goal + '" is not the key of a goal with a measure in this draft.');
+      }
+    });
+    Object.keys(keys).forEach(function (k) {
+      if (!items.some(function (it) { return it && goalKeyOf(it.goal) === k; })) {
+        errors.push('Goal "' + (keys[k].text || k) + '" has no items. Tie at least one with "goal": "' + k + '".');
+      }
+    });
+    return errors;
   }
 
   function matchKey(name) { return String(name || '').trim().toLowerCase(); }
@@ -2196,7 +2951,7 @@ var BeastCore = (function () {
       }
       usedIds[prev.id] = true;
       var merged = normalizeItem(Object.assign({}, inc, { id: prev.id, addedAt: prev.addedAt }));
-      var diffs = ['core', 'freq', 'dueBy', 'group', 'notes', 'trainerNotes'].filter(function (f) {
+      var diffs = ['core', 'freq', 'dueBy', 'group', 'notes', 'trainerNotes', 'goalId', 'swap', 'block', 'replaces', 'steps'].filter(function (f) {
         return JSON.stringify(merged[f]) !== JSON.stringify(prev[f]);
       });
       if (diffs.length || JSON.stringify(merged.detail) !== JSON.stringify(prev.detail) ||
@@ -2376,6 +3131,13 @@ var BeastCore = (function () {
     encodePayload: encodePayload, decodePayload: decodePayload, extractCode: extractCode,
     packItem: packItem, unpackItem: unpackItem, shareUrlLength: shareUrlLength, linkFromText: linkFromText, needsInstallFirst: needsInstallFirst, heldWelcomeFits: heldWelcomeFits, welcomeOnFile: welcomeOnFile, STARTS: STARTS, STARTS_WORDING: STARTS_WORDING, startPoints: startPoints, heldStartsFit: heldStartsFit, welcomeStamp: welcomeStamp, iosSafari: iosSafari, hasAppHistory: hasAppHistory,
     validateDraft: validateDraft, mergeDraft: mergeDraft,
+    // Goals with steps and finding the time (goals brief, draft 3).
+    PACES: PACES, DEFAULT_PACE: DEFAULT_PACE, MEASURES: MEASURES, FIT_SCALE: FIT_SCALE, BLOCK_DAYS: BLOCK_DAYS,
+    WEIGHT_MARGIN: WEIGHT_MARGIN, PAYLOAD_STEPS: PAYLOAD_STEPS, STATUS_MAX_STEPS: STATUS_MAX_STEPS,
+    paceOf: paceOf, startWeekFor: startWeekFor, blockStartOf: blockStartOf, scheduleSwaps: scheduleSwaps, dueByOn: dueByOn,
+    goalKeyOf: goalKeyOf, goalLink: goalLink, mergeGoals: mergeGoals,
+    stepKey: stepKey, stepValue: stepValue, stepPoints: stepPoints, judgeSteps: judgeSteps, unsentSteps: unsentSteps,
+    ladderWeek: ladderWeek, ladderSnapshot: ladderSnapshot, rankProgress: rankProgress, validateSteps: validateSteps,
     buildBackup: buildBackup, readBackup: readBackup, backupDiff: backupDiff,
     backupFilename: backupFilename, daysSince: daysSince, BACKUP_TYPE: BACKUP_TYPE,
     reminderSlots: reminderSlots, dueAtSlot: dueAtSlot,
