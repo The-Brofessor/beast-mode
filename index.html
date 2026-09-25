@@ -492,6 +492,11 @@ nav button.active svg.navbadge { opacity: 1; filter: drop-shadow(0 0 3px var(--a
   font: 700 19px/1.15 "Barlow Condensed", Inter, sans-serif; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; border-radius: 14px 14px 0 0;
   border-bottom: 2px solid var(--acc); }
 :root:not([data-theme="light"]) .card.featured { border-color: var(--acc); }
+/* The routine pages' band (Chris, 2026-09-24): the Goals band's look, but
+   the lines are longer, so they wrap. */
+.card.band .lead { margin: -16px -16px 14px; padding: 14px 16px; background: #0B0D10; color: var(--acc); text-align: center;
+  font: 700 19px/1.2 "Barlow Condensed", Inter, sans-serif; text-transform: uppercase; letter-spacing: .03em; text-wrap: balance;
+  border-radius: 14px 14px 0 0; border-bottom: 2px solid var(--acc); }
 /* A section heading that is a sentence: the display font, one line, sized
    to fit a phone. The text colour, so it is black on the light card. */
 .card h2.condensed { font: 700 18px/1.1 "Barlow Condensed", Inter, sans-serif; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); margin-bottom: 6px; }
@@ -620,7 +625,7 @@ nav button.active svg { color: var(--acc-ink); stroke-width: 2.6; }
    timings, frequencies and payload prefixes are never written inline here.
    See CLAUDE.md. */
 
-var BUILT_AGAINST = '2.18.0';
+var BUILT_AGAINST = '2.19.0';
 var KEY = 'bm2.client';
 
 /* ── icons and badges ──────────────────────────────────────────────────── */
@@ -1286,10 +1291,20 @@ function answersHtml(answers, sections, withChange) {
   var a = answers || {};
   return sections.map(function (sec) {
     var shown = BeastCore.visibleFields ? BeastCore.visibleFields(sec, a) : sec.fields;
-    var lines = shown.filter(function (f) { return a[f.key] !== undefined && String(a[f.key]).trim() !== ''; })
+    var has = function (k) { return a[k] !== undefined && String(a[k]).trim() !== ''; };
+    // A "Something else?" box joins the line of the question above it, so
+    // the client never reads its internal label (CTO, step 3); its words win
+    // over a "none" or "nothing" tap.
+    var moreFor = {};
+    shown.forEach(function (f) { if (f.moreOf && has(f.key)) moreFor[f.moreOf] = String(a[f.key]).trim(); });
+    var lines = shown.filter(function (f) { return !f.moreOf && (has(f.key) || moreFor[f.key]); })
       .map(function (f) {
-        var v = String(a[f.key]).trim();
-        if (f.type === 'multi') v = v.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).join(', ');
+        var v = has(f.key) ? String(a[f.key]).trim() : '';
+        if (f.type === 'multi') {
+          var picks = v.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+          if (moreFor[f.key]) picks = picks.filter(function (p) { return p !== f.none; }).concat([moreFor[f.key]]);
+          v = picks.join(', ');
+        }
         if (f.type === 'height' && BeastCore.heightWords) v = BeastCore.heightWords(v);
         return '<div class="ans"><span>' + esc(f.label) + '</span><b>' + esc(v) + '</b></div>';
       });
@@ -1821,7 +1836,7 @@ function intakeScreen() {
     '<div style="margin:22px 0 4px"><div class="imeta">Step ' + (intake.step + 1) + ' of ' + secs.length + '</div>' +
       '<div class="bar" style="margin-top:8px"><i style="width:' +
         Math.round(((intake.step + 1) / secs.length) * 100) + '%"></i></div></div>' +
-    '<div class="card' + (sec.featured ? ' featured' : '') + '" style="margin-top:16px">' +
+    '<div class="card' + (sec.featured ? ' featured' : sec.lead ? ' band' : '') + '" style="margin-top:16px">' +
       (sec.lead ? '<div class="lead">' + esc(sec.lead) + '</div>' : '') +
       (sec.noTitle ? ''
         : sec.heading ? '<h2 class="condensed">' + esc(sec.heading) + '</h2>'

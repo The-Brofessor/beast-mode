@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.18.0';
+  var VERSION = '2.19.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1916,7 +1916,9 @@ var BeastCore = (function () {
   // (2026-09-24) is the form as taps; version 2's typed keys live on in
   // INTAKE_LEGACY. The worker refuses a version newer than it knows, so a
   // phone ahead of the worker is told, rather than having answers dropped.
-  var INTAKE_VERSION = 3;
+  // Version 4 (2026-09-25) adds finding the time: the morning, the commute,
+  // the lunch break, the screens, the time that doesn't move and the trade.
+  var INTAKE_VERSION = 4;
 
   // Version 1's keys that are gone, kept so old answers still print (under
   // the section named) and still make a baseline. Never asked again.
@@ -1989,10 +1991,20 @@ var BeastCore = (function () {
      went, and meals are "how many times", then a time and a where for each.
      Wording is draft. */
   var MAX_MEALS = 6;
+  // Finding the time (Chris, 2026-09-24, goals brief 4i): the morning, the
+  // commute, the lunch break and the evening's screens, so the Brofessor can
+  // see where the time goes. `hours` fields go with no set work hours.
   var ROUTINE_ASKS = [
     { key: 'wake', label: 'Wake up', type: 'time' },
-    { key: 'start', work: true, label: 'Start work', type: 'time' },
-    { key: 'end', work: true, label: 'Finish work', type: 'time' },
+    { key: 'morning', type: 'multi', labelBy: { work: 'Your morning, before work', off: 'Your morning' },
+      optionsBy: { work: ['coffee', 'phone', 'news', 'kids to school', 'shower', 'breakfast', 'chores', 'snooze'],
+                   off: ['coffee', 'phone', 'news', 'kids', 'shower', 'breakfast', 'chores', 'sleeping in'] } },
+    { key: 'commuteEach', work: true, label: 'Your commute, each way', type: 'choice',
+      options: ['none', 'under 15 min', '15 to 30 min', '30 to 60 min', 'over an hour'] },
+    { key: 'start', work: true, hours: true, label: 'Start work', type: 'time' },
+    { key: 'end', work: true, hours: true, label: 'Finish work', type: 'time' },
+    { key: 'lunch', work: true, hours: true, label: 'Your lunch break', type: 'choice',
+      options: ['none', '30 min', '45 min', 'an hour or more'] },
     { key: 'mealCount', label: 'How many times do you eat?', type: 'choice', options: ['1', '2', '3', '4', '5', '6'] }
   ];
   for (var mi = 1; mi <= MAX_MEALS; mi++) {
@@ -2004,6 +2016,8 @@ var BeastCore = (function () {
     { key: 'train2', label: 'Second choice', type: 'time' },
     { key: 'evening', label: 'Your evening', type: 'multi',
       options: ['dinner', 'kids', 'TV', 'phone', 'alcohol', 'gaming', 'computer', 'chores', 'a second job'] },
+    { key: 'screens', label: 'Screens in the evening, about', type: 'choice',
+      options: ['under 1 hour', '1 to 2 hours', '2 to 3 hours', '3+ hours'] },
     { key: 'bed', label: 'Bed time', type: 'time' }
   );
 
@@ -2012,8 +2026,9 @@ var BeastCore = (function () {
 
   function routinePass(prefix) {
     return ROUTINE_ASKS.filter(function (f) { return prefix === 'work' || !f.work; }).map(function (f) {
-      var out = { key: prefix + f.key[0].toUpperCase() + f.key.slice(1), label: f.label, type: f.type, ask: f.key };
+      var out = { key: prefix + f.key[0].toUpperCase() + f.key.slice(1), label: f.labelBy ? f.labelBy[prefix] : f.label, type: f.type, ask: f.key };
       if (f.options) out.options = f.options;
+      if (f.optionsBy) out.options = f.optionsBy[prefix];
       if (f.hideLabel) out.hideLabel = true;
       // Where each meal is eaten: work is a place only on a work day.
       if (f.where) out.options = prefix === 'work' ? ['home', 'work', 'out'] : ['home', 'out'];
@@ -2022,7 +2037,7 @@ var BeastCore = (function () {
       if (f.meal) out.when = { key: prefix + 'MealCount', atLeast: f.meal };
       if (f.meal && !f.where) out.whereKey = prefix + 'Meal' + f.meal + 'Where';
       if (f.where) out.joined = true;
-      if (f.work) out.unless = { key: 'job', is: NO_SET_HOURS };
+      if (f.hours) out.unless = { key: 'job', is: NO_SET_HOURS };
       return out;
     });
   }
@@ -2149,7 +2164,10 @@ var BeastCore = (function () {
     // No line under the title (Chris, 2026-09-24). The job is one set of
     // buttons, each a row of the activity table (methods 2); "no set work
     // hours" hides the leave, start and finish.
+    // A band on each routine page, like the Goals page's (Chris's wording,
+    // 2026-09-24): these three pages are where the time is found.
     { title: 'Your work day', routine: true, pass: 'work',
+      lead: 'Time is the most valuable asset you have. Don’t waste it.',
       fields: [
         // "Weekdays" taps Monday to Friday at once (Chris, 2026-09-24). It is
         // a shortcut, not an answer: only the days themselves are stored.
@@ -2165,11 +2183,13 @@ var BeastCore = (function () {
     // No line under the title (Chris, 2026-09-24). The days off are the
     // days not tapped as work days, so they are not asked.
     { title: 'Your days off', routine: true, pass: 'off',
+      lead: 'Don’t let the weekend become your weak end.',
       fields: routinePass('off') },
     // "Most days", as taps, no line under the title (Chris, 2026-09-24).
     // Calories and nights away went (no plan used them); brushing and
     // flossing moved to Health. Steps and water keep their keys.
     { title: 'Most days', routine: true, pass: 'most',
+      lead: 'Motivation is what gets you started. Habit is what keeps you going.',
       fields: [
         { key: 'steps', label: 'Steps a day', type: 'choice',
           options: ['don’t know', 'under 5,000', '5,000 to 8,000', '8,000 to 10,000', '10,000 to 12,000', '12,000 to 15,000', 'over 15,000'] },
@@ -2182,6 +2202,17 @@ var BeastCore = (function () {
         { key: 'caffeineCount', label: 'Coffees, energy drinks or pre-workouts a day', type: 'choice', options: ['0', '1', '2', '3', '4', '5', '6+'] },
         { key: 'caffeineLast', label: 'The last one', type: 'choice', options: ['morning', 'noon', 'afternoon', 'evening'],
           when: { key: 'caffeineCount', atLeast: 1 } },
+        // Finding the time (Chris, 2026-09-24): what never moves, and what
+        // the client would give up for training. Each has a box under its
+        // taps so they think of everything.
+        { key: 'fixedTime', label: 'Time that doesn’t move', type: 'multi', none: 'none',
+          options: ['family dinner', 'kids’ bedtime', 'school run', 'church', 'a second job', 'caring for someone', 'none'] },
+        { key: 'fixedMore', label: 'Time that doesn’t move: something else', hideLabel: true, type: 'text', moreOf: 'fixedTime',
+          hint: 'Something else? Date night, the kids’ games' },
+        { key: 'trade', label: 'What would you trade for training time?', type: 'multi', none: 'nothing',
+          options: ['TV', 'phone', 'gaming', 'sleeping in', 'snooze', 'a night out', 'nothing'] },
+        { key: 'tradeMore', label: 'Trade for training time: something else', hideLabel: true, type: 'text', moreOf: 'trade',
+          hint: 'Something else? Happy hour, the drive-thru' },
         { key: 'mostMore', label: 'Anything else?', type: 'textarea', hint: 'Travel, shift changes, anything the taps missed' }
       ] },
     // As taps, no line under the title (Chris, 2026-09-24). The experience
@@ -2459,8 +2490,17 @@ var BeastCore = (function () {
       var train = [t(p + 'Train'), t(p + 'Train2')].filter(Boolean).join(', or ');
       return {
         wake: t(p + 'Wake'), meals: meals.join(', '),
-        train: train, evening: list(p + 'Evening'), bed: t(p + 'Bed')
+        train: train, evening: list(p + 'Evening'), bed: t(p + 'Bed'),
+        // Finding the time (version 4).
+        morning: list(p + 'Morning'), screens: t(p + 'Screens')
       };
+    };
+    // A "none" or "nothing" tap and words in the box below it: the words win,
+    // since the client named something (CTO, step 3).
+    var joinMore = function (key, more, none) {
+      var picks = picksOf(a[key]);
+      if (t(more)) picks = picks.filter(function (p) { return p !== none; });
+      return picks.concat(t(more) ? [t(more)] : []).join(', ');
     };
     var w = day('work'), o = day('off');
     var hours = [t('workStart'), t('workEnd')].filter(Boolean).join(' to ');
@@ -2474,10 +2514,13 @@ var BeastCore = (function () {
       version: v,
       job: pick('job'), activity: pick('activity'), workDays: list('workDays'),
       work: { wake: or(w.wake, 'workWake', 'wakeTime'), hours: or(hours, 'workHours'), meals: or(w.meals, 'workMeals'),
-              train: or(w.train, 'workTrain'), evening: or(w.evening, 'workEvening'), bed: or(w.bed, 'workBed', 'bedTime') },
+              train: or(w.train, 'workTrain'), evening: or(w.evening, 'workEvening'), bed: or(w.bed, 'workBed', 'bedTime'),
+              morning: w.morning, commute: t('workCommuteEach'), lunch: t('workLunch'), screens: w.screens },
       off: { wake: or(o.wake, 'offWake'), meals: or(o.meals, 'offMeals'), train: or(o.train, 'offTrain'),
-             evening: or(o.evening, 'offEvening'), bed: or(o.bed, 'offBed') },
-      most: { steps: pick('steps'), water: pick('water'), alcohol: or(drinks, 'alcohol'), caffeine: or(caffeine, 'caffeine') },
+             evening: or(o.evening, 'offEvening'), bed: or(o.bed, 'offBed'),
+             morning: o.morning, screens: o.screens },
+      most: { steps: pick('steps'), water: pick('water'), alcohol: or(drinks, 'alcohol'), caffeine: or(caffeine, 'caffeine'),
+              fixed: joinMore('fixedTime', 'fixedMore', 'none'), trade: joinMore('trade', 'tradeMore', 'nothing') },
       habitKeep: pick('habitKeep'), habitBreak: pick('habitBreak'), obstacle: pick('obstacle'),
       // Who cooks, and what the routine pages' own boxes add, so the coach
       // reads them with the routine (CTO, 2026-09-24).
@@ -2525,12 +2568,23 @@ var BeastCore = (function () {
     workTrain: 'Your work day: Could train', workEvening: 'Your work day: Evening', workBed: 'Your work day: Bed',
     offWake: 'Your days off: Wake', offMeals: 'Your days off: Meals', offTrain: 'Your days off: Could train',
     offEvening: 'Your days off: Evening', offBed: 'Your days off: Bed',
-    steps: 'Most days: Steps', water: 'Most days: Water', alcohol: 'Most days: Alcohol', caffeine: 'Most days: Caffeine'
+    steps: 'Most days: Steps', water: 'Most days: Water', alcohol: 'Most days: Alcohol', caffeine: 'Most days: Caffeine',
+    // Version 4, finding the time.
+    workMorning: 'Your work day: Morning', workCommute: 'Your work day: Commute', workLunch: 'Your work day: Lunch break',
+    workScreens: 'Your work day: Screens', offMorning: 'Your days off: Morning', offScreens: 'Your days off: Screens',
+    fixed: 'Most days: Time that doesn’t move', trade: 'Most days: Would trade for training'
   };
+  // Slots first asked in version 4: a blank before them was never asked, so
+  // a first answer is not a change (the same trap as 2026-09-23's wake time).
+  // This holds for good, not only across version 3 to 4: a client who left
+  // one blank and fills it in at a later block shows no change there either.
+  // The price is small; the answer itself still reaches the coach (CTO, step 3).
+  var NEW_SLOTS_V4 = ['workMorning', 'workCommute', 'workLunch', 'workScreens', 'offMorning', 'offScreens', 'fixed', 'trade'];
 
   // A baseline as one flat object keyed by the version 2 field keys.
   function flatBaseline(b) {
-    var out = { workDays: b.workDays || '', job: b.job, activity: b.activity, steps: b.most.steps, water: b.most.water, alcohol: b.most.alcohol, caffeine: b.most.caffeine };
+    var out = { workDays: b.workDays || '', job: b.job, activity: b.activity, steps: b.most.steps, water: b.most.water, alcohol: b.most.alcohol, caffeine: b.most.caffeine,
+      fixed: b.most.fixed || '', trade: b.most.trade || '' };
     Object.keys(b.work).forEach(function (k) { out['work' + k[0].toUpperCase() + k.slice(1)] = b.work[k]; });
     Object.keys(b.off).forEach(function (k) { out['off' + k[0].toUpperCase() + k.slice(1)] = b.off[k]; });
     return out;
@@ -2547,6 +2601,7 @@ var BeastCore = (function () {
     var b = flatBaseline(routineBaseline(before)), a = flatBaseline(routineBaseline(after));
     var TIMED = /^(work|off)(Wake|Hours|Meals|Train|Bed)$/;
     return Object.keys(SLOT_LABELS).filter(function (k) {
+      if (NEW_SLOTS_V4.indexOf(k) !== -1 && !b[k]) return false;
       return TIMED.test(k) ? !sameSlot(k, b[k], a[k]) : b[k] !== a[k];
     })
       .map(function (k) { return { key: k, label: SLOT_LABELS[k], from: b[k], to: a[k] }; });
@@ -2687,6 +2742,8 @@ var BeastCore = (function () {
   }
 
   // `opts.planStart`: the client's plan start, when the caller knows it.
+  // `opts.cutPace`: the intake's answer, 'aggressive' or 'slow', which moves
+  // the loss limit one row of the deficit table.
   function validateDraft(raw, opts) {
     var errors = [];
     var parsed = raw;
@@ -2782,7 +2839,15 @@ var BeastCore = (function () {
   // `rateReason` (a GLP-1, a test date) is let through: the Brofessor has said
   // why, and Chris reads it.
   var MAX_GAIN_PER_WEEK = 0.005;
-  function maxLossPerWeek(toLose) { return toLose > 50 ? 2 : toLose >= 20 ? 1 : 0.75; }
+  // The rows of the deficit table, slowest first. The intake's pace moves a
+  // client one row (methods 2): Aggressive up, Slow down.
+  var LOSS_ROWS = [0.75, 1, 2];
+  function maxLossPerWeek(toLose, cutPace) {
+    var row = toLose > 50 ? 2 : toLose >= 20 ? 1 : 0;
+    if (cutPace === 'aggressive') row = Math.min(row + 1, LOSS_ROWS.length - 1);
+    if (cutPace === 'slow') row = Math.max(row - 1, 0);
+    return LOSS_ROWS[row];
+  }
 
   // How often an item can be ticked in a week.
   function timesAWeek(it) {
@@ -2879,7 +2944,7 @@ var BeastCore = (function () {
           // is known, else over the months given.
           var span = planStart && /^\d{4}-\d\d-\d\d$/.test(String(m.by || '')) ? daysBetween(planStart, m.by) / 7 : months.length * 4;
           var perWeek = span > 0 ? Math.abs(target - start) / span : Infinity;
-          var limit = rises ? start * MAX_GAIN_PER_WEEK : maxLossPerWeek(start - target);
+          var limit = rises ? start * MAX_GAIN_PER_WEEK : maxLossPerWeek(start - target, opts.cutPace);
           if (perWeek > limit + 0.005 && !String(m.rateReason || '').trim()) {
             errors.push('Goal ' + name + ': ' + (isFinite(perWeek) ? Math.round(perWeek * 100) / 100 : 'no time') + ' lb a week is faster than the methods file allows (' +
               (Math.round(limit * 100) / 100) + ' lb a week). Give it more time or a smaller target, or say why in measure.rateReason.');

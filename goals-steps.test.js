@@ -512,3 +512,66 @@ test('a step with no usable target is closed as skipped, never left open', () =>
   const rec = C.judgeSteps(agreed({ goals: [g] }), day(28)).find(r => r.key === 'gJ|0|m|1');
   assert.strictEqual(rec.result, 'skipped');
 });
+
+// ── build step 3: the intake for finding the time ─────────────────────────
+
+test('the Aggressive or Slow answer moves the loss limit one row of the deficit table', () => {
+  const draft = (start, target, by) => ({
+    items: [{ name: 'Weigh-in', goal: 'weight' }],
+    goals: [{ key: 'weight', text: target + ' lbs', why: 'Because.', measure: { kind: 'weight', start, target, by },
+      months: [{ n: 1, target }], weeks: [1, 2, 3, 4].map(n => ({ n, target: start })) }]
+  });
+  const err = (d, cutPace) => C.validateDraft(d, { planStart: P, cutPace }).errors.join('\n');
+  // 4 lbs in four weeks is 1 lb a week: too fast under 20 lbs, fine when Aggressive.
+  const four = draft(200, 196, '2026-10-26');
+  assert.match(err(four), /0.75 lb a week/);
+  assert.strictEqual(err(four, 'aggressive'), '');
+  // 30 lbs to lose over 30 weeks is 1 lb a week: fine as it is, too fast at Slow.
+  const thirty = draft(230, 200, C.addDays(P, 210));
+  thirty.goals[0].months = [1, 2, 3, 4, 5, 6, 7, 8].map(n => ({ n, target: n === 8 ? 200 : 230 - n * 3.75 }));
+  assert.strictEqual(err(thirty), '');
+  assert.match(err(thirty, 'slow'), /0.75 lb a week/);
+});
+
+test('the routine pages ask where the time goes, each with its band', () => {
+  const [work, off, most] = C.routineSections();
+  assert.strictEqual(work.lead, 'Time is the most valuable asset you have. Don\u2019t waste it.');
+  assert.strictEqual(off.lead, 'Don\u2019t let the weekend become your weak end.');
+  assert.strictEqual(most.lead, 'Motivation is what gets you started. Habit is what keeps you going.');
+  const keys = s => s.fields.map(f => f.key);
+  assert.ok(['workMorning', 'workCommuteEach', 'workLunch', 'workScreens'].every(k => keys(work).includes(k)));
+  assert.ok(['offMorning', 'offScreens'].every(k => keys(off).includes(k)));
+  assert.ok(!keys(off).some(k => /Commute|Lunch/.test(k)), 'no commute or lunch on a day off');
+  assert.ok(C.intakeFields().find(f => f.key === 'offMorning').options.includes('sleeping in'));
+  // Lunch goes with no set work hours; the commute stays.
+  const shown = a => C.visibleFields(work, a).map(f => f.key);
+  assert.ok(!shown({ job: 'no set work hours' }).includes('workLunch'));
+  assert.ok(shown({ job: 'no set work hours' }).includes('workCommuteEach'));
+  // What never moves, and the trade, each with a box for something else.
+  assert.deepStrictEqual(keys(most).slice(-5), ['fixedTime', 'fixedMore', 'trade', 'tradeMore', 'mostMore']);
+  assert.strictEqual(most.fields.find(f => f.key === 'trade').none, 'nothing');
+});
+
+test('the new routine answers reach the baseline, and a first answer to one is not a change', () => {
+  const before = { workWake: '5am', workBed: '11pm' };
+  const after = { workWake: '5am', workBed: '11pm', workMorning: 'coffee\nphone', workScreens: '2 to 3 hours',
+    fixedTime: 'family dinner', fixedMore: 'date night', trade: 'TV\nphone' };
+  const b = C.routineBaseline(after);
+  assert.strictEqual(b.work.morning, 'coffee, phone');
+  assert.strictEqual(b.work.screens, '2 to 3 hours');
+  assert.strictEqual(b.most.fixed, 'family dinner, date night');
+  assert.strictEqual(b.most.trade, 'TV, phone');
+  assert.deepStrictEqual(C.routineChanges(before, after), [], 'never asked before, so not a change');
+  const later = Object.assign({}, after, { workScreens: '1 to 2 hours' });
+  assert.deepStrictEqual(C.routineChanges(after, later).map(c => [c.key, c.from, c.to]), [['workScreens', '2 to 3 hours', '1 to 2 hours']]);
+});
+
+test('a "none" or "nothing" tap gives way to words typed in the box below it', () => {
+  const b = C.routineBaseline({ fixedTime: 'none', fixedMore: 'Date night', trade: 'nothing', tradeMore: 'happy hour' });
+  assert.strictEqual(b.most.fixed, 'Date night');
+  assert.strictEqual(b.most.trade, 'happy hour');
+  const plain = C.routineBaseline({ trade: 'nothing' });
+  assert.strictEqual(plain.most.trade, 'nothing', 'a real nothing stays a nothing');
+  const most = C.routineSections()[2];
+  assert.deepStrictEqual(most.fields.filter(f => f.moreOf).map(f => [f.key, f.moreOf]), [['fixedMore', 'fixedTime'], ['tradeMore', 'trade']]);
+});

@@ -681,7 +681,7 @@ test('the date of birth is required on the form, and missingRequired finds it bl
 // ── the intake and the routine baseline ────────────────────────────────────
 
 test('the intake asks the routine for a work day and a day off, keyed by pass, with no duplicate keys', () => {
-  assert.strictEqual(C.INTAKE_VERSION, 3, 'the form as taps (2026-09-24)');
+  assert.strictEqual(C.INTAKE_VERSION, 4, 'finding the time (2026-09-25), after the form as taps');
   const routine = C.routineSections();
   assert.deepStrictEqual(routine.map(s => s.pass), ['work', 'off', 'most']);
   assert.deepStrictEqual(routine.map(s => s.title), ['Your work day', 'Your days off', 'Most days']);
@@ -794,8 +794,8 @@ test('the intake asks the routine for a work day and a day off, keyed by pass, w
   // The same asks for both passes, so the two days compare field for field.
   const asks = pass => routine.find(s => s.pass === pass).fields.filter(f => f.ask).map(f => f.ask);
   const meals = [1, 2, 3, 4, 5, 6].flatMap(n => ['meal' + n, 'meal' + n + 'Where']);
-  assert.deepStrictEqual(asks('off'), ['wake', 'mealCount', ...meals, 'train', 'train2', 'evening', 'bed']);
-  assert.deepStrictEqual(asks('work').filter(k => !asks('off').includes(k)), ['start', 'end'], 'the day off asks what the work day asks, minus the fixed blocks');
+  assert.deepStrictEqual(asks('off'), ['wake', 'morning', 'mealCount', ...meals, 'train', 'train2', 'evening', 'screens', 'bed']);
+  assert.deepStrictEqual(asks('work').filter(k => !asks('off').includes(k)), ['commuteEach', 'start', 'end', 'lunch'], 'the day off asks what the work day asks, minus the work blocks');
   assert.ok(keys.includes('workStart') && !keys.includes('offStart') && !keys.includes('workHours'), 'the fixed blocks belong to the work day alone, as wheels');
   for (const gone of ['workLeave', 'workCommute', 'workFirst']) assert.ok(!keys.includes(gone), gone + ': no plan used it (Chris, 2026-09-24)');
   for (const old of ['wakeTime', 'bedTime']) assert.ok(!keys.includes(old), old + ' is never asked again');
@@ -836,7 +836,7 @@ test('old answers are told apart from new ones, and both still print for the coa
 test('routineBaseline reads either version into one shape, blank as empty strings', () => {
   const b1 = C.routineBaseline({ job: 'desk', wakeTime: ' 05:30 ', workHours: '8 to 5', bedTime: '22:30' });
   assert.strictEqual(b1.version, 1);
-  assert.deepStrictEqual(b1.work, { wake: '05:30', hours: '8 to 5', meals: '', train: '', evening: '', bed: '22:30' });
+  assert.deepStrictEqual(b1.work, { wake: '05:30', hours: '8 to 5', meals: '', train: '', evening: '', bed: '22:30', morning: '', commute: '', lunch: '', screens: '' });
   assert.strictEqual(b1.off.wake, '');
   assert.strictEqual(b1.empty, false);
   const b2 = C.routineBaseline({ workWake: '6, coffee', wakeTime: '5', offBed: 'midnight', steps: 6000, habitKeep: 'walks' });
@@ -847,7 +847,7 @@ test('routineBaseline reads either version into one shape, blank as empty string
   assert.strictEqual(b2.habitKeep, 'walks');
   assert.strictEqual(C.routineBaseline({ age: 40, habitKeep: 'walks' }).empty, true, 'goals alone are not a routine');
   assert.strictEqual(C.routineBaseline(null).empty, true);
-  assert.deepStrictEqual(Object.keys(C.routineBaseline({}).work), ['wake', 'hours', 'meals', 'train', 'evening', 'bed']);
+  assert.deepStrictEqual(Object.keys(C.routineBaseline({}).work), ['wake', 'hours', 'meals', 'train', 'evening', 'bed', 'morning', 'commute', 'lunch', 'screens']);
 });
 
 test('the work day as taps: times in words, the slots built from the taps, typed answers untouched', () => {
@@ -871,7 +871,7 @@ test('the work day as taps: times in words, the slots built from the taps, typed
   });
   assert.strictEqual(b.workDays, 'Mon, Tue, Wed, Thu, Fri');
   assert.deepStrictEqual(b.work, { wake: '5am', hours: '9am to 5pm',
-    meals: '7am at home, 11am at work, 2pm at work, 5pm at home, 7pm at home', train: '4pm, or 6pm', evening: 'dinner, TV', bed: '10pm' },
+    meals: '7am at home, 11am at work, 2pm at work, 5pm at home, 7pm at home', train: '4pm, or 6pm', evening: 'dinner, TV', bed: '10pm', morning: '', commute: '', lunch: '', screens: '' },
     'a sixth meal left over from a higher count is not read');
   assert.strictEqual(b.off.wake, '6am');
   const work0 = C.INTAKE_SECTIONS.find(s => s.pass === 'work');
@@ -891,7 +891,7 @@ test('the work day as taps: times in words, the slots built from the taps, typed
   assert.ok(keys({ job: 'no set work hours' }).includes('workMealCount'));
   // Most days as taps.
   const m = C.routineBaseline({ steps: 'over 15,000', water: 'over 150 oz', alcoholNights: 'Fri\nSat', alcoholMost: '10 or more', caffeineCount: '6+', caffeineLast: 'noon' }).most;
-  assert.deepStrictEqual(m, { steps: 'over 15,000', water: 'over 150 oz', alcohol: 'Fri, Sat; 10 or more on the biggest night', caffeine: '6+ a day, the last at noon' });
+  assert.deepStrictEqual(m, { steps: 'over 15,000', water: 'over 150 oz', alcohol: 'Fri, Sat; 10 or more on the biggest night', caffeine: '6+ a day, the last at noon', fixed: '', trade: '' });
   assert.strictEqual(C.routineBaseline({ alcoholNights: 'none', caffeineCount: '0', caffeineLast: 'evening' }).most.caffeine, '0 a day');
   assert.strictEqual(C.routineBaseline({ alcoholNights: 'none' }).most.alcohol, 'none');
   assert.strictEqual(C.routineBaseline({ alcohol: '3 beers Friday' }).most.alcohol, '3 beers Friday', 'a typed answer still reads');
