@@ -24,3 +24,7 @@ id = "f7be0a8d97f94ec89920d9a5d00d6838"
 #   npx wrangler secret put VAPID_PRIVATE_JWK
 VAPID_PUBLIC_KEY = "BDpOB42o2rDOh6fd0DrTSWRm7rj6LUu3IKcX51r9yA1JOGJEefM1d3PjWek2o3ju9xk7Vyt2vUuzocjqwxFPusE"
 VAPID_SUBJECT = "mailto:clinkhorn@gmail.com"
+# The iPhone app's Apple push (native app brief). The key itself is the
+# APNS_KEY secret; the Team ID and Key ID are not secret.
+APNS_TEAM_ID = "BMQX57LP2Y"
+APNS_KEY_ID = "588T95864M"

@@ -200,3 +200,78 @@ test('unsubscribe removes the record', async () => {
   assert.strictEqual((await post('/unsubscribe', { id: 'a' }, env(kv))).status, 200);
   assert.strictEqual(kv.map.size, 0);
 });
+
+// ── Apple push for the iPhone app (native app brief) ────────────────────────
+
+async function apnsEnv(kv) {
+  // A throwaway P-256 key in the .p8 (PKCS#8 PEM) form Apple hands out.
+  const pair = await webcrypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const der = Buffer.from(await webcrypto.subtle.exportKey('pkcs8', pair.privateKey)).toString('base64');
+  const pem = '-----BEGIN PRIVATE KEY-----\n' + der.match(/.{1,64}/g).join('\n') + '\n-----END PRIVATE KEY-----\n';
+  return { e: env(kv, { APNS_KEY: pem, APNS_KEY_ID: 'KEYID12345', APNS_TEAM_ID: 'BMQX57LP2Y' }), pub: pair.publicKey };
+}
+
+function withApns(status, reason, fn) {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return { status, json: async () => ({ reason }) };
+  };
+  return fn(calls).finally(() => { globalThis.fetch = real; });
+}
+
+const TOKEN = 'ab'.repeat(32);
+const postTo = (path, body, e) => W.default.fetch(new Request('https://push.example.com' + path, {
+  method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }), e);
+
+test('an Apple push is signed with the push key and addressed to the app', async () => {
+  const { e, pub } = await apnsEnv(fakeKV({}));
+  await withApns(200, '', async calls => {
+    const out = await W.sendApns(TOKEN, { title: 'Beast Mode', body: 'Hi' }, e, Date.UTC(2026, 8, 25, 22, 0));
+    assert.deepStrictEqual(out, { status: 200, reason: '' });
+    const { url, init } = calls[0];
+    assert.strictEqual(url, 'https://api.push.apple.com/3/device/' + TOKEN);
+    assert.strictEqual(init.headers['apns-topic'], 'coach.thebrofessor.beastmode');
+    assert.strictEqual(init.headers['apns-push-type'], 'alert');
+    const jwt = init.headers.authorization.replace(/^bearer /, '');
+    const [h, p, s] = jwt.split('.');
+    const dec = x => JSON.parse(Buffer.from(x, 'base64url').toString());
+    assert.deepStrictEqual(dec(h), { alg: 'ES256', kid: 'KEYID12345' });
+    assert.strictEqual(dec(p).iss, 'BMQX57LP2Y');
+    const ok = await webcrypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub,
+      Buffer.from(s, 'base64url'), new TextEncoder().encode(h + '.' + p));
+    assert.ok(ok, 'the signature checks out with the key');
+    assert.deepStrictEqual(JSON.parse(init.body).aps.alert, { title: 'Beast Mode', body: 'Hi' });
+  });
+});
+
+test('a phone signs up with its device token, gets one test a minute, and nothing without the key', async () => {
+  const kv = fakeKV({});
+  const { e } = await apnsEnv(kv);
+  assert.strictEqual((await postTo('/device', { id: 'r1', token: 'not-a-token' }, e)).status, 400);
+  assert.strictEqual((await postTo('/device', { id: 'r1', token: TOKEN, tz: 'America/Los_Angeles' }, e)).status, 200);
+  assert.strictEqual(JSON.parse(kv.map.get('dev:r1')).token, TOKEN);
+  await withApns(200, '', async calls => {
+    assert.strictEqual((await postTo('/device/test', { id: 'r1' }, e)).status, 200);
+    assert.strictEqual((await postTo('/device/test', { id: 'r1' }, e)).status, 429, 'one a minute');
+    assert.strictEqual(calls.length, 1);
+  });
+  assert.strictEqual((await postTo('/device/test', { id: 'nobody' }, e)).status, 404);
+  const bare = env(fakeKV({ 'dev:r2': JSON.stringify({ token: TOKEN }) }));
+  assert.strictEqual((await postTo('/device/test', { id: 'r2' }, bare)).status, 503, 'no key on the server yet');
+});
+
+test('a phone Apple has forgotten is dropped, and unsubscribing forgets the phone', async () => {
+  const kv = fakeKV({});
+  const { e } = await apnsEnv(kv);
+  await postTo('/device', { id: 'r1', token: TOKEN }, e);
+  await withApns(410, 'Unregistered', async () => {
+    const r = await postTo('/device/test', { id: 'r1' }, e);
+    assert.strictEqual(r.status, 502);
+  });
+  assert.ok(!kv.map.has('dev:r1'));
+  await postTo('/device', { id: 'r3', token: TOKEN }, e);
+  await postTo('/unsubscribe', { id: 'r3' }, e);
+  assert.ok(!kv.map.has('dev:r3'));
+});

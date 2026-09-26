@@ -6,7 +6,8 @@
    says when the push arrives.
 
    Deploy:  npx wrangler deploy
-   Secret:  npx wrangler secret put VAPID_PRIVATE_JWK
+   Secrets: npx wrangler secret put VAPID_PRIVATE_JWK
+            npx wrangler secret put APNS_KEY   (the iPhone app's push key, .p8)
 */
 
 const CRON_WINDOW_MIN = 15;   // must match the cron in wrangler.toml
@@ -94,6 +95,90 @@ async function sendPush(sub, env) {
   return res.status;
 }
 
+// ── Apple push (APNs) ──────────────────────────────────────────────────────
+// For the native iPhone app (native app brief, 2026-09-25). A token signed
+// with Chris's push key (.p8, the APNS_KEY secret) proves the push is ours;
+// Apple allows one token per key to be reused for up to an hour, so it is
+// kept for 50 minutes. TestFlight and App Store builds use the production
+// host; APNS_HOST points a Xcode debug build at the sandbox.
+
+const APNS_TOPIC = 'coach.thebrofessor.beastmode';
+let apnsJwt = null;   // { token, at, kid }
+
+function pemToDer(pem) {
+  const b64 = String(pem).replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+async function apnsToken(env, nowMs) {
+  if (apnsJwt && apnsJwt.kid === env.APNS_KEY_ID && nowMs - apnsJwt.at < 50 * 60 * 1000) return apnsJwt.token;
+  const key = await crypto.subtle.importKey('pkcs8', pemToDer(env.APNS_KEY),
+    { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const enc = o => bytesToB64url(new TextEncoder().encode(JSON.stringify(o)));
+  const input = enc({ alg: 'ES256', kid: env.APNS_KEY_ID }) + '.' + enc({ iss: env.APNS_TEAM_ID, iat: Math.floor(nowMs / 1000) });
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(input));
+  apnsJwt = { token: input + '.' + bytesToB64url(sig), at: nowMs, kid: env.APNS_KEY_ID };
+  return apnsJwt.token;
+}
+
+export function apnsReady(env) {
+  return !!(env.APNS_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID);
+}
+
+// { status, reason }: 200 is delivered to Apple; 410 or BadDeviceToken means
+// the phone no longer takes pushes (the app was deleted).
+export async function sendApns(deviceToken, alert, env, nowMs = Date.now()) {
+  const host = env.APNS_HOST || 'https://api.push.apple.com';
+  const res = await fetch(host + '/3/device/' + deviceToken, {
+    method: 'POST',
+    headers: {
+      authorization: 'bearer ' + await apnsToken(env, nowMs),
+      'apns-topic': APNS_TOPIC,
+      'apns-push-type': 'alert',
+      'apns-priority': '10',
+      'apns-expiration': '0',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ aps: { alert: { title: alert.title, body: alert.body }, sound: 'default' } })
+  });
+  let reason = '';
+  if (res.status !== 200) { try { reason = (await res.json()).reason || ''; } catch { /* no body */ } }
+  return { status: res.status, reason };
+}
+
+const DEVICE_TOKEN = /^[0-9a-fA-F]{64,200}$/;
+
+// POST /device { id, token, tz }: the iPhone app's device token, stored
+// under the same id as a web push subscription. Nothing else is kept.
+async function device(req, env) {
+  let body;
+  try { body = await req.json(); } catch { return json({ error: 'Bad JSON' }, 400); }
+  const { id, token, tz } = body || {};
+  if (!id || typeof id !== 'string' || id.length > 100) return json({ error: 'Missing id' }, 400);
+  if (!DEVICE_TOKEN.test(String(token || ''))) return json({ error: 'Missing device token' }, 400);
+  await env.SUBS.put('dev:' + id, JSON.stringify({
+    token: token.toLowerCase(), tz: typeof tz === 'string' ? tz : 'UTC', updatedAt: new Date().toISOString()
+  }));
+  return json({ ok: true });
+}
+
+// POST /device/test { id }: one test notification to that phone, and only to
+// that phone. At most one a minute per phone.
+async function deviceTest(req, env) {
+  let body;
+  try { body = await req.json(); } catch { return json({ error: 'Bad JSON' }, 400); }
+  const id = body && typeof body.id === 'string' ? body.id : '';
+  const raw = id ? await env.SUBS.get('dev:' + id) : null;
+  if (!raw) return json({ error: 'This phone is not signed up for notifications yet.' }, 404);
+  if (!apnsReady(env)) return json({ error: 'Notifications are not set up on the server yet.' }, 503);
+  if (await env.SUBS.get('devtest:' + id) !== null) return json({ error: 'One test a minute. Try again shortly.' }, 429);
+  await env.SUBS.put('devtest:' + id, '1', { expirationTtl: 60 });
+  const rec = JSON.parse(raw);
+  const out = await sendApns(rec.token, { title: 'Beast Mode', body: 'Notifications work. Now go crush the day.' }, env);
+  if (out.status === 410 || out.reason === 'BadDeviceToken' || out.reason === 'Unregistered') await env.SUBS.delete('dev:' + id);
+  return out.status === 200 ? json({ ok: true }) : json({ error: 'Apple said no: ' + (out.reason || out.status), status: out.status, reason: out.reason }, 502);
+}
+
 // ── routes ─────────────────────────────────────────────────────────────────
 
 async function subscribe(req, env) {
@@ -122,6 +207,7 @@ async function unsubscribe(req, env) {
   try { body = await req.json(); } catch { return json({ error: 'Bad JSON' }, 400); }
   if (!body || !body.id) return json({ error: 'Missing id' }, 400);
   await env.SUBS.delete('sub:' + body.id);
+  await env.SUBS.delete('dev:' + body.id);   // the iPhone app's token too
   return json({ ok: true });
 }
 
@@ -182,6 +268,8 @@ export default {
 
     if (req.method === 'POST' && path === '/subscribe') return subscribe(req, env);
     if (req.method === 'POST' && path === '/unsubscribe') return unsubscribe(req, env);
+    if (req.method === 'POST' && path === '/device') return device(req, env);
+    if (req.method === 'POST' && path === '/device/test') return deviceTest(req, env);
     if (req.method === 'GET' && path === '/health') return json({ ok: true });
 
     return json({ error: 'Not found' }, 404);

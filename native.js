@@ -105,5 +105,30 @@
   }
   if (App) App.addListener('appUrlOpen', function (e) { deliver(e && e.url); });
 
-  window.BeastNative = { isNative: isNative, ready: ready, onLink: onLink };
+  // Apple push (native app brief). Asks iOS for permission, then for this
+  // phone's device token, which the app gives to the push worker. Resolves
+  // with the token, or rejects with a plain reason: 'denied' when the client
+  // said no, 'unavailable' off the iPhone app, or iOS's own error.
+  var Push = plugin('PushNotifications');
+  function enablePush() {
+    if (!Push) return Promise.reject(new Error('unavailable'));
+    return Push.requestPermissions().then(function (p) {
+      if (!p || p.receive !== 'granted') throw new Error('denied');
+      return new Promise(function (resolve, reject) {
+        var done = false, handles = [];
+        var finish = function (fn, v) {
+          if (done) return;
+          done = true;
+          handles.forEach(function (h) { Promise.resolve(h).then(function (x) { if (x && x.remove) x.remove(); }); });
+          fn(v);
+        };
+        handles.push(Push.addListener('registration', function (t) { finish(resolve, t && t.value); }));
+        handles.push(Push.addListener('registrationError', function (e) { finish(reject, new Error((e && e.error) || 'registration failed')); }));
+        setTimeout(function () { finish(reject, new Error('no answer from iOS')); }, 15000);
+        Push.register();
+      });
+    });
+  }
+
+  window.BeastNative = { isNative: isNative, ready: ready, onLink: onLink, enablePush: enablePush };
 })();

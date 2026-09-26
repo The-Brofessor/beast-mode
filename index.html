@@ -3128,7 +3128,54 @@ function intakeCard() {
     '</div>';
 }
 
+// The iPhone app (native app brief): Apple push, on first. Reminders for
+// due-by times move onto the phone itself next (local notifications); until
+// then this card turns notifications on and sends a test. Draft wording.
+function nativeNotifyCard() {
+  var on = !!(state.reminders && state.reminders.native);
+  return '<div class="card"><h3>Notifications</h3>' +
+    (on
+      ? '<p class="imeta" style="margin-bottom:10px">On for this phone.</p>' +
+        '<button class="btn sec" onclick="testNativePush()">Send a test notification</button>'
+      : '<p class="imeta" style="margin-bottom:10px">Get a shout from The Brofessor when it matters.</p>' +
+        '<button class="btn" onclick="enableNativePush()">Turn on notifications</button>') +
+    '</div>';
+}
+
+async function enableNativePush() {
+  var token;
+  try { token = await BeastNative.enablePush(); }
+  catch (e) {
+    toast(e && e.message === 'denied' ? 'Notifications are off. Turn them on in the iPhone Settings app, under Beast Mode.'
+      : 'Couldn’t turn notifications on. Try again in a minute.');
+    return;
+  }
+  state.reminders = state.reminders || {};
+  state.reminders.id = state.reminders.id || BeastCore.newId();
+  try {
+    var res = await fetch(PUSH_URL + '/device', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: state.reminders.id, token: token,
+        tz: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || 'UTC' }) });
+    if (!res.ok) throw new Error('refused');
+  } catch (e) { toast('Can’t reach the server right now. Try again in a minute.'); return; }
+  state.reminders.native = true;
+  save(); render();
+  toast('Notifications on');
+}
+
+async function testNativePush() {
+  var id = state.reminders && state.reminders.id;
+  if (!id) return;
+  try {
+    var res = await fetch(PUSH_URL + '/device/test', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }) });
+    var got = await res.json().catch(function () { return {}; });
+    toast(res.ok ? 'Sent. It should arrive in a few seconds.' : (got.error || 'That didn’t go through.'));
+  } catch (e) { toast('Can’t reach the server right now. Try again in a minute.'); }
+}
+
 function remindersCard() {
+  if (isNativeApp()) return PUSH_URL ? nativeNotifyCard() : '';
   var slots = BeastCore.reminderSlots(state.items);
   if (!pushConfigured()) {
     return '<div class="card"><h3>Reminders</h3>' +
@@ -3158,6 +3205,8 @@ function remindersCard() {
 // Reminders are what bring someone back each day, so they are offered on Today
 // once rather than left at the bottom of Profile for people to find.
 function reminderNudge() {
+  // The iPhone app turns notifications on from Profile (nativeNotifyCard).
+  if (isNativeApp()) return '';
   if (!pushConfigured() || remindersOn()) return '';
   if (state.reminders && state.reminders.nudgeDismissed) return '';
   var slots = BeastCore.reminderSlots(state.items);
