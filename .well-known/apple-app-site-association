@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["BMQX57LP2Y.coach.thebrofessor.beastmode"],
+        "components": [{ "/": "/*", "comment": "Plan and intake links (#import=, #intake=) open the iPhone app" }]
+      }
+    ]
+  }
+}
