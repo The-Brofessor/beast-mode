@@ -21,7 +21,7 @@ var BeastCore = (function () {
   // Bumped whenever the contract changes. Each app declares the version it was
   // built against and checks it at boot. GitHub Pages serves with a 600s cache
   // and no revalidation, so a phone can hold new HTML against an old core.
-  var VERSION = '2.20.0';
+  var VERSION = '2.21.0';
 
   // Payload schema version. An app receiving a higher number refuses the
   // import instead of guessing at a shape it does not know.
@@ -1204,6 +1204,9 @@ var BeastCore = (function () {
       // iPhone only the home-screen app keeps a plan and can be pushed to,
       // so Chris needs to see who has finished installing (loop brief 3e).
       standalone: opts.standalone === true ? true : opts.standalone === false ? false : null,
+      // The native iPhone app (native app brief, 2026-09-25): the roster
+      // shows it apart from the web app on the home screen.
+      native: opts.native === true ? true : null,
       sharing: opts.sharing !== false,
       nudges: opts.nudges === true ? true : opts.nudges === false ? false : null
     };
@@ -1323,6 +1326,7 @@ var BeastCore = (function () {
     } else out.yesterday = null;
     out.pushId = typeof raw.pushId === 'string' && isValidId(raw.pushId) && raw.pushId.length <= 64 ? raw.pushId : null;
     out.standalone = raw.standalone === true ? true : raw.standalone === false ? false : null;
+    out.native = raw.native === true ? true : null;
     out.sharing = raw.sharing !== false;
     out.nudges = raw.nudges === true ? true : raw.nudges === false ? false : null;
     if (raw.steps !== undefined && raw.steps !== null) {

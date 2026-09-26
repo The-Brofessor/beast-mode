@@ -47,4 +47,7 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
+        # Upload only. Internal testers (Chris, then the pilot group) need no
+        # beta review; the submit needs the Test Information filled in, and
+        # comes back when external testers do.
+        submit_to_testflight: false

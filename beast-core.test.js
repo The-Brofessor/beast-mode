@@ -398,6 +398,17 @@ test('statusPayload says where the app is running, and validateStatus keeps it a
   assert.strictEqual(ok({ standalone: 1 }).status.standalone, null);
 });
 
+test('the status says when it comes from the native iPhone app, and nothing else counts as that', () => {
+  const items = [{ id: 'z2', name: 'Zone 2', kind: 'habit', freq: 'daily', core: true, addedAt: '2026-09-01' }];
+  const state = { items: C.normalizeItems(items), log: {}, perfectWeek: 7, earnedLevel: 1 };
+  assert.strictEqual(C.statusPayload(state, { today: '2026-09-21', standalone: true, native: true }).native, true);
+  assert.strictEqual(C.statusPayload(state, { today: '2026-09-21', standalone: true }).native, null, 'the web app says nothing');
+  const ok = raw => C.validateStatus(Object.assign(C.statusPayload(state, { today: '2026-09-21' }), raw));
+  assert.strictEqual(ok({ native: true }).status.native, true);
+  assert.strictEqual(ok({ native: 'yes' }).status.native, null);
+  assert.strictEqual(ok({ native: false }).status.native, null);
+});
+
 test('iosSafari is Safari on an iPhone, and nothing else that calls itself one', () => {
   const SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
   assert.strictEqual(C.iosSafari(SAFARI, true), true);
