@@ -1,0 +1,12 @@
+{
+  "appId": "coach.thebrofessor.beastmode",
+  "appName": "Beast Mode",
+  "webDir": "www",
+  "backgroundColor": "#0B0D10",
+  "ios": {
+    "contentInset": "never"
+  },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

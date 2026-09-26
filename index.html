@@ -610,6 +610,7 @@ header .hname { font: 700 30px/1 var(--display); text-transform: uppercase; lett
 .dots { display: flex; justify-content: center; gap: 6px; margin-top: 14px; }
 .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
 .dots i.on { background: var(--acc-line); }
+.invitecode { font: 700 44px/1 var(--display); letter-spacing: .18em; color: var(--text); background: var(--surface2); border-radius: 14px; padding: 16px 10px; margin: 10px 0 6px; }
 .howlead { display: flex; justify-content: space-between; align-items: center; text-align: left; }
 .howlead button { background: none; border: 0; padding: 4px 0 4px 12px; color: var(--acc); font: 600 15px/1 Inter, sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; }
 .hownum { width: 56px; height: 56px; margin: 18px auto 12px; border-radius: 16px; background: var(--acc); color: var(--on-acc); font: 700 34px/56px var(--display); text-align: center; }
@@ -674,6 +675,7 @@ nav button.active svg { color: var(--acc-ink); stroke-width: 2.6; }
 
 <script src="lz-string.min.js"></script>
 <script src="beast-core.js"></script>
+<script src="native.js"></script>
 <script>
 'use strict';
 
@@ -2488,6 +2490,14 @@ function closeSheet() {
 var COACH_URL = 'https://coach.thebrofessor.coach';
 var LINK_URL = 'https://thebrofessor.coach';   // where short links live
 var APP_URL = 'https://app.thebrofessor.coach';  // where the app itself lives
+// The iPhone app's App Store page, once it is published (native app brief).
+// While empty, iPhone Safari shows the home-screen steps as it always has.
+var APP_STORE_URL = '';
+
+// In the iPhone app the box also takes the invite code. Draft wording.
+function pastePlaceholder() {
+  return isNativeApp() ? 'Paste the text your coach sent you, or type your 8-letter code' : 'Paste the text your coach sent you here';
+}
 
 var coachBusy = false;
 var coachError = '';
@@ -3167,8 +3177,11 @@ function reminderNudge() {
 var deferredPrompt = null;
 var DISMISS_KEY = 'bm2.installDismissed';
 
+// The iPhone app counts as the home-screen app: it is the app they keep, so
+// no install screen is ever shown inside it.
+function isNativeApp() { return !!(window.BeastNative && BeastNative.isNative); }
 function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches ||
+  return isNativeApp() || window.matchMedia('(display-mode: standalone)').matches ||
          window.navigator.standalone === true;
 }
 
@@ -3365,7 +3378,7 @@ function lastLink() {
 function waitingHome() {
   return '<div class="card" style="margin-top:18px"><h3>Your plan is on its way</h3>' +
       '<p class="imeta">Your coach is building it from your answers. When the link comes, paste it here.</p>' +
-      '<div style="margin-top:12px"><textarea id="pastelink" rows="3" placeholder="Paste the text your coach sent you here"></textarea></div>' +
+      '<div style="margin-top:12px"><textarea id="pastelink" rows="3" placeholder="' + attr(pastePlaceholder()) + '"></textarea></div>' +
       '<button class="btn" style="margin-top:10px" onclick="openPasted()">Open my plan</button></div>' +
     '<div class="card"><h3>Questions while you wait?</h3>' +
       '<button class="btn sec" style="margin-top:6px" onclick="go(\'coach\')">Talk to The Brofessor</button></div>';
@@ -3377,7 +3390,7 @@ function setupScreen() {
   return '<div class="wrap"><div class="empty" style="padding-top:72px">' +
     '<div class="big">' + mark('', '') + '</div><h2>Beast Mode</h2>' +
     '<p>No plan on this phone yet.<br>Paste the link your coach sent you to get started.</p>' +
-    '<div style="margin-top:18px;text-align:left"><textarea id="pastelink" rows="3" placeholder="Paste the text your coach sent you here"></textarea></div>' +
+    '<div style="margin-top:18px;text-align:left"><textarea id="pastelink" rows="3" placeholder="' + attr(pastePlaceholder()) + '"></textarea></div>' +
     '<button class="pbtn full" style="margin-top:10px" onclick="openPasted()">Open my plan</button>' +
     '<p class="imeta" style="margin-top:22px;color:var(--text3)">Lost the link? Text your coach for a new one.</p>' +
     '</div></div>';
@@ -3390,10 +3403,34 @@ function setupScreen() {
 // sends the links. Awaiting Chris's approval. The app owns every line,
 // so the server's wording is never shown here.
 var pasteBusy = false;
-async function openPasted() {
-  if (pasteBusy) return;
+function openPasted() {
   var box = document.getElementById('pastelink');
-  var found = BeastCore.linkFromText(box && box.value);
+  openLinkText(box && box.value);
+}
+
+// A pasted message, or a link tapped outside the iPhone app that opened it
+// (BeastNative.onLink): the same path either way.
+async function openLinkText(text) {
+  if (pasteBusy) return;
+  var found = BeastCore.linkFromText(text);
+  // Six letters: the invite code the web page showed a client who tapped
+  // the link before installing the app (native app brief). The server
+  // trades it for the link, which then opens as if tapped.
+  // The server sets the length (8, Chris 2026-09-25); 6 to 8 letters are tried.
+  var inviteCode = found ? '' : String(text || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (!found && inviteCode.length >= 6 && inviteCode.length <= 8) {
+    pasteBusy = true;
+    var link = '';
+    try {
+      var r = await fetch(COACH_URL + '/invite/redeem', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code: inviteCode }) });
+      var got = await r.json().catch(function () { return {}; });
+      if (!got.link) { toast(got.error || 'That code didn’t work. Text your coach for a new link.'); return; }
+      link = got.link;
+    } catch (e) { toast('Can’t reach the server right now. Try again in a minute.'); return; }
+    finally { pasteBusy = false; }
+    found = BeastCore.linkFromText(link);
+  }
   if (!found) { toast('That doesn’t look like a Beast Mode link'); return; }
   if (found.intake) { openIntakeLink(found.intake); return; }
   var code = found.code;
@@ -3456,6 +3493,7 @@ function intakeNeedsInstall() {
 }
 
 function installFirstScreen(kind) {
+  if (APP_STORE_URL) return appStoreScreen(kind);
   var forIntake = kind === 'intake';
   var words = INSTALL_WORDS[forIntake ? 'intake' : 'plan'];
   // The intake link is rebuilt from its token rather than read from the
@@ -3490,6 +3528,46 @@ function installFirstScreen(kind) {
       '<a href="' + attr('sms:' + number) + '">Text your coach</a>' +
       '<br><br><a href="#" onclick="skipInstall(' + (forIntake ? '\'intake\'' : '') + ');return false">Keep going in Safari for now</a></p>' +
     '</div></div>';
+}
+
+/* Once the iPhone app is in the App Store, iPhone Safari sends people there
+   instead of to the home-screen steps, with a code standing for the link
+   they tapped: typed once in the app, it opens that link (native app brief,
+   2026-09-25). Draft wording. */
+var invite = { link: '', code: '', failed: false };
+function appStoreScreen(kind) {
+  var forIntake = kind === 'intake';
+  var link = forIntake ? APP_URL + '/#intake=' + encodeURIComponent(intake.token) : lastLink();
+  if (link && invite.link !== link) {
+    invite = { link: link, code: '', days: 0, failed: false };
+    askInvite(link, forIntake ? { intakeToken: intake.token }
+      : state && state.coachToken ? { token: state.coachToken } : { clientToken: state && state.clientToken });
+  }
+  var number = forIntake ? intakeBossNumber() : bossNumber();
+  var code = invite.code
+    ? '<div class="invitecode">' + esc(invite.code.replace(/^(.{4})(.+)$/, '$1 $2')) + '</div><p class="imeta" style="color:var(--text3)">The code works once, for ' + invite.days + ' days.</p>'
+    : invite.failed || !link ? '<p class="imeta">Open the app and paste the text your coach sent you.</p>'
+    : '<p class="imeta">Getting your code...</p>';
+  return '<div class="wrap"><div class="empty" style="padding-top:40px;padding-bottom:24px">' +
+    '<div class="big">' + mark() + '</div><h2 class="fit">Get the Beast Mode app</h2>' +
+    '<p>Beast Mode lives in the app. Get it from the App Store, open it, and type this code:</p>' + code +
+    '<a class="pbtn" style="display:block;text-decoration:none;margin-top:14px" href="' + attr(APP_STORE_URL) + '">Get the app</a>' +
+    '<p class="imeta" style="margin-top:16px;color:var(--text3)">Need help? ' +
+      '<a href="' + attr('sms:' + number) + '">Text your coach</a>' +
+      '<br><br><a href="#" onclick="skipInstall(' + (forIntake ? '\'intake\'' : '') + ');return false">Keep going in Safari for now</a></p>' +
+    '</div></div>';
+}
+// The server makes a code only for a phone holding one of the client's
+// tokens (CTO, 2026-09-25).
+async function askInvite(link, who) {
+  try {
+    var r = await fetch(COACH_URL + '/invite', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.assign({ link: link }, who)) });
+    var got = await r.json().catch(function () { return {}; });
+    if (invite.link !== link) return;
+    if (got.code) { invite.code = got.code; invite.days = got.expiresInDays || 14; } else invite.failed = true;
+  } catch (e) { if (invite.link === link) invite.failed = true; }
+  render();
 }
 
 /* Chris's number, which only the server knows, so it is never in this public
@@ -4276,7 +4354,95 @@ function profileTab() {
     '<p class="imeta">Erases your plan and everything you have logged on this phone.</p>' +
     '<button class="btn danger" onclick="resetAll()">Start over</button></div>';
 
+  // Apple guideline 1.4.1 (native app brief). Draft wording, for Chris.
+  html += '<div class="card"><h3>Health</h3>' +
+    '<p class="imeta">' + esc(HEALTH_NOTE) + '</p></div>';
+
+  // Apple guideline 5.1.1(v): an account can be deleted from inside the app.
+  if (state.coachToken || state.clientToken) {
+    html += '<div class="card"><h3>Delete my account</h3>' +
+      '<p class="imeta">' + esc(DELETE_ACCOUNT.card) + '</p>' +
+      '<button class="btn danger" onclick="openDeleteAccount()">Delete my account</button></div>';
+  }
+
   return html;
+}
+
+// Draft wording (native app brief, 2026-09-25), for Chris.
+var HEALTH_NOTE = 'Beast Mode and The Brofessor coach fitness, food and habits. They are not medical care. ' +
+  'Talk to your doctor before a medical decision, like starting or changing a medication.';
+var DELETE_ACCOUNT = {
+  card: 'Erases your account: your chats, answers, progress and plan, on this phone and on the server.',
+  title: 'Delete your account?',
+  // The server waits 7 days before it erases (Chris, 2026-09-25), so a
+  // forwarded link cannot erase anyone for good by mistake.
+  text: 'This phone is signed out now. Your chats, your answers, your progress and your plan are erased for good in 7 days. ' +
+    'Changed your mind before then? Text your coach. To use Beast Mode again you would need a new link.',
+  button: 'Delete my account',
+  done: 'Signed out. Your account is erased in 7 days.'
+};
+
+function openDeleteAccount() {
+  showSheet(
+    '<h2 style="font-size:20px;margin-bottom:4px">' + esc(DELETE_ACCOUNT.title) + '</h2>' +
+    '<p class="imeta">' + esc(DELETE_ACCOUNT.text) + '</p>' +
+    '<p id="delacct-err" class="imeta" style="color:var(--bad)"></p>' +
+    '<button id="delacct-go" class="btn danger" onclick="deleteAccount()">' + esc(DELETE_ACCOUNT.button) + '</button>' +
+    '<button class="btn sec" onclick="closeSheet()">Cancel</button>'
+  );
+}
+
+// The server goes first. Only once it says the account is gone does the
+// phone forget everything; a failure leaves both, and says so.
+async function deleteAccount() {
+  var btn = document.getElementById('delacct-go');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  var body = state.coachToken ? { token: state.coachToken } : { clientToken: state.clientToken };
+  var data;
+  try {
+    var res = await fetch(COACH_URL + '/account/delete', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
+    });
+    data = await res.json().catch(function () { return {}; });
+    data.status = res.status;
+  } catch (e) { data = { status: 0 }; }
+  if (!data.ok) {
+    btn.disabled = false;
+    var err = document.getElementById('delacct-err');
+    if (err) err.textContent = data.status === 0 ? 'Can’t reach the server right now. Try again in a minute.'
+      : (data.error || 'That didn’t go through. Try again in a minute.');
+    return;
+  }
+  // Reminders stop with the account: the push worker forgets the phone, the
+  // browser drops its subscription, and the reminder copy kept for the
+  // service worker (IndexedDB) goes too (CTO, 2026-09-25).
+  try {
+    if (PUSH_URL && state.reminders && state.reminders.id) {
+      await fetch(PUSH_URL + '/unsubscribe', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: state.reminders.id }) }).catch(function () {});
+    }
+    if ('serviceWorker' in navigator && !isNativeApp()) {
+      var reg = await navigator.serviceWorker.getRegistration();
+      var sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+      if (sub) await sub.unsubscribe();
+    }
+  } catch (e) {}
+  try { if (window.indexedDB) indexedDB.deleteDatabase(IDB); } catch (e) {}
+  // Everything this app kept on the phone, except the look (theme, colour).
+  try {
+    var mine = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (/^bm2\./.test(k) && k !== PREFS_KEY) mine.push(k);
+    }
+    mine.forEach(function (k) { localStorage.removeItem(k); });
+  } catch (e) {}
+  state = null; intake = null;
+  tab = 'today';
+  closeSheet();
+  render();
+  toast(DELETE_ACCOUNT.done);
 }
 
 /* ── boot ──────────────────────────────────────────────────────────────── */
@@ -4330,7 +4496,7 @@ window.addEventListener('hashchange', function () {
   if (/[#&](import|intake)=/.test(location.hash)) handleImport();
 });
 
-(function boot() {
+function boot() {
   applyPrefs();
   load();
   loadIntake();
@@ -4340,9 +4506,16 @@ window.addEventListener('hashchange', function () {
   if (state && intake && !intake.token && !intake.routineOnly && !intake.update && !intake.sent) clearIntakeSilently();
   if (!handleImport()) render();
   if (sharingOn()) sendStatus();
-})();
+  // In the iPhone app a tapped link arrives here instead of in the address.
+  if (isNativeApp()) BeastNative.onLink(openLinkText);
+}
+// The iPhone app first reads back what iOS kept (native.js); the web boots
+// at once.
+if (isNativeApp()) BeastNative.ready.then(boot); else boot();
 
-if ('serviceWorker' in navigator) {
+// The iPhone app's web view runs no service worker: its files are already
+// on the phone.
+if ('serviceWorker' in navigator && !isNativeApp()) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').catch(function () {
       // No worker means no offline. The app still works, so this is quiet.

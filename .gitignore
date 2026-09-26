@@ -34,3 +34,10 @@ worker/node_modules/
 # hub's design/brand/, never here.
 /_*.html
 /_marks/
+
+# The iPhone app: packages, the copied web files, and Xcode build output
+native/node_modules/
+native/www/
+native/ios/App/Pods/
+native/ios/App/build/
+native/ios/DerivedData/

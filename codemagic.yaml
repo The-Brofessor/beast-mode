@@ -1,0 +1,50 @@
+# The iPhone app's cloud build (native app brief, 2026-09-25). Codemagic runs
+# this on a Mac: copy the web app into the native shell, sign with the App
+# Store Connect key set up in Codemagic (never stored here), build, and send
+# the build to TestFlight. Started by hand from Codemagic; a push to GitHub
+# does not start it.
+workflows:
+  ios-testflight:
+    name: iPhone app to TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # The API key's name in Codemagic's Team integrations. Chris creates the
+      # key in App Store Connect and adds it there himself.
+      app_store_connect: Beast Mode
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: coach.thebrofessor.beastmode
+      vars:
+        # The app's Apple ID number from App Store Connect (App Information),
+        # filled in once the app record exists.
+        APP_STORE_APPLE_ID: 0
+      node: 22
+      xcode: latest
+    scripts:
+      - name: Copy the web app into the shell
+        script: |
+          cd native
+          npm ci
+          npm run sync
+      - name: Use the signing profiles
+        script: xcode-project use-profiles
+      - name: Next build number
+        script: |
+          # Without the app's ID every build would be number 1, and Apple
+          # refuses the second as a duplicate (CTO, 2026-09-25).
+          if [ "$APP_STORE_APPLE_ID" = "0" ] || [ -z "$APP_STORE_APPLE_ID" ]; then
+            echo "Set APP_STORE_APPLE_ID in codemagic.yaml to the app's Apple ID number first."; exit 1
+          fi
+          # No build on TestFlight yet (the first one) is the only reason to start at 1.
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null) || LATEST=0
+          cd native/ios/App && agvtool new-version -all $((LATEST + 1))
+      - name: Build the app
+        script: xcode-project build-ipa --project "native/ios/App/App.xcodeproj" --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

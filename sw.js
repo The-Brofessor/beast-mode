@@ -4,13 +4,14 @@
    revalidation, so without a new cache name an installed app can sit on old
    files well past a push. The deploy checklist in CLAUDE.md names this step. */
 
-var CACHE = 'beast-mode-v2.17.1-a3';
+var CACHE = 'beast-mode-v2.20.0-a1';
 
 // Everything the checklist needs to open with no signal.
 var SHELL = [
   './',
   './index.html',
   './beast-core.js',
+  './native.js',
   './lz-string.min.js',
   './manifest.webmanifest',
   './fonts/inter-latin.woff2',

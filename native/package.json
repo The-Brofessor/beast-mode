@@ -1,0 +1,19 @@
+{
+  "name": "beast-mode-native",
+  "private": true,
+  "description": "The iPhone app: Capacitor around the web app in the repo root. The web files are copied into www by tools/build-www.js; nothing here is served by GitHub Pages as the app.",
+  "scripts": {
+    "build": "node tools/build-www.js",
+    "sync": "node tools/build-www.js && npx cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/push-notifications": "^8.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}
